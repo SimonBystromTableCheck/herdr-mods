@@ -99,7 +99,7 @@ export default class Todos extends View {
           cx.timer.after(40, () => { if (this.handle.is_focused()) this.focusToken++; });
           cx.timer.after(150, cx => { if (this.focusToken === token && !this.handle.is_focused()) { this.handle.focus(); cx.notify(); } });
         }
-        else if (c.startsWith("go:")) { this.handle.focus(); run("pane.go", { direction: c.slice(3) }); }
+        else if (c.startsWith("go:")) this.go(c.slice(3));
         else if (c.startsWith("key:")) this.press(c.slice(4), cx);
         cx.notify();
       }
@@ -408,7 +408,25 @@ export default class Todos extends View {
     cx.notify();
   }
 
-  key(e, cx) { if (this.press(keyOf(e), cx)) cx.stop_propagation(); }
+  // Leaving the panel: left goes straight back to the terminal the keyboard came from (pane.focus);
+  // pane.go doesn't reliably move the keyboard out of a panel. Other directions are pane.go's.
+  go(dir) {
+    this.focusToken = (this.focusToken ?? 0) + 1; // cancel a pending focus retry
+    const pane = focused()?.pane;
+    if (dir === "left" && pane) return run("pane.focus", { pane });
+    this.handle.focus();
+    run("pane.go", { direction: dir });
+  }
+
+  // cmd-alt-arrows (keys.json pane.go) are handled here so leaving never depends on pane.go
+  // knowing this panel holds the keyboard.
+  navKey(e, cx) {
+    const m = e.modifiers ?? {};
+    if (!(m.platform && m.alt && !m.control && ["left", "right", "up", "down"].includes(e.key))) return false;
+    cx.stop_propagation(); this.go(e.key); return true;
+  }
+
+  key(e, cx) { if (this.navKey(e, cx)) return; if (this.press(keyOf(e), cx)) cx.stop_propagation(); }
 
   // Real keys and "todos.key:<k>" commands both come through here.
   press(k, cx) {

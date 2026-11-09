@@ -56,8 +56,9 @@ keyboard), text 13px, top to bottom:
   to the tree with that file selected. Anywhere: `r` refresh, `q` hide the panel
   (`layout.hide {id: "panel"}`) and refocus the pane, `?` the keys card (`esc`, `?`, `q` or a
   click closes it). Keys with cmd/alt pass through.
-- Commands from `keys.json`: `pond-files.key:<k>` presses a key, `pond-files.go:<dir>` takes the
-  keyboard then runs `pane.go`.
+- Commands from `keys.json`: `pond-files.key:<k>` presses a key, `pond-files.go:<dir>` moves out:
+  left is `pane.focus` back to the focused pane, other directions take the keyboard then run `pane.go`;
+  `cmd-alt-arrows` are caught in the key handler and do the same.
 - Publishes `shared("pond-files.hasKeys")` (true while it holds the keyboard), polled every 300ms.
 
 ## Built from
@@ -77,7 +78,7 @@ Clone of shipped `files` (`cloned_from: {name: "files", version: "0.1.14"}`). Fi
   10 − 10) / 7.2px, the 12px mono advance; zoom is read from `settings.json` (`settings()`
   has none) at start and on every resize, since the size comes in zoomed pixels.
 - Keyboard: `cx.focus_handle()`, `.track_focus().on_key_down()`, `nextCommand()` loop for
-  `focus` / `key:` / `go:`, a retry 150ms after `focus`, and a 300ms timer for focus changes
+  `focus` / `key:` / `go:`, a retry 150ms after `focus` (skipped once focus landed at 40ms, or after leaving), and a 300ms timer for focus changes
   (GPUI has no blur event). Back now reselects the file in the tree.
 - Asset paths changed from `mods/files/…` to `mods/pond-files/…`.
 - `keybar.js`: `keycap`, `keybar` (fits chips to `on_size_change` width), `keysCard`; the same

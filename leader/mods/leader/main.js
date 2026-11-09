@@ -1,7 +1,7 @@
 // A tmux-style prefix: ctrl-a opens this popup, the next key runs a binding from bindings.js.
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { props, closeOverlay, theme, run, focused, hc, layout, settings, nextCommand, shared, setShared, spaces, notify } from "herdr";
+import { props, closeOverlay, theme, run, focused, hc, layout, settings, nextCommand, shared, setShared, spaces, panes, notify } from "herdr";
 import BINDINGS from "./bindings.js";
 
 const MODIFIERS = new Set(["shift", "control", "alt", "platform", "function", "capslock", "cmd", "ctrl"]);
@@ -46,11 +46,22 @@ export default class Leader extends View {
     const b = BINDINGS.find(x => x.key === k);
     if (!b) { this.miss = k; cx.notify(); return; }
     if (b.action === "expand") return this.expand(cx);
-    this.close();
+    // gitview (Changes): move for it while this popup is still open, then close it. Closed first,
+    // the app still has gitview as the keyboard's owner and hands it `focus` again when the popup
+    // goes, which starts gitview's takeKeyboard loop and leaves its handle with the keys while
+    // the app's focus is on the terminal (nothing looks focused).
+    if (b.run === "pane.go" && this.fromPanel === "gitview") {
+      const pane = focused()?.pane;
+      if (b.args.direction === "left" && pane) run("pane.focus", { pane });
+      else run("pane.go", b.args);
+      return this.close();
+    }
+    if (!(b.panel && b.focus)) this.close();
     if (b.panel) {
       const panel = find(layout(), "panel"), body = find(layout(), "panel-body"), mod = b.mod ?? b.panel;
       // Shown but the keyboard is elsewhere (a terminal): focus it rather than hide it.
       if (b.toggle && panel && !panel.hidden && body?.active === b.panel && (!b.focus || this.fromPanel === mod)) {
+        this.close();
         run("layout.hide", { id: "panel" });
         // The panel may have had the keyboard; hand it back to the terminal.
         if (focused()?.pane) run("pane.focus", { pane: focused().pane });
@@ -58,13 +69,29 @@ export default class Leader extends View {
       }
       run("layout.select", { stack: "panel-body", child: b.panel });
       run("layout.show", { id: "panel" });
-      if (b.focus) run(`${mod}.focus`);
+      if (b.focus) this.enterPanel(cx);
       return;
     }
     // pane.go would start from the last focused terminal, not the panel this popup took the keyboard
     // from, so that panel makes the move itself once it has the keyboard back.
     if (b.run === "pane.go" && this.fromPanel) return run(`${this.fromPanel}.go:${b.args.direction}`);
     run(b.run, b.args ?? {});
+  }
+
+  // Enter the right-hand panel the way the app's own navigation does (pane.go), not by
+  // sending the mod `focus` itself: only then does the app know the panel holds the keyboard,
+  // so pane.go / cmd-alt-left leave it cleanly and it gets `focus` again when this popup closes.
+  // From the focused terminal, `right` as many times as the tab has panes always ends in the
+  // panel (the rightmost column; pane.go from it to the right does nothing). Waits a moment so
+  // the panel shown just now is laid out, then closes this popup.
+  enterPanel(cx) {
+    cx.timer.after(60, () => {
+      const f = focused();
+      if (f?.pane) run("pane.focus", { pane: f.pane });
+      const n = panes().filter(p => p.tab === f?.tab).length;
+      for (let i = 0; i <= n; i++) run("pane.go", { direction: "right" });
+      this.close();
+    });
   }
 
   // leader + E: an expanded view collapses; a panel with an expanded view expands; a panel

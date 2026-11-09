@@ -32,7 +32,7 @@ Panel: theme `background`, text 12.5px, rounded 10 with a 1px border (`accent` w
 - `main.js` (scan, actions, rendering), `keybar.js` (footer keycaps and keys card, same file as the git and servers mods), icons `run.svg edit.svg plus.svg` (and `skills.svg`, which the code doesn't use).
 - `mod.json`: `{ "place": "none", "title": "Skills", "focusable": true }`. No `props`.
 - herdr: `spaces panes focused agents knownAgents exec hc run theme settings home readTextFile writeTextFile watchFolder nextCommand setShared`. Commands: `tab.new`, `terminal.open` (`place: "tab"`), `layout.hide`, `pane.focus`, `pane.go`.
-- `nextCommand()`: `focus`, `go:<direction>`, `key:<k>` (e.g. `"skills.key:n"` in keys.json). Shared: `skills.hasKeys` (keyboard ownership, polled every 300ms).
+- `nextCommand()`: `focus`, `go:<direction>` (left: `pane.focus` back to the focused pane, since `pane.go` doesn't reliably move the keyboard out of a panel; other directions `pane.go`; `cmd-alt-arrows` are caught in the key handler and do the same; leaving cancels a pending 150ms focus retry, which also skips once focus has landed), `key:<k>` (e.g. `"skills.key:n"` in keys.json). Shared: `skills.hasKeys` (keyboard ownership, polled every 300ms).
 - Programs: `sh` (list `SKILL.md` and `*.md`; `printf $SHELL`), `git rev-parse --show-toplevel`, `mkdir -p`, `hc send <agent> "/name args"`, `nvim` through `$SHELL -lic`.
 - The list is a window of fixed-height rows (cards 90, headings 26, gap 6) computed from the panel's height, since a plain scroll area can't be scrolled from code.
 - Art: Lucide-style 24px stroke icons; Herdr's shipped `mods/workspace-chrome/git-branch.svg`.

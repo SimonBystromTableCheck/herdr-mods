@@ -86,7 +86,8 @@ One rounded card (radius 10, `background`, 1px `border`; the border turns
   `nextCommand`, `setShared`, `focused`, `theme`, `run`.
 - Commands: `layout.hide {id: "panel"}`, `pane.focus`, `pane.go`,
   `terminal.open {argv: ["/bin/zsh","-lic","nvim '<file>'"], folder, place: "tab", name}`.
-- `nextCommand()` accepts `focus` (from `pane.go`), `go:<dir>` and
+- `nextCommand()` accepts `focus` (from `pane.go`), `go:<dir>` (left: `pane.focus` back to the
+  focused pane; others `pane.go`; `cmd-alt-arrows` caught in the key handler do the same) and
   `key:<k>`, so keys.json can send `todos.key:j` and the `leader` mod can send
   `todos.focus` / `todos.go:left`. Every 300ms it publishes
   `shared("todos.hasKeys")` for the leader.

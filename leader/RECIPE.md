@@ -47,14 +47,17 @@ Bindings (aliases in brackets, not shown):
   are ignored.
 - `ctrl-a` again: closes and sends `ctrl+a` to the focused terminal.
 - Panel keys select that child of the `panel-body` stack and show the `panel`
-  column, and hand that panel's mod the keyboard (`<mod>.focus`: `files` is the
-  `pond-files` mod, `changes` is `gitview`). If the panel is already showing but
+  column, then enter it the way the app's own navigation does (`enterPanel`): wait 60ms for the
+  panel to lay out, `pane.focus` the focused pane, `pane.go right` (tab's pane count + 1) times,
+  which always ends in the rightmost panel, then close the popup (`files` is the `pond-files`
+  mod, `changes` is `gitview`). If the panel is already showing but
   the keyboard is elsewhere (a terminal), the key just focuses it; only when that
   panel already had the keyboard does the key hide it, giving the focused pane
   the keyboard back.
 - `h`/`j`/`k`/`l` from a panel that had the keyboard (git, skills, todos,
   gitview, pond-files, servers, remote-checker) ask that panel to move (`<panel>.go:<dir>`), so
-  the move starts from the panel, not the last terminal.
+  the move starts from the panel, not the last terminal. From gitview the leader moves itself,
+  before closing the popup: `h` is `pane.focus` on the focused pane, `j`/`k`/`l` are `pane.go`.
 - `e` (expand), in order: inside gitview's own tab, or from gitview's list while
   Changes shows → opens `gitview-tab`; from the git mod's tab → `git.collapse`;
   from the git panel → `git.expand`; from another panel → an info toast
@@ -78,12 +81,18 @@ Bindings (aliases in brackets, not shown):
 - Commands: `tab.new/next/prev/rename/close/select`, `pane.split/go/zoom/close/focus`,
   `layout.select/show/hide/toggle`, `mod.open {name: "picker"}`,
   `mod.open {name: "gitview-tab"}`, `space.rename/next/prev`, `app.help`,
-  `git.expand`, `git.collapse`, `<panel>.focus`, `<panel>.go:<dir>`.
+  `git.expand`, `git.collapse`, `<panel>.go:<dir>`, `pane.go`, `pane.focus`.
 - Reads shared flags written by other mods: `<mod>.hasKeys` for git, skills,
   todos, gitview, pond-files, servers, remote-checker; `git.tabHasKeys`; `gitview.own`.
 
 ## Watch out
 
+- Enter panels through `pane.go`, never by sending the mod `focus` yourself: only then does
+  the app know the panel holds the keyboard. Sent directly, `pane.go` out of it starts from the
+  terminal, and the popup closing hands the keyboard back to the terminal (a flicker).
+- Closing this popup re-sends `focus` to the mod the app thinks holds the keyboard. Moving out
+  of gitview after closing left gitview's handle with the keys while the app's focus was on the
+  terminal (nothing looked focused); move first, then close.
 - Panels answer `focus` once more after 150ms if they lost the keyboard to the
   closing popup; a fresh build of a panel should do the same, but only when the
   first focus never landed (checked at 40ms) and the panel wasn't left meanwhile,
