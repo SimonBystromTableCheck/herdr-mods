@@ -133,8 +133,12 @@ export default class Files extends View {
 
   // The app may hand the keyboard over a moment after it says so; ask again once.
   takeKeyboard(cx) {
+    // One retry in case the first focus didn't land; focus that landed and then moved
+    // (leaving quickly, a click, the leader popup) is the person's choice, so no retry then.
+    const token = this.focusToken = (this.focusToken ?? 0) + 1;
     try { this.handle.focus(); } catch { /* not drawn yet */ }
-    cx.timer.after(150, cx => { if (!this.handle.is_focused()) { try { this.handle.focus(); } catch { /* gone */ } cx.notify(); } });
+    cx.timer.after(40, () => { try { if (this.handle.is_focused()) this.focusToken++; } catch { /* gone */ } });
+    cx.timer.after(150, cx => { if (this.focusToken === token && !this.handle.is_focused()) { try { this.handle.focus(); } catch { /* gone */ } cx.notify(); } });
   }
 
   watch(root, cx) {

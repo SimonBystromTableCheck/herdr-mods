@@ -77,7 +77,7 @@ export default class Tabs extends View {
       ? Math.max(10, (root.traffic_lights[0] + 64) / settings().zoom - (sidebar?.hidden ? 0 : sidebar?.size?.px ?? 0))
       : 10;
     const panel = find(root, "panel"), body = find(root, "panel-body");
-    const enabled = [...(shared("workspace.panels") ?? ["files", "changes"]), "git", "skills", "todos", "servers"];
+    const enabled = [...(shared("workspace.panels") ?? ["files", "changes"]), "git", "skills", "todos", "servers", "remote"];
     this.syncPanel(space, panel, body, enabled);
     const panelButton = (id, label, icon, badge) => {
       const on = panel && !panel.hidden && body?.active === id;
@@ -102,6 +102,7 @@ export default class Tabs extends View {
       .child(panelButton("skills", "Skills", "mods/skills/skills.svg"))
       .child(panelButton("todos", "Todos", "mods/todos/todos.svg"))
       .child(panelButton("servers", "Servers", "mods/workspace-chrome/server.svg", terminals().filter(x => x.state === "live" && x.labels?.["herdr.server"]).length))
+      .child(panelButton("remote", "PR", "mods/remote-checker/pr.svg"))
       .when(w?.buttons, el => el.child(button("minimize", w.platform === "windows" ? svg("mods/pond-tabs/win-min.svg").size(16) : "−", () => run("window.minimize")))
         .child(button("maximize", w.platform === "windows" ? svg(`mods/pond-tabs/${w.maximized ? "win-restore" : "win-max"}.svg`).size(16) : "□", () => run("window.maximize")))
         .child(button("close-window", w.platform === "windows" ? svg("mods/pond-tabs/win-close.svg").size(16) : svg("mods/pane/close.svg").size(13), () => run("window.close"))));

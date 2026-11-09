@@ -173,6 +173,13 @@
                       "content": {
                         "mod": "servers"
                       }
+                    },
+                    {
+                      "id": "remote",
+                      "type": "block",
+                      "content": {
+                        "mod": "remote-checker"
+                      }
                     }
                   ],
                   "active": "files"

@@ -36,7 +36,7 @@ Bindings (aliases in brackets, not shown):
 - Panes: `%` [`|`] split right, `"` [`-`] split down, `h` `j` `k` `l` go
   left/down/up/right, `z` zoom, `x` close.
 - Panels: `g` Git, `a` AI skills, `T` Todos, `e` expand / collapse, `f` Files,
-  `d` Changes (diff), `r` Servers, `b` toggle sidebar.
+  `d` Changes (diff), `r` Servers, `P` Remote Checker (PR), `b` toggle sidebar.
 - Spaces: `s` [`o`] find space / tab, `$` rename space, `)` next, `(` previous,
   `?` all shortcuts.
 
@@ -53,7 +53,7 @@ Bindings (aliases in brackets, not shown):
   panel already had the keyboard does the key hide it, giving the focused pane
   the keyboard back.
 - `h`/`j`/`k`/`l` from a panel that had the keyboard (git, skills, todos,
-  gitview, pond-files, servers) ask that panel to move (`<panel>.go:<dir>`), so
+  gitview, pond-files, servers, remote-checker) ask that panel to move (`<panel>.go:<dir>`), so
   the move starts from the panel, not the last terminal.
 - `e` (expand), in order: inside gitview's own tab, or from gitview's list while
   Changes shows → opens `gitview-tab`; from the git mod's tab → `git.collapse`;
@@ -80,17 +80,19 @@ Bindings (aliases in brackets, not shown):
   `mod.open {name: "gitview-tab"}`, `space.rename/next/prev`, `app.help`,
   `git.expand`, `git.collapse`, `<panel>.focus`, `<panel>.go:<dir>`.
 - Reads shared flags written by other mods: `<mod>.hasKeys` for git, skills,
-  todos, gitview, pond-files, servers; `git.tabHasKeys`; `gitview.own`.
+  todos, gitview, pond-files, servers, remote-checker; `git.tabHasKeys`; `gitview.own`.
 
 ## Watch out
 
 - Panels answer `focus` once more after 150ms if they lost the keyboard to the
-  closing popup; a fresh build of a panel should do the same.
+  closing popup; a fresh build of a panel should do the same, but only when the
+  first focus never landed (checked at 40ms) and the panel wasn't left meanwhile,
+  or leaving quickly snaps the keyboard back.
 - Panel keys assume a layout with a `panel` column holding a `panel-body` stack
-  whose children are `git`, `skills`, `todos`, `files`, `changes`, `servers`
+  whose children are `git`, `skills`, `todos`, `files`, `changes`, `servers`, `remote`
   (as in this repo's `pond` layout). Shipped `main` has only `files` and
   `changes`; other panel keys then do nothing useful. `b` needs a `sidebar` node.
-- References mods not shipped with Herdr: `git`, `skills`, `todos`, `servers`,
+- References mods not shipped with Herdr: `git`, `skills`, `todos`, `servers`, `remote-checker`,
   `pond-files` (this repo), `picker` (shipped with Terminals), and `gitview` /
   `gitview-tab` (third-party, github.com/ChmaraX/herdr-gitview, not in this
   repo). Without them the popup still works: missing flags read as "not

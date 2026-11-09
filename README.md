@@ -23,7 +23,7 @@ It follows the "Layouts and mods other people made" steps in your `~/.config/her
 
 | Layout | |
 | --- | --- |
-| [pond](pond/) | Herdr's main layout with my own tabs, agents and files panels, and git, skills, todos and servers panels on the right |
+| [pond](pond/) | Herdr's main layout with my own tabs, agents and files panels, and git, skills, todos, servers and remote-checker panels on the right |
 
 ## Mods
 
@@ -33,10 +33,11 @@ It follows the "Layouts and mods other people made" steps in your `~/.config/her
 | [leader](leader/) | a tmux-style prefix: `ctrl-a`, then a key, with a popup of the bindings |
 | [todos](todos/) | todo pages as Markdown files in `~/.config/herdr-app/todos` |
 | [servers](servers/) | local dev servers as labelled herdr-core terminals that survive restarts |
+| [remote-checker](remote-checker/) | the focused branch's GitHub pull request: CI checks, reviewers, comments, diff size and commits, refetched every 10s |
 | [skills](skills/) | Claude skills (personal and the repo's): run, edit, scaffold |
 | [pond-agents](pond-agents/) | Herdr's agents list with a pixel duck per agent that acts out its status, plus the Claude context bar and model |
 | [pond-files](pond-files/) | Herdr's Files panel with focus, vim keys and a key bar |
-| [pond-tabs](pond-tabs/) | Herdr's tab bar with Git, Skills, Todos and Servers panel buttons (needs those mods) |
+| [pond-tabs](pond-tabs/) | Herdr's tab bar with Git, Skills, Todos, Servers and PR panel buttons (needs those mods) |
 
 Some panels integrate with [herdr-gitview](https://github.com/ChmaraX/herdr-gitview) when it's installed. It isn't part of this repo.
 

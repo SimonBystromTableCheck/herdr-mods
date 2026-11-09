@@ -92,7 +92,14 @@ export default class Servers extends View {
     cx.spawn(async cx => {
       for (;;) {
         const c = await nextCommand();
-        if (c === "focus") { this.handle.focus(); cx.timer.after(150, cx => { if (!this.handle.is_focused()) { this.handle.focus(); cx.notify(); } }); }
+        if (c === "focus") {
+          // One retry in case the first focus didn't land; focus that landed and then moved
+          // (leaving quickly, a click, the leader popup) is the person's choice, so no retry then.
+          const token = this.focusToken = (this.focusToken ?? 0) + 1;
+          this.handle.focus();
+          cx.timer.after(40, () => { if (this.handle.is_focused()) this.focusToken++; });
+          cx.timer.after(150, cx => { if (this.focusToken === token && !this.handle.is_focused()) { this.handle.focus(); cx.notify(); } });
+        }
         else if (c.startsWith("key:")) this.press(c.slice(4), cx);
         else if (c.startsWith("go:")) { this.handle.focus(); run("pane.go", { direction: c.slice(3) }); }
         cx.notify();
