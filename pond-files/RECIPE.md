@@ -1,4 +1,4 @@
-# My Files
+# Pond Files
 
 Herdr's Files panel made keyboard-first. It still browses the focused pane's folder as a
 lazy tree with git marks and opens a read-only preview, but you can move into it with
@@ -7,11 +7,11 @@ flip between files in the preview, q to hide the panel. A footer of keycaps show
 that fit, and `?` opens a card with all of them. The border turns accent while it has the keyboard.
 
 
-**Install:** Point your Herdr agent at this folder: copy `mods/my-files/` into
-`~/.config/herdr-app/mods/`, then `herdr-app check ~/.config/herdr-app/mods/my-files`.
+**Install:** Point your Herdr agent at this folder: copy `mods/pond-files/` into
+`~/.config/herdr-app/mods/`, then `herdr-app check ~/.config/herdr-app/mods/pond-files`.
 It is `"place": "none"`: it replaces the shipped `files` mod in a layout block. Clone the
 layout (`herdr-app do layout.clone '{"name":"main","as":"my-main"}'`) and set the `files`
-block's `content` to `{ "mod": "my-files" }`.
+block's `content` to `{ "mod": "pond-files" }`.
 
 ## What you see
 
@@ -56,9 +56,9 @@ keyboard), text 13px, top to bottom:
   to the tree with that file selected. Anywhere: `r` refresh, `q` hide the panel
   (`layout.hide {id: "panel"}`) and refocus the pane, `?` the keys card (`esc`, `?`, `q` or a
   click closes it). Keys with cmd/alt pass through.
-- Commands from `keys.json`: `my-files.key:<k>` presses a key, `my-files.go:<dir>` takes the
+- Commands from `keys.json`: `pond-files.key:<k>` presses a key, `pond-files.go:<dir>` takes the
   keyboard then runs `pane.go`.
-- Publishes `shared("my-files.hasKeys")` (true while it holds the keyboard), polled every 300ms.
+- Publishes `shared("pond-files.hasKeys")` (true while it holds the keyboard), polled every 300ms.
 
 ## Built from
 
@@ -79,7 +79,7 @@ Clone of shipped `files` (`cloned_from: {name: "files", version: "0.1.14"}`). Fi
 - Keyboard: `cx.focus_handle()`, `.track_focus().on_key_down()`, `nextCommand()` loop for
   `focus` / `key:` / `go:`, a retry 150ms after `focus`, and a 300ms timer for focus changes
   (GPUI has no blur event). Back now reselects the file in the tree.
-- Asset paths changed from `mods/files/…` to `mods/my-files/…`.
+- Asset paths changed from `mods/files/…` to `mods/pond-files/…`.
 - `keybar.js`: `keycap`, `keybar` (fits chips to `on_size_change` width), `keysCard`; the same
   file is copied into this author's `git`, `skills`, `todos` and `servers` mods.
 - herdr: `spaces`, `panes`, `focused`, `exec` (`sh` listing script, PowerShell on Windows,
@@ -96,11 +96,11 @@ Clone of shipped `files` (`cloned_from: {name: "files", version: "0.1.14"}`). Fi
   first keypress goes to the terminal.
 - Remote folders are polled only (no watch).
 - Limits: 500 entries per folder, 5,000 in total, 20,000 preview lines.
-- The `leader` mod in this repo reads `my-files.hasKeys`; keep the key name if you rename.
+- The `leader` mod in this repo reads `pond-files.hasKeys`; keep the key name if you rename.
 
 ## Done when
 
-- `herdr-app check ~/.config/herdr-app/mods/my-files` passes.
+- `herdr-app check ~/.config/herdr-app/mods/pond-files` passes.
 - In a block in place of `files`, it lists the focused pane's folder with git marks.
 - `pane.go` into the panel turns its border accent; `j`/`k` move the highlight, `l` opens a
   folder and previews a file, `h` goes back, `J`/`K` step through files in the preview.

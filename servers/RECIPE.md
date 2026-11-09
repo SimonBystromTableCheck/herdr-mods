@@ -41,7 +41,7 @@ Panel: theme `background`, text 13px, rounded 10 with a 1px border (`accent` whi
 
 ## Watch out
 
-- `place: "none"`: nothing shows it by default. Show it with a layout block `{ "content": { "mod": "servers" } }` (it was built for the hidden right-hand `panel` column of the `my-main` layout) or as a pane: `herdr-app do pane.split '{"direction":"right","mod":"servers"}'`. `mod.open` does not apply (no overlay in `mod.json`). `q` hides the layout node `panel`, which only exists in such a layout.
+- `place: "none"`: nothing shows it by default. Show it with a layout block `{ "content": { "mod": "servers" } }` (it was built for the hidden right-hand `panel` column of the `pond` layout) or as a pane: `herdr-app do pane.split '{"direction":"right","mod":"servers"}'`. `mod.open` does not apply (no overlay in `mod.json`). `q` hides the layout node `panel`, which only exists in such a layout.
 - The projects root is `servers.json` `"root"` (a path, `~` allowed), set by Change…; without it, `~/code` if that folder exists, else home. Saving keeps `root` next to `servers`. Existing servers keep their absolute `cwd`, so changing the root never moves them. The tree only browses with the mouse.
 - Writes `~/.config/herdr-app/servers.json` (outside its folder, not in this repo). Local machine only: no `on`, so remote spaces' servers aren't supported.
 - Server terminals carry no `herdr.space`/`herdr.tab` labels on purpose, so they never appear as tabs; don't add those labels.

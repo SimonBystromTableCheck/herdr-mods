@@ -1,4 +1,4 @@
-# My Agents
+# Pond Agents
 
 Herdr's Agents list with a pixel-art duck in place of each agent's program icon. The duck
 acts out the agent's status: it jabs a knife while the agent works, glares (then scowls)
@@ -8,11 +8,11 @@ for Claude Code agents. Everything else (grouping, priority sort, pins, sub-agen
 the narrow rail) is the shipped `agents` mod unchanged.
 
 
-**Install:** Point your Herdr agent at this folder: copy `mods/my-agents/` into
-`~/.config/herdr-app/mods/`, then `herdr-app check ~/.config/herdr-app/mods/my-agents`.
+**Install:** Point your Herdr agent at this folder: copy `mods/pond-agents/` into
+`~/.config/herdr-app/mods/`, then `herdr-app check ~/.config/herdr-app/mods/pond-agents`.
 It is `"place": "none"`: to use it, point a layout block at it instead of the shipped
 `agents` (clone the layout first: `herdr-app do layout.clone '{"name":"main","as":"my-main"}'`,
-then set the `agents` block's `content` to `{ "mod": "my-agents" }`).
+then set the `agents` block's `content` to `{ "mod": "pond-agents" }`).
 
 ## What you see
 
@@ -78,7 +78,7 @@ Clone of shipped `agents` (`cloned_from: {name: "agents", version: "0.1.14"}`). 
   `duck(a.status, 45, now - since)` and sub rows `duck(st, 27, …)`; row 66px with `pl(4)`,
   gap 6; name/detail stacked in a `v_flex` instead of "name · detail" on one line; the duck
   gets a tooltip and is always shown; adds `contextBar()`; the sort popup opens
-  `mod: "my-agents"` (shipped opens `agents`).
+  `mod: "pond-agents"` (shipped opens `agents`).
 - Context data: terminal labels `claude.context` (0–100) and `claude.model`, read from
   `terminals()[i].labels`.
 - herdr: `agents`, `terminals`, `panes`, `focused`, `spaces`, `run`, `theme`, `shared`,
@@ -104,8 +104,8 @@ Clone of shipped `agents` (`cloned_from: {name: "agents", version: "0.1.14"}`). 
 
 ## Done when
 
-- `herdr-app check ~/.config/herdr-app/mods/my-agents` passes.
-- A layout block with `{ "mod": "my-agents" }` shows the "Agents" header and a 45px duck per agent.
+- `herdr-app check ~/.config/herdr-app/mods/pond-agents` passes.
+- A layout block with `{ "mod": "pond-agents" }` shows the "Agents" header and a 45px duck per agent.
 - A working agent's duck jabs its knife and the row shows the spinner; a blocked agent shows
   "Needs you" and its duck scowls after a minute; a finished one hops; an idle one bobs.
 - A Claude Code agent with the status line labels shows a colored context bar and its model.

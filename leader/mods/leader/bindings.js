@@ -25,7 +25,7 @@ export default [
   { group: "Panels", key: "a", label: "AI skills", panel: "skills", focus: true, toggle: true },
   { group: "Panels", key: "T", label: "Todos", panel: "todos", focus: true, toggle: true },
   { group: "Panels", key: "e", label: "Expand / collapse", action: "expand" },
-  { group: "Panels", key: "f", label: "Files", panel: "files", mod: "my-files", focus: true, toggle: true },
+  { group: "Panels", key: "f", label: "Files", panel: "files", mod: "pond-files", focus: true, toggle: true },
   { group: "Panels", key: "d", label: "Changes (diff)", panel: "changes", mod: "gitview", focus: true, toggle: true },
   { group: "Panels", key: "r", label: "Servers", panel: "servers", focus: true, toggle: true },
   { group: "Panels", key: "b", label: "Toggle sidebar", run: "layout.toggle", args: { id: "sidebar" } },

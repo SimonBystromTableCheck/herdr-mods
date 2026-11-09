@@ -113,7 +113,7 @@ export default class Files extends View {
     this.readZoom(cx);
     this.refresh(cx);
     cx.timer.every(10000, cx => this.refresh(cx));
-    // pane.go moved the keyboard here, or `my-files.key:<k>` from keys.json.
+    // pane.go moved the keyboard here, or `pond-files.key:<k>` from keys.json.
     cx.spawn(async cx => {
       for (;;) {
         const c = await nextCommand();
@@ -126,7 +126,7 @@ export default class Files extends View {
     // GPUI has no blur event: notice the keyboard coming and going (redraws only on change).
     cx.timer.every(300, cx => {
       const k = this.handle.is_focused();
-      if (k !== this.sharedKeys) { this.sharedKeys = k; setShared("my-files.hasKeys", k); }
+      if (k !== this.sharedKeys) { this.sharedKeys = k; setShared("pond-files.hasKeys", k); }
       if (k !== this.hadKeys) { this.hadKeys = k; cx.notify(); }
     });
   }
@@ -397,8 +397,8 @@ export default class Files extends View {
     return h_flex().id(`file-${path}`).h(ROW).flex_none().pl(8 + depth * 18).pr(8).gap(7).items_center().rounded(7).cursor_pointer()
       .when(on, el => el.bg(keys ? t.selected : t.raised))
       .hover(s => s.bg(t.hover))
-      .child(entry.dir ? svg(`mods/my-files/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim) : div().w(12).flex_none())
-      .child(svg(`mods/my-files/${entry.dir ? "folder" : "file"}.svg`).size(14).flex_none().text_color(t.muted))
+      .child(entry.dir ? svg(`mods/pond-files/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim) : div().w(12).flex_none())
+      .child(svg(`mods/pond-files/${entry.dir ? "folder" : "file"}.svg`).size(14).flex_none().text_color(t.muted))
       .child(div().flex_1().min_w(0).truncate().child(entry.name))
       .when(Boolean(mark), el => el.child(div().text_size(11).text_color(mark === "A" ? t.ansi2 : mark === "D" || mark === "U" ? t.ansi1 : t.blocked).child(mark)));
   }

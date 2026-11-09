@@ -1,4 +1,4 @@
-# My Tabs
+# Pond Tabs
 
 Herdr's tab bar with more panel buttons. The active space's tabs are pills
 along the top of the work area (program icon, name, agent status, a close `x`
@@ -7,11 +7,11 @@ Files, Changes, Git, Skills, Todos and Servers, where Servers carries a green
 count of running dev servers. The chosen panel is remembered per space.
 
 
-**Install:** point your Herdr agent at this folder: copy `mods/my-tabs/` into
-`~/.config/herdr-app/mods/`, then `herdr-app check ~/.config/herdr-app/mods/my-tabs`.
+**Install:** point your Herdr agent at this folder: copy `mods/pond-tabs/` into
+`~/.config/herdr-app/mods/`, then `herdr-app check ~/.config/herdr-app/mods/pond-tabs`.
 It is `"place": "none"` and replaces the layout's `tabs` block: clone a layout
 (`herdr-app do layout.clone '{"name":"main","as":"my-layout"}'`) and set the
-`tabs` block's `content` to `{ "mod": "my-tabs" }`. This repo's `my-main`
+`tabs` block's `content` to `{ "mod": "pond-tabs" }`. This repo's `pond`
 layout already does, at 42px tall.
 
 ## What you see
@@ -63,7 +63,7 @@ padding, 3px gaps), left to right:
   - `panelButton` takes a `badge` count; Servers passes
     `terminals().filter(x => x.state === "live" && x.labels?.["herdr.server"]).length`
     (imports `terminals`).
-  - Window-button icons point at `mods/my-tabs/win-*.svg` instead of `mods/tabs/`.
+  - Window-button icons point at `mods/pond-tabs/win-*.svg` instead of `mods/tabs/`.
 - Files: `main.js`, `mod.json`, `win-min.svg`, `win-max.svg`, `win-restore.svg`,
   `win-close.svg` (16px, 1px stroke; same as shipped).
 - `herdr`: `spaces`, `panes` (program per tab), `terminals`, `run`,
@@ -78,11 +78,11 @@ padding, 3px gaps), left to right:
 
 - The Git, Skills, Todos and Servers buttons always show. They need the layout's
   `panel-body` stack to have children with those ids (blocks for the `git`,
-  `skills`, `todos`, `servers` mods from this repo, as in `my-main`); on the
+  `skills`, `todos`, `servers` mods from this repo, as in `pond`); on the
   shipped `main` layout they select a child that doesn't exist. The Skills and
   Todos icons come from those mods' folders and are blank without them.
-- In `my-main` the `changes` child runs the third-party `gitview` mod
-  (github.com/ChmaraX/herdr-gitview, not in this repo); my-tabs only selects
+- In `pond` the `changes` child runs the third-party `gitview` mod
+  (github.com/ChmaraX/herdr-gitview, not in this repo); pond-tabs only selects
   the child id, so it works with shipped `changes` too.
 - The Servers badge counts any terminal with a `herdr.server` label, which the
   `servers` mod sets; without it the badge stays hidden.
@@ -92,8 +92,8 @@ padding, 3px gaps), left to right:
 
 ## Done when
 
-- `herdr-app check ~/.config/herdr-app/mods/my-tabs` passes.
-- In a layout whose `tabs` block uses `my-tabs`, the bar shows the active
+- `herdr-app check ~/.config/herdr-app/mods/pond-tabs` passes.
+- In a layout whose `tabs` block uses `pond-tabs`, the bar shows the active
   space's tabs, `+`, and Files, Changes, Git, Skills, Todos, Servers.
 - Clicking Todos opens the panel on Todos with the button highlighted; clicking
   it again hides the panel.

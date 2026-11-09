@@ -40,7 +40,7 @@
               "id": "agents",
               "type": "block",
               "content": {
-                "mod": "my-agents"
+                "mod": "pond-agents"
               },
               "size": {
                 "weight": 1
@@ -79,7 +79,7 @@
           "id": "tabs",
           "type": "block",
           "content": {
-            "mod": "my-tabs"
+            "mod": "pond-tabs"
           },
           "size": {
             "px": 42
@@ -131,7 +131,7 @@
                       "id": "files",
                       "type": "block",
                       "content": {
-                        "mod": "my-files"
+                        "mod": "pond-files"
                       }
                     },
                     {

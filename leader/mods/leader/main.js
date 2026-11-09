@@ -22,7 +22,7 @@ function find(node, id) {
 export default class Leader extends View {
   init(_props, cx) {
     // Read before this popup's own focus makes the panel report it lost the keyboard.
-    this.fromPanel = ["git", "skills", "todos", "gitview", "my-files", "servers"].find(m => shared(`${m}.hasKeys`) === true) ?? null;
+    this.fromPanel = ["git", "skills", "todos", "gitview", "pond-files", "servers"].find(m => shared(`${m}.hasKeys`) === true) ?? null;
     this.fromGitTab = shared("git.tabHasKeys") === true;
     this.fromGitview = shared("gitview.hasKeys") === true;
     this.handle = cx.focus_handle();

@@ -48,7 +48,7 @@ Panel: theme `background`, text 12.5px, rounded 10 with a 1px border (`accent` w
 
 ## Watch out
 
-- `place: "none"`: nothing shows it by default. Show it with a layout block `{ "content": { "mod": "git" } }` (it was built for a hidden right-hand `panel` column with a `panel-body` stack, as in the `my-main` layout), or as a pane: `herdr-app do pane.split '{"direction":"right","mod":"git"}'`. `mod.open` does not apply (no overlay in `mod.json`).
+- `place: "none"`: nothing shows it by default. Show it with a layout block `{ "content": { "mod": "git" } }` (it was built for a hidden right-hand `panel` column with a `panel-body` stack, as in the `pond` layout), or as a pane: `herdr-app do pane.split '{"direction":"right","mod":"git"}'`. `mod.open` does not apply (no overlay in `mod.json`).
 - `q`, pop-out and collapse assume layout ids `panel` and stack `panel-body` with a child `git`. Elsewhere `q` and collapse's panel steps do nothing useful; pop-out still opens the tab.
 - The folder name `git` is hardcoded: icons `mods/git/*.svg`, `${appHome()}/mods/git/config.json`, `${appHome()}/mods/git/seq-edit.pl`, and `tab.new {mod: "git"}`. Rename the folder and these break.
 - No dependency on `gitview` (github.com/ChmaraX/herdr-gitview, not in this repo): it is only mentioned in comments and the footer copies its look. The `leader` mod in this repo reads `git.hasKeys` and runs `git.expand`/`git.collapse`, but Git works without it.

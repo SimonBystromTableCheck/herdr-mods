@@ -48,12 +48,12 @@ Bindings (aliases in brackets, not shown):
 - `ctrl-a` again: closes and sends `ctrl+a` to the focused terminal.
 - Panel keys select that child of the `panel-body` stack and show the `panel`
   column, and hand that panel's mod the keyboard (`<mod>.focus`: `files` is the
-  `my-files` mod, `changes` is `gitview`). If the panel is already showing but
+  `pond-files` mod, `changes` is `gitview`). If the panel is already showing but
   the keyboard is elsewhere (a terminal), the key just focuses it; only when that
   panel already had the keyboard does the key hide it, giving the focused pane
   the keyboard back.
 - `h`/`j`/`k`/`l` from a panel that had the keyboard (git, skills, todos,
-  gitview, my-files, servers) ask that panel to move (`<panel>.go:<dir>`), so
+  gitview, pond-files, servers) ask that panel to move (`<panel>.go:<dir>`), so
   the move starts from the panel, not the last terminal.
 - `e` (expand), in order: inside gitview's own tab, or from gitview's list while
   Changes shows → opens `gitview-tab`; from the git mod's tab → `git.collapse`;
@@ -80,7 +80,7 @@ Bindings (aliases in brackets, not shown):
   `mod.open {name: "gitview-tab"}`, `space.rename/next/prev`, `app.help`,
   `git.expand`, `git.collapse`, `<panel>.focus`, `<panel>.go:<dir>`.
 - Reads shared flags written by other mods: `<mod>.hasKeys` for git, skills,
-  todos, gitview, my-files, servers; `git.tabHasKeys`; `gitview.own`.
+  todos, gitview, pond-files, servers; `git.tabHasKeys`; `gitview.own`.
 
 ## Watch out
 
@@ -88,10 +88,10 @@ Bindings (aliases in brackets, not shown):
   closing popup; a fresh build of a panel should do the same.
 - Panel keys assume a layout with a `panel` column holding a `panel-body` stack
   whose children are `git`, `skills`, `todos`, `files`, `changes`, `servers`
-  (as in this repo's `my-main` layout). Shipped `main` has only `files` and
+  (as in this repo's `pond` layout). Shipped `main` has only `files` and
   `changes`; other panel keys then do nothing useful. `b` needs a `sidebar` node.
 - References mods not shipped with Herdr: `git`, `skills`, `todos`, `servers`,
-  `my-files` (this repo), `picker` (shipped with Terminals), and `gitview` /
+  `pond-files` (this repo), `picker` (shipped with Terminals), and `gitview` /
   `gitview-tab` (third-party, github.com/ChmaraX/herdr-gitview, not in this
   repo). Without them the popup still works: missing flags read as "not
   focused", tabs/panes/spaces keys are unaffected, and `e` falls through to zen
@@ -111,6 +111,6 @@ Bindings (aliases in brackets, not shown):
 - `ctrl-a` then `%` splits the focused pane right; `ctrl-a` `t` opens a tab.
 - `ctrl-a` `y` shows `Nothing on "y"` in red and stays open.
 - `ctrl-a` `ctrl-a` in a shell moves the cursor to the line start.
-- In `my-main`, `ctrl-a` `T` opens Todos with the keyboard; again hides it.
+- In `pond`, `ctrl-a` `T` opens Todos with the keyboard; again hides it.
 - `ctrl-a` `e` in a terminal hides sidebar and panel; again brings back exactly
   what was open.

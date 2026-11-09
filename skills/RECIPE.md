@@ -39,7 +39,7 @@ Panel: theme `background`, text 12.5px, rounded 10 with a 1px border (`accent` w
 
 ## Watch out
 
-- `place: "none"`: nothing shows it by default. Show it with a layout block `{ "content": { "mod": "skills" } }` (it was built for the hidden right-hand `panel` column of the `my-main` layout) or as a pane: `herdr-app do pane.split '{"direction":"right","mod":"skills"}'`. `mod.open` does not apply (no overlay in `mod.json`). `q` hides the layout node `panel`, which only exists in such a layout.
+- `place: "none"`: nothing shows it by default. Show it with a layout block `{ "content": { "mod": "skills" } }` (it was built for the hidden right-hand `panel` column of the `pond` layout) or as a pane: `herdr-app do pane.split '{"direction":"right","mod":"skills"}'`. `mod.open` does not apply (no overlay in `mod.json`). `q` hides the layout node `panel`, which only exists in such a layout.
 - Reads `~/.claude/skills` and `<repo>/.claude/skills`, and New writes `SKILL.md` files there: outside its own folder.
 - Needs `nvim` for Edit and New (hardcoded, not `$EDITOR`), `git`, and an installed agent (`knownAgents()`) for the New tab option. Send works with any agent; it is written for Claude Code's `/skill` syntax.
 - Local machine only: on a remote space the folder is checked with local `git`, so its repo skills don't show.

@@ -1,4 +1,4 @@
-# My Main
+# Pond
 
 Herdr's own `main` window, with a fuller right-hand panel and a few personal swaps. The left
 sidebar keeps the spaces list, but its agents list shows animated ducks and Claude's context
@@ -8,11 +8,11 @@ pages and a dev-server runner. Files is keyboard-driven (vim keys), and Changes 
 third-party gitview instead of Herdr's stock panel.
 
 
-**Install:** Point your Herdr agent at this folder: copy `layouts/my-main.json` to
-`~/.config/herdr-app/layouts/` and every folder in `mods/` (`my-agents`, `my-files`, `my-tabs`,
+**Install:** Point your Herdr agent at this folder: copy `layouts/pond.json` to
+`~/.config/herdr-app/layouts/` and every folder in `mods/` (`pond-agents`, `pond-files`, `pond-tabs`,
 `git`, `skills`, `todos`, `servers`) to `~/.config/herdr-app/mods/`, renaming any that clash
 (and the `mod` names in the layout), run `herdr-app check ~/.config/herdr-app/mods/<name>` on
-each, install gitview (below), then `herdr-app do layout.switch --name my-main`.
+each, install gitview (below), then `herdr-app do layout.switch --name pond`.
 
 ## What you see
 
@@ -21,19 +21,19 @@ everything; 1px `border` dividers; terminals padded 14x12.
 
 - **Sidebar**, 268px on `chrome` (44–480px, edge not draggable), top to bottom:
   - brand bar, 46px (shipped `workspace-chrome`), drags the window;
-  - spaces list (shipped `spaces`) and agents list (`my-agents`), sharing the height equally,
+  - spaces list (shipped `spaces`) and agents list (`pond-agents`), sharing the height equally,
     each at least 90px. Agents rows are 66px with a 45px pixel duck acting out the status
     and, for Claude Code, a green/yellow/red context bar and the model;
   - footer, 69px (`workspace-chrome` with `footer: true`).
 - **Work column**, the rest:
-  - tab bar, 42px (`my-tabs`), drags the window: tab pills, `+` menu, then panel buttons
+  - tab bar, 42px (`pond-tabs`), drags the window: tab pills, `+` menu, then panel buttons
     Files, Changes, Git, Skills, Todos, Servers (26px, 12px text; `selected` when open).
     Servers shows a green (`ansi2`) count of running servers;
   - body row with 8px padding and 8px gap:
     - the active tab's panes as cards: `background`, 1px `border` (`accent` when focused),
       radius 10, 8px apart, framed even when alone, each with the shipped `pane` header (30px, top);
     - the panel, 368px (280–900), hidden until a panel button opens it: a stack showing one of
-      `files` (`my-files`), `changes` (`gitview`), `git`, `skills`, `todos`, `servers`;
+      `files` (`pond-files`), `changes` (`gitview`), `git`, `skills`, `todos`, `servers`;
   - status bar, 28px (shipped `workspace-status`).
 
 ## How it behaves
@@ -59,11 +59,11 @@ everything; 1px `border` dividers; terminals padded 14x12.
 Clone of shipped `layouts/main.json` (`cloned_from: {name: "main", version: "0.1.13"}`);
 keys are reordered but the tree, ids, sizes and look are the shipped ones except:
 
-| Node | Shipped | my-main |
+| Node | Shipped | pond |
 |---|---|---|
-| `agents` block | `agents` | `my-agents` (ducks, context bar) |
-| `tabs` block | `tabs` | `my-tabs` (4 extra panel buttons, Servers badge) |
-| `files` (stack child) | `files` | `my-files` (vim keys, keybar, plain-text preview) |
+| `agents` block | `agents` | `pond-agents` (ducks, context bar) |
+| `tabs` block | `tabs` | `pond-tabs` (4 extra panel buttons, Servers badge) |
+| `files` (stack child) | `files` | `pond-files` (vim keys, keybar, plain-text preview) |
 | `changes` (stack child) | `changes` | `gitview`, props `{ "replaces": { "mod": "changes" } }` |
 | `panel-body` stack | 2 children | + `git`, `skills`, `todos`, `servers` blocks |
 
@@ -72,10 +72,10 @@ Tree: `root` row → `sidebar` column [`brand`, `sidebar-lists` column [`spaces`
 pane frame), `panel` column [`panel-body` stack, `active: files`]], `status`].
 
 Mods: shipped `workspace-chrome`, `spaces`, `pane`, `workspace-status` (and the `new-menu`,
-`files`/`changes` icons `my-tabs` borrows); this repo's seven in `mods/`; `gitview` from
-outside. `my-agents` and `my-files` have their own recipes in this repo; `my-tabs` differs from
+`files`/`changes` icons `pond-tabs` borrows); this repo's seven in `mods/`; `gitview` from
+outside. `pond-agents` and `pond-files` have their own recipes in this repo; `pond-tabs` differs from
 shipped `tabs` only by the four buttons (`enabled` always adds `git`, `skills`, `todos`,
-`servers` to shared `workspace.panels`) and its own `mods/my-tabs/win-*.svg` paths.
+`servers` to shared `workspace.panels`) and its own `mods/pond-tabs/win-*.svg` paths.
 Programs the panels run: `git`, `sh`, `hc`, `nvim` (git and skills), `mv` (todos).
 
 **gitview** (github.com/ChmaraX/herdr-gitview, not in this repo): install it with that repo's
@@ -88,10 +88,10 @@ instead, set that block's `content` to `{ "mod": "changes" }`.
 ## Watch out
 
 - Keep the node ids `sidebar`, `panel`, `panel-body` and the child ids `files`, `changes`,
-  `git`, `skills`, `todos`, `servers`: `my-tabs` selects stack children by id, the agents rail
+  `git`, `skills`, `todos`, `servers`: `pond-tabs` selects stack children by id, the agents rail
   measures `sidebar`, and Files' `q` hides `panel`.
 - Renaming mods on a clash: `git` reads `mods/git/config.json` and `mods/git/seq-edit.pl`
-  by fixed path, and `my-tabs` draws `mods/skills/skills.svg`, `mods/todos/todos.svg`; rename
+  by fixed path, and `pond-tabs` draws `mods/skills/skills.svg`, `mods/todos/todos.svg`; rename
   those paths too. The `leader` mod (separate item) looks for `<mod>.hasKeys` by these names.
 - `git/config.json` ships this author's settings: editor `nvim` and a `ctrl-p` custom command
   that prunes local branches whose upstream is gone. Review before using.
@@ -103,7 +103,7 @@ instead, set that block's `content` to `{ "mod": "changes" }`.
 
 ## Done when
 
-- Every mod in `mods/` passes `herdr-app check`; `layout.switch --name my-main` shows a 268px
+- Every mod in `mods/` passes `herdr-app check`; `layout.switch --name pond` shows a 268px
   sidebar (brand, spaces, duck agents list, footer), a 42px tab bar and a 28px status bar.
 - The tab bar shows Files, Changes, Git, Skills, Todos, Servers; each opens a 368px panel on the
   right with that mod, and clicking it again hides the panel.
