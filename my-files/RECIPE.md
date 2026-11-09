@@ -30,9 +30,13 @@ keyboard), text 13px, top to bottom:
 - **Preview** (replaces the tree): the file as plain monospace lines (the terminal font,
   12px, 18px rows), line numbers right-aligned in `dim`, the current line highlighted
   (`selected` with the keyboard, else `raised`), with a scrollbar. No syntax colors.
+  Word wrap is on by default: a long line continues on extra 18px rows (line number only
+  on its first row, the whole line highlighted), breaking at the last space in the row's
+  second half, else mid-word.
 - **Keybar** (28px footer, top border, 11px): keycaps (16px, rounded 4, `raised` on `border`,
   JetBrains Mono) with labels in `dim`, as many as fit: tree "j k move · l open · h up ·
-  g G ends · q hide"; preview "j k line · J K file · h back · q hide"; a `?` keycap at the right.
+  g G ends · q hide"; preview "j k line · w wrap on|off · J K file · h back · q hide" (the
+  wrap chip is also a button: hover `hover`, click toggles); a `?` keycap at the right.
 - **Keys card** (on `?`): a 55%-black scrim over the panel with a centered card (max 360px,
   `popover`, rounded 10) titled "Files: all keys", groups Tree / Preview / Everywhere.
 
@@ -47,7 +51,8 @@ keyboard), text 13px, top to bottom:
   `g`/`G`/Home/End first/last, `ctrl-d`/`ctrl-u`/PgDn/PgUp half a page, `l`/→/Enter open a
   folder (again: step into it) or preview a file, `h`/← close the folder or jump to its parent,
   `space`/`o` fold, `esc` keyboard back to the focused pane. Preview: `j`/`k`, `g`/`G`,
-  `ctrl-d`/`ctrl-u` move the line, `J`/`K` next/previous file in the tree, `h`/←/`esc`/⌫ back
+  `ctrl-d`/`ctrl-u` move the line, `w` word wrap on/off (remembered in the copy's
+  `localStorage` "wrap"), `J`/`K` next/previous file in the tree, `h`/←/`esc`/⌫ back
   to the tree with that file selected. Anywhere: `r` refresh, `q` hide the panel
   (`layout.hide {id: "panel"}`) and refocus the pane, `?` the keys card (`esc`, `?`, `q` or a
   click closes it). Keys with cmd/alt pass through.
@@ -67,6 +72,10 @@ Clone of shipped `files` (`cloned_from: {name: "files", version: "0.1.14"}`). Fi
 - Preview: shipped uses a readonly `EditorState`/`Editor` with syntax colors; this one splits
   the text into lines (tabs as 4 spaces, max 20,000 lines / 400,000 chars, "… (file truncated)")
   in a second virtual list so a line cursor can move. The `LANG` table is now unused.
+- Wrap: rows are precomputed (`wrapRows`, cached per file and column count) because the
+  virtual list needs fixed row heights. Columns = (panel width / zoom − 2 − 16 − gutter −
+  10 − 10) / 7.2px, the 12px mono advance; zoom is read from `settings.json` (`settings()`
+  has none) at start and on every resize, since the size comes in zoomed pixels.
 - Keyboard: `cx.focus_handle()`, `.track_focus().on_key_down()`, `nextCommand()` loop for
   `focus` / `key:` / `go:`, a retry 150ms after `focus`, and a 300ms timer for focus changes
   (GPUI has no blur event). Back now reselects the file in the tree.
@@ -96,4 +105,6 @@ Clone of shipped `files` (`cloned_from: {name: "files", version: "0.1.14"}`). Fi
 - `pane.go` into the panel turns its border accent; `j`/`k` move the highlight, `l` opens a
   folder and previews a file, `h` goes back, `J`/`K` step through files in the preview.
 - The footer shows keycaps that fit its width; `?` opens the all-keys card, `esc` closes it.
+- A long line in the preview wraps to the panel's right edge; `w` (or clicking "wrap on")
+  turns it off and the label reads "wrap off"; reopening the panel keeps the choice.
 - `q` hides the panel and puts the keyboard back in the terminal; `esc` in the tree does the latter.

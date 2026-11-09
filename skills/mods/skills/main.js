@@ -90,7 +90,7 @@ export default class Skills extends View {
     cx.spawn(async cx => {
       for (;;) {
         const c = await nextCommand();
-        if (c === "focus") this.handle.focus();
+        if (c === "focus") { this.handle.focus(); cx.timer.after(150, cx => { if (!this.handle.is_focused()) { this.handle.focus(); cx.notify(); } }); }
         else if (c.startsWith("go:")) { this.handle.focus(); run("pane.go", { direction: c.slice(3) }); }
         else if (c.startsWith("key:")) this.press(c.slice(4), cx);
         cx.notify();

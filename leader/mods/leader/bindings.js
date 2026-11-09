@@ -1,5 +1,6 @@
 // Leader (ctrl-a) bindings. `run`: an app command (herdr-app commands lists them) with `args`;
-// `panel`: show that right-side panel, `focus` also gives it the keyboard, `toggle` hides it if already shown.
+// `panel`: show that right-side panel (a `panel-body` child id), `mod` the mod in it when named differently,
+// `focus` also gives it the keyboard, `toggle` hides it when it already has the keyboard.
 export default [
   { group: "Tabs", key: "t", label: "New tab", run: "tab.new" },
   { group: "Tabs", key: "c", label: "New tab", run: "tab.new", hidden: true },
@@ -24,9 +25,9 @@ export default [
   { group: "Panels", key: "a", label: "AI skills", panel: "skills", focus: true, toggle: true },
   { group: "Panels", key: "T", label: "Todos", panel: "todos", focus: true, toggle: true },
   { group: "Panels", key: "e", label: "Expand / collapse", action: "expand" },
-  { group: "Panels", key: "f", label: "Files", panel: "files", toggle: true },
-  { group: "Panels", key: "d", label: "Changes (diff)", panel: "changes", toggle: true },
-  { group: "Panels", key: "r", label: "Servers", panel: "servers", toggle: true },
+  { group: "Panels", key: "f", label: "Files", panel: "files", mod: "my-files", focus: true, toggle: true },
+  { group: "Panels", key: "d", label: "Changes (diff)", panel: "changes", mod: "gitview", focus: true, toggle: true },
+  { group: "Panels", key: "r", label: "Servers", panel: "servers", focus: true, toggle: true },
   { group: "Panels", key: "b", label: "Toggle sidebar", run: "layout.toggle", args: { id: "sidebar" } },
 
   { group: "Spaces", key: "s", label: "Find space / tab", run: "mod.open", args: { name: "picker" } },

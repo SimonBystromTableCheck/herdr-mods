@@ -47,9 +47,11 @@ Bindings (aliases in brackets, not shown):
   are ignored.
 - `ctrl-a` again: closes and sends `ctrl+a` to the focused terminal.
 - Panel keys select that child of the `panel-body` stack and show the `panel`
-  column. `g`, `a`, `T` also hand the panel the keyboard (`<panel>.focus`).
-  All panel keys toggle: if that panel is already showing, it hides and the
-  focused pane gets the keyboard back.
+  column, and hand that panel's mod the keyboard (`<mod>.focus`: `files` is the
+  `my-files` mod, `changes` is `gitview`). If the panel is already showing but
+  the keyboard is elsewhere (a terminal), the key just focuses it; only when that
+  panel already had the keyboard does the key hide it, giving the focused pane
+  the keyboard back.
 - `h`/`j`/`k`/`l` from a panel that had the keyboard (git, skills, todos,
   gitview, my-files, servers) ask that panel to move (`<panel>.go:<dir>`), so
   the move starts from the panel, not the last terminal.
@@ -64,7 +66,8 @@ Bindings (aliases in brackets, not shown):
 
 - `mod.json`: `{ "place": "none", "title": "Leader", "overlay": { "kind": "popup", "at": "top", "offset": 40, "width": 620, "height": 330 } }`.
 - `bindings.js`: the table, `{ group, key, label, run, args?, hidden? }` or
-  `{ panel, focus?, toggle? }` or `{ action: "expand" }`. Edit it to rebind.
+  `{ panel, mod?, focus?, toggle? }` (`mod` when the mod in that `panel-body`
+  child is named differently) or `{ action: "expand" }`. Edit it to rebind.
 - `main.js`: the popup; grabs keyboard with a focus handle (again after 30ms
   and 250ms, since the popup takes focus a moment after opening), reads keys
   from `on_key_down` and from `nextCommand()` `key:<k>` (so `leader.key:x` works
@@ -81,6 +84,8 @@ Bindings (aliases in brackets, not shown):
 
 ## Watch out
 
+- Panels answer `focus` once more after 150ms if they lost the keyboard to the
+  closing popup; a fresh build of a panel should do the same.
 - Panel keys assume a layout with a `panel` column holding a `panel-body` stack
   whose children are `git`, `skills`, `todos`, `files`, `changes`, `servers`
   (as in this repo's `my-main` layout). Shipped `main` has only `files` and

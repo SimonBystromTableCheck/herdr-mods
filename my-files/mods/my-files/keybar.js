@@ -25,8 +25,12 @@ export function keycap(t, k, { size = 10.5 } = {}) {
     .child(capText(k));
 }
 
+// A chip with `onClick` is also a button (e.g. a toggle whose label shows its state).
 function chip(t, c) {
   return h_flex().flex_none().gap(4).items_center()
+    .when(Boolean(c.onClick), (el) => el.id(`chip-${c.caps.join("-")}`).cursor_pointer().rounded(4).px(2).hover((s) => s.bg(t.hover))
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_click((_e, cx) => { cx.stop_propagation(); c.onClick(cx); }))
     .child(h_flex().flex_none().gap(2).children(c.caps.map((k) => keycap(t, k))))
     .child(div().flex_none().text_size(11).text_color(t.dim).child(c.label));
 }

@@ -48,8 +48,9 @@ export default class Leader extends View {
     if (b.action === "expand") return this.expand(cx);
     this.close();
     if (b.panel) {
-      const panel = find(layout(), "panel"), body = find(layout(), "panel-body");
-      if (b.toggle && panel && !panel.hidden && body?.active === b.panel) {
+      const panel = find(layout(), "panel"), body = find(layout(), "panel-body"), mod = b.mod ?? b.panel;
+      // Shown but the keyboard is elsewhere (a terminal): focus it rather than hide it.
+      if (b.toggle && panel && !panel.hidden && body?.active === b.panel && (!b.focus || this.fromPanel === mod)) {
         run("layout.hide", { id: "panel" });
         // The panel may have had the keyboard; hand it back to the terminal.
         if (focused()?.pane) run("pane.focus", { pane: focused().pane });
@@ -57,7 +58,7 @@ export default class Leader extends View {
       }
       run("layout.select", { stack: "panel-body", child: b.panel });
       run("layout.show", { id: "panel" });
-      if (b.focus) run(`${b.panel}.focus`);
+      if (b.focus) run(`${mod}.focus`);
       return;
     }
     // pane.go would start from the last focused terminal, not the panel this popup took the keyboard

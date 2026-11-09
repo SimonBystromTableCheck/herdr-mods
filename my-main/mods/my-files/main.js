@@ -3,7 +3,7 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { keybar, keysCard } from "./keybar.js";
-import { spaces, panes, focused, exec, readTextFile, watchFolder, theme, settings, window, run, nextCommand, setShared } from "herdr";
+import { spaces, panes, focused, exec, readTextFile, watchFolder, theme, settings, window, run, nextCommand, setShared, appHome } from "herdr";
 
 function location() {
   const space = spaces().find(s => s.active), f = focused();
@@ -46,9 +46,33 @@ async function directory(path, on) {
 //   h ←          close a folder, else go to its parent
 //   space o      fold or unfold a folder · r refresh
 //   esc          keyboard back to the terminal · q hide the panel
-// Preview: j/k ctrl-d/ctrl-u g/G move the line · J/K next/previous file
+// Preview: j/k ctrl-d/ctrl-u g/G move the line · J/K next/previous file · w word wrap
 //   h ← esc backspace  back to the tree
 const ROW = 28, LINE = 18, MAX_LINES = 20000;
+// Preview text is 12px mono (~0.6em a character). Wrapping splits a line into extra fixed-height
+// rows (the list is virtual), at the last space when there is one in the second half of the row.
+const CHAR_W = 7.2, MAX_ROWS = 200000;
+
+function wrapRows(lines, cols) {
+  const rows = [], first = new Array(lines.length);
+  for (let n = 0; n < lines.length; n++) {
+    first[n] = rows.length;
+    let text = lines[n];
+    if (!cols || text.length <= cols || rows.length > MAX_ROWS) { rows.push({ n, text, head: true }); continue; }
+    let head = true;
+    while (text.length > cols) {
+      const space = text.lastIndexOf(" ", cols);
+      const cut = space > cols / 2 ? space + 1 : cols;
+      rows.push({ n, text: text.slice(0, cut), head }); head = false;
+      text = text.slice(cut);
+    }
+    rows.push({ n, text, head });
+  }
+  return { rows, first };
+}
+
+function loadWrap() { try { return localStorage.getItem("wrap") !== "0"; } catch { return true; } }
+function saveWrap(on) { try { localStorage.setItem("wrap", on ? "1" : "0"); } catch { /* no storage */ } }
 
 function keyOf(e) {
   const m = e.modifiers ?? {};
@@ -61,6 +85,7 @@ function keyOf(e) {
 const KEYS = {
   tree: [{ caps: ["j", "k"], label: "move" }, { caps: ["l"], label: "open" }, { caps: ["h"], label: "up" }, { caps: ["g", "G"], label: "ends" }, { caps: ["q"], label: "hide" }],
   preview: [{ caps: ["j", "k"], label: "line" }, { caps: ["J", "K"], label: "file" }, { caps: ["h"], label: "back" }, { caps: ["q"], label: "hide" }],
+  wrap: (on) => ({ caps: ["w"], label: on ? "wrap on" : "wrap off" }),
   treeAll: [
     { caps: ["j", "k"], label: "move" }, { caps: ["g", "G"], label: "first / last" }, { caps: ["ctrl-d", "ctrl-u"], label: "half a page" },
     { caps: ["l", "enter"], label: "open folder / preview file" }, { caps: ["h"], label: "close folder, else parent" },
@@ -69,6 +94,7 @@ const KEYS = {
   previewAll: [
     { caps: ["j", "k"], label: "move the line" }, { caps: ["g", "G"], label: "first / last line" }, { caps: ["ctrl-d", "ctrl-u"], label: "half a page" },
     { caps: ["J", "K"], label: "next / previous file" }, { caps: ["h", "escape"], label: "back to the tree" },
+    { caps: ["w"], label: "word wrap on / off" },
   ],
   everywhere: [{ caps: ["r"], label: "refresh" }, { caps: ["q"], label: "hide the panel" }, { caps: ["?"], label: "this card" }],
 };
@@ -83,6 +109,8 @@ export default class Files extends View {
     this.treeScroll = VirtualListScrollHandle.new();
     this.lineScroll = VirtualListScrollHandle.new();
     this.sel = null; this.line = 0;
+    this.wrap = loadWrap(); this.wrapped = null; this.zoom = 1;
+    this.readZoom(cx);
     this.refresh(cx);
     cx.timer.every(10000, cx => this.refresh(cx));
     // pane.go moved the keyboard here, or `my-files.key:<k>` from keys.json.
@@ -236,8 +264,38 @@ export default class Files extends View {
   moveLine(to, cx) {
     if (!this.lines?.length) return;
     this.line = Math.max(0, Math.min(this.lines.length - 1, to));
-    this.lineScroll.scroll_to_item(this.line);
+    this.lineScroll.scroll_to_item(this.rows().first[this.line]);
     cx.notify();
+  }
+
+  toggleWrap(cx) {
+    this.wrap = !this.wrap; saveWrap(this.wrap);
+    if (this.lines) this.lineScroll.scroll_to_item(this.rows().first[this.line]);
+    cx.notify();
+  }
+
+  // The app zoom (settings.json): the panel's size comes in zoomed pixels, text sizes don't.
+  readZoom(cx) {
+    cx.spawn(async cx => {
+      const text = await readTextFile(`${appHome()}/settings.json`).catch(() => null);
+      let zoom = 1;
+      try { zoom = Number(JSON.parse(text ?? "{}").zoom) || 1; } catch { /* keep 1 */ }
+      if (zoom !== this.zoom) { this.zoom = zoom; cx.notify(); }
+    });
+  }
+
+  // Columns that fit beside the line numbers: panel width less borders, padding, gutter and gap, scrollbar.
+  cols() {
+    if (!this.wrap || !this.size?.width) return 0;
+    const digits = String(this.lines.length).length;
+    return Math.max(20, Math.floor((this.size.width / this.zoom - 2 - 16 - digits * 7.5 - 10 - 10) / CHAR_W));
+  }
+
+  // The preview's rows, cached per file and width.
+  rows() {
+    const cols = this.cols(), w = this.wrapped;
+    if (w && w.lines === this.lines && w.cols === cols) return w;
+    return (this.wrapped = { lines: this.lines, cols, ...wrapRows(this.lines, cols) });
   }
 
   // Preview the file `step` rows away in the tree, skipping folders.
@@ -288,6 +346,7 @@ export default class Files extends View {
       case "ctrl-u": case "pageup": this.moveLine(this.line - this.page(), cx); return true;
       case "g": case "home": this.moveLine(0, cx); return true;
       case "G": case "end": this.moveLine(Infinity, cx); return true;
+      case "w": this.toggleWrap(cx); return true;
       case "J": this.neighbour(1, cx); return true;
       case "K": this.neighbour(-1, cx); return true;
       case "h": case "left": case "escape": case "backspace": this.back(cx); return true;
@@ -368,18 +427,18 @@ export default class Files extends View {
 
   preview(t, keys) {
     if (!this.lines) return div().p(12).text_color(t.dim).child(this.fileError || "Loading file…");
-    const lines = this.lines, digits = String(lines.length).length, mono = settings().font_family ?? "JetBrains Mono";
+    const { rows } = this.rows(), digits = String(this.lines.length).length, mono = settings().font_family ?? "JetBrains Mono";
     return div().flex_1().min_h(0).relative().font_family(mono).text_size(12)
-      .child(div().size_full().child(v_virtual_list("files-lines", lines.length, LINE, i => String(i),
-        range => lines.slice(range.start, range.end).map((text, j) => {
-          const n = range.start + j, on = n === this.line;
-          return h_flex().id(`line-${n}`).h(LINE).w_full().gap(10).px(8).items_center().overflow_hidden()
+      .child(div().size_full().child(v_virtual_list("files-lines", rows.length, LINE, i => `${rows[i].n}:${i}`,
+        range => rows.slice(range.start, range.end).map((r, j) => {
+          const on = r.n === this.line;
+          return h_flex().id(`line-${range.start + j}`).h(LINE).w_full().gap(10).px(8).items_center().overflow_hidden()
             .when(on, el => el.bg(keys ? t.selected : t.raised))
-            .child(div().w(digits * 7.5).flex_none().text_right().text_color(on ? t.muted : t.dim).child(String(n + 1)))
-            .child(div().flex_1().min_w(0).whitespace_nowrap().overflow_hidden().child(text || " "));
+            .child(div().w(digits * 7.5).flex_none().text_right().text_color(on ? t.muted : t.dim).child(r.head ? String(r.n + 1) : ""))
+            .child(div().flex_1().min_w(0).whitespace_nowrap().overflow_hidden().child(r.text || " "));
         }))
         .track_scroll(this.lineScroll).size_full()
-        .on_item_click((key, cx) => { this.line = Number(key); cx.notify(); })))
+        .on_item_click((key, cx) => { this.line = Number(key.split(":")[0]); cx.notify(); })))
       .child(Scrollbar.vertical("files-lines").viewport_from_layout().absolute().inset_0());
   }
 
@@ -389,13 +448,13 @@ export default class Files extends View {
     return v_flex().id("files").relative().size_full().min_h(0).rounded(10).overflow_hidden().bg(t.background).border_1().border_color(keys ? t.accent : t.border).text_color(t.foreground).text_size(13)
       .track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx))
       .on_mouse_down("left", () => this.handle.focus())
-      .on_size_change((size, cx) => { this.size = size; cx.notify(); })
+      .on_size_change((size, cx) => { this.size = size; this.readZoom(cx); cx.notify(); })
       .child(h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
         .when(Boolean(this.file), el => el.child(div().id("files-back").w(20).cursor_pointer().text_color(t.muted).on_click((_e, cx) => this.back(cx)).child("←")))
         .child(div().font_semibold().child("Files"))
         .child(div().flex_1().min_w(0).truncate().text_right().text_size(12).text_color(t.dim).child(this.file ?? this.root?.split(/[\\/]/).pop() ?? "")))
       .child(this.file ? this.preview(t, keys) : this.tree(t, keys))
-      .child(keybar(t, { id: "files", chips: this.file ? KEYS.preview : KEYS.tree, width: this.size?.width, onKeys: cx => { this.keysOpen = true; this.handle.focus(); cx.notify(); } }))
+      .child(keybar(t, { id: "files", chips: this.file ? [KEYS.preview[0], { ...KEYS.wrap(this.wrap), onClick: cx => this.toggleWrap(cx) }, ...KEYS.preview.slice(1)] : KEYS.tree, width: this.size?.width, onKeys: cx => { this.keysOpen = true; this.handle.focus(); cx.notify(); } }))
       .when(Boolean(this.keysOpen), el => el.child(keysCard(t, { id: "files", title: "Files: all keys", onClose: cx => { this.keysOpen = false; cx.notify(); }, groups: [
         { title: "Tree", chips: KEYS.treeAll }, { title: "Preview", chips: KEYS.previewAll }, { title: "Everywhere", chips: KEYS.everywhere }] })));
   }
