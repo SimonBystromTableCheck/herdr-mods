@@ -1,0 +1,103 @@
+# My Tabs
+
+Herdr's tab bar with more panel buttons. The active space's tabs are pills
+along the top of the work area (program icon, name, agent status, a close `x`
+on the active one), then `+`, then toggle buttons for the right-side panel:
+Files, Changes, Git, Skills, Todos and Servers, where Servers carries a green
+count of running dev servers. The chosen panel is remembered per space.
+
+
+**Install:** point your Herdr agent at this folder: copy `mods/my-tabs/` into
+`~/.config/herdr-app/mods/`, then `herdr-app check ~/.config/herdr-app/mods/my-tabs`.
+It is `"place": "none"` and replaces the layout's `tabs` block: clone a layout
+(`herdr-app do layout.clone '{"name":"main","as":"my-layout"}'`) and set the
+`tabs` block's `content` to `{ "mod": "my-tabs" }`. This repo's `my-main`
+layout already does, at 42px tall.
+
+## What you see
+
+One bar filling its block (`chrome` background, 1px `border` bottom, 10px side
+padding, 3px gaps), left to right:
+
+- **Tab pills**, 29px tall, radius 7, 10px padding, 12.8px text, in a
+  horizontally scrolling strip. Active: `raised` with a `border` outline and
+  `foreground` text; others: `chrome` and `muted`. Each: the program's icon
+  (14px; tinted `muted` if a glyph), the name (max 170px, truncated; unnamed
+  tabs show their agent's or program's name, else "Terminal"; ` Z` when
+  zoomed), a 12px `working` spinner while an agent works, a 6px `blocked` or
+  `done` dot, and on the active tab a 12px close `x` in `dim`.
+- **`+`**, 26px square button, `dim`.
+- **Panel buttons**, 26px tall, radius 6, 12px text, 14px icon + label: Files,
+  Changes (only if enabled in shared `workspace.panels`, default both), then
+  always Git, Skills, Todos, Servers. The open one is `selected`/`foreground`;
+  others `chrome`/`muted`. Servers adds a 16px round badge (`ansi2` green,
+  `background` text, 10.5px semibold) with the number of live terminals
+  labeled `herdr.server`, hidden at 0.
+- **Window buttons** (Linux/Windows only, where the system draws none):
+  minimize, maximize/restore, close; vector icons on Windows.
+- On macOS with a hidden title bar, left padding clears the traffic lights.
+
+## How it behaves
+
+- Click a tab: select it. Double-click: rename. Drag one pill onto another and
+  release: moves it there. Right-click: Herdr's tab menu (`menu` popup, 200px).
+  Close `x`: closes the tab. Scroll wheel over the bar: previous / next tab.
+- `+` opens the shipped `new-menu` popup (250×512): new terminal or agent.
+- A panel button shows that child of the `panel-body` stack and the `panel`
+  column; clicking the open one hides the panel.
+- Per space: the open panel (or none) is saved when it changes and restored on
+  switching spaces; a space never seen keeps whatever is showing.
+- Agent status per tab: working = spinning ring, blocked / done = colored dot,
+  idle = nothing.
+
+## Built from
+
+- A clone of Herdr's shipped `tabs` mod (`mod.json` has
+  `cloned_from: { name: "tabs", version: "0.1.13" }`). Differences from the
+  shipped one, all in `main.js`:
+  - `enabled` panels = `workspace.panels` plus `"git", "skills", "todos", "servers"`,
+    so per-space restore accepts those too.
+  - Four extra `panelButton`s after Changes: Git
+    (`mods/workspace-chrome/git-branch.svg`), Skills (`mods/skills/skills.svg`),
+    Todos (`mods/todos/todos.svg`), Servers (`mods/workspace-chrome/server.svg`).
+  - `panelButton` takes a `badge` count; Servers passes
+    `terminals().filter(x => x.state === "live" && x.labels?.["herdr.server"]).length`
+    (imports `terminals`).
+  - Window-button icons point at `mods/my-tabs/win-*.svg` instead of `mods/tabs/`.
+- Files: `main.js`, `mod.json`, `win-min.svg`, `win-max.svg`, `win-restore.svg`,
+  `win-close.svg` (16px, 1px stroke; same as shipped).
+- `herdr`: `spaces`, `panes` (program per tab), `terminals`, `run`,
+  `openOverlay`, `theme`, `window`, `shared`, `layout`, `settings` (zoom).
+- Commands: `tab.select`, `tab.move`, `tab.rename`, `tab.close`, `tab.prev`,
+  `tab.next`, `layout.select {stack: "panel-body", child}`,
+  `layout.show/hide {id: "panel"}`, `window.minimize/maximize/close`.
+- Shipped mods used: `menu`, `new-menu`, and icons from `pane`, `files`,
+  `changes`, `workspace-chrome`.
+
+## Watch out
+
+- The Git, Skills, Todos and Servers buttons always show. They need the layout's
+  `panel-body` stack to have children with those ids (blocks for the `git`,
+  `skills`, `todos`, `servers` mods from this repo, as in `my-main`); on the
+  shipped `main` layout they select a child that doesn't exist. The Skills and
+  Todos icons come from those mods' folders and are blank without them.
+- In `my-main` the `changes` child runs the third-party `gitview` mod
+  (github.com/ChmaraX/herdr-gitview, not in this repo); my-tabs only selects
+  the child id, so it works with shipped `changes` too.
+- The Servers badge counts any terminal with a `herdr.server` label, which the
+  `servers` mod sets; without it the badge stays hidden.
+- Per-space panel memory is in this copy's `localStorage`, not shared.
+- Clones never update: fixes to the shipped `tabs` must be carried over by hand.
+- No programs, files or network.
+
+## Done when
+
+- `herdr-app check ~/.config/herdr-app/mods/my-tabs` passes.
+- In a layout whose `tabs` block uses `my-tabs`, the bar shows the active
+  space's tabs, `+`, and Files, Changes, Git, Skills, Todos, Servers.
+- Clicking Todos opens the panel on Todos with the button highlighted; clicking
+  it again hides the panel.
+- Opening Git in one space and nothing in another, then switching back and
+  forth, restores each.
+- Starting a server through `servers` shows a green `1` on Servers.
+- An agent working in a tab shows the spinning ring on its pill.

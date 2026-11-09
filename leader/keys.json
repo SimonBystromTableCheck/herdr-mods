@@ -1,0 +1,5 @@
+{
+  "global": {
+    "ctrl-a": "mod.open:leader"
+  }
+}

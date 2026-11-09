@@ -1,0 +1,12 @@
+{
+  "editor": "nvim",
+  "customCommands": [
+    {
+      "key": "ctrl-p",
+      "context": "global",
+      "description": "Prunes local branches and delete branches deleted on remote",
+      "command": "bash -c \"git fetch --prune && git for-each-ref --format='%(refname:short) %(upstream:track)' | awk '\\$2 == \\\"[gone]\\\" {print \\$1}' | xargs -r git branch -D\"",
+      "output": "log"
+    }
+  ]
+}

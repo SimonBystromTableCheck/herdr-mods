@@ -1,0 +1,61 @@
+# Servers
+
+A panel of your local dev servers. Each card shows whether the server is running, the branch its folder is on, the localhost URL it printed, and the command it runs; start, stop, restart and its logs are one click or key away. Servers run as labeled herdr-core terminals, so they keep running when Herdr closes and are found again when it reopens. Adding one is a two-step picker: choose a folder under `~/code`, then pick a detected start command (package.json scripts, Procfile, Rails, Docker Compose, Django, Cargo, Go) or type one.
+
+
+**Install:** Point your Herdr agent at this folder: copy `mods/servers/` into `~/.config/herdr-app/mods/`, then `herdr-app check ~/.config/herdr-app/mods/servers`.
+
+## What you see
+
+Panel: theme `background`, text 13px, rounded 10 with a 1px border (`accent` while it has the keyboard, else `border`).
+
+- **Header, 42px**, 1px bottom border: "Servers" (semibold), "2/3 running" (12px, `dim`), and a "+ Add" button (26px, `muted`, `hover` background).
+- **List** (scrolls, 8px padding and gap): one card per server, 10px padding, 9px radius, `surface`, 1px border (the selected card: `accent` with the keyboard, else `input`).
+  - Line 1: an 8px status dot, the name (semibold), the status word (11px), then 26px icon buttons: Restart and Stop (`ansi1`) while running; Start (play, `ansi2`) and Remove (trash) while not; Logs (terminal icon) whenever it has a terminal. Statuses: `running` (`ansi2`), `exited (1)` (`ansi1`, the terminal ended on its own), `stopped` (`dim`), `starting` / `stopping` (`working`, a spinning 10px ring instead of the dot).
+  - Line 2 (12px, indented 16px): a `git-branch` icon in `accent` and the branch (`detached @ abc1234`, or "not a git repo" in `dim`); while running, the detected URL at the right in `accent` (`localhost:5173`, with an external-link icon).
+  - Line 3: `~/code/app $ pnpm run dev` in the mono font, 11.5px, `dim`, truncated.
+  - An error line in `ansi1` if starting failed.
+- Empty: "No servers yet" and a primary "Add a server" button.
+- **Add, step 1/2 "Pick a folder"** (replaces the list): header with `~/code`; a folder tree of 28px rows indented 16px per level with chevrons and a folder icon (`accent` when the folder is a git repo or has a package.json, else `muted`), `git` / `pkg` tags on the right, selected row `selected`. Under it "Selected: ~/code/app"; footer with Cancel and Next (30px buttons, primary `solid`/`solid_foreground`; Next dimmed to 0.45 until a folder is picked).
+- **Add, step 2/2 "Command"**: a Name input (defaults to the folder name), "Start command" with detected options (radio dot, command in mono 12px, source hint below in 11px `dim`; picked one: `accent` border on `selected`), a free-text command input, and Back / Add server.
+- **Footer, 28px**: keycap chips (start/stop, restart, logs, move, open url, add, remove) and a `?` keycap that opens the all-keys card.
+
+## How it behaves
+
+- Every 4s it re-reads `servers.json`, each server's branch and, for running servers without a URL yet, the last 400 lines of output for the first `http://localhost|127.0.0.1|0.0.0.0|[::1]` URL (`0.0.0.0` is shown as `localhost`).
+- Start: removes old finished terminals for that server, then starts a background terminal through your login shell. Stop: kills and removes it, so nothing is left. Restart: stop then start. A server that crashes keeps its finished terminal, so it shows `exited (code)` and Logs still opens its output.
+- Logs opens the terminal with `terminal.peek`. Clicking the URL (or `o`) opens it in the browser.
+- Keys: `j/k` move, `< >` first/last, `s`/`enter`/`space` start or stop, `R` restart (running only), `l` logs, `o` open URL, `a` add, `d` remove (only when not running), `r` refresh, `q` hide the panel and give the keyboard back to the focused pane, `?` the keys card (`escape`, `?` or `q` closes it). In the add flow, `enter` goes next / adds, `escape` goes back / cancels. Click a card to select it.
+- Detected commands: package.json scripts, ordered `dev`, `start`, `serve`, `preview` (and their `name:*` variants) first, run with the package manager from the nearest lockfile up to `$HOME` (`pnpm run`, `yarn`, `bun run`, else `npm run`); each `Procfile.dev` / `Procfile` entry; `bin/dev`; `bin/rails server`; `docker compose up`; `python manage.py runserver`; `cargo run`; `go run .`. Typing a custom command overrides the pick.
+
+## Built from
+
+- `main.js` (all logic and rendering), `keybar.js` (footer keycaps and keys card, same file as the git and skills mods), icons `play.svg stop.svg restart.svg trash.svg external.svg`.
+- `mod.json`: `{"place": "none", "title": "Servers", "focusable": true}`. No `props`.
+- herdr: `exec hc home appHome readTextFile writeTextFile terminals theme settings run nextCommand focused setShared`. Commands: `terminal.peek`, `layout.hide`, `pane.focus`, `pane.go`.
+- `nextCommand()`: `focus`, `go:<direction>`, `key:<k>` (e.g. `"servers.key:s"` in keys.json). Shared: `servers.hasKeys` (keyboard ownership, polled every 300ms).
+- Config: `~/.config/herdr-app/servers.json`, `{ "servers": [{ "id", "name", "cwd", "command", "added" }] }`; `id` is the name slug (max 20) plus 4 random characters. Saved with `writeTextFile(path, text, expected)`, retrying against the current file on conflict.
+- Programs: `hc run --bg --json --no-parent --no-notify --outlive-parent --name srv-<id> --cwd <cwd> --label herdr.server=<id> -- $SHELL -lic '<command>'`, `hc kill`, `hc rm`, `hc read --lines 400`; `git branch --show-current` / `git rev-parse --short HEAD`; `sh` scripts to list folders and detect project files; `open` for URLs.
+- A server's terminal is found in `terminals()` by its `herdr.server` label (or name `srv-<id>`), a live one first, else the newest.
+- Art: Lucide-style 24px stroke icons; Herdr's shipped `mods/workspace-chrome/spinner.svg`, `terminal.svg`, `git-branch.svg`, `plus.svg` and `mods/files/chevron-down.svg`, `chevron-right.svg`, `folder.svg`.
+
+## Watch out
+
+- `place: "none"`: nothing shows it by default. Show it with a layout block `{ "content": { "mod": "servers" } }` (it was built for the hidden right-hand `panel` column of the `my-main` layout) or as a pane: `herdr-app do pane.split '{"direction":"right","mod":"servers"}'`. `mod.open` does not apply (no overlay in `mod.json`). `q` hides the layout node `panel`, which only exists in such a layout.
+- The folder picker is hardcoded to `~/code` and only browses with the mouse. Folders outside it can only be added by editing `servers.json`.
+- Writes `~/.config/herdr-app/servers.json` (outside its folder, not in this repo). Local machine only: no `on`, so remote spaces' servers aren't supported.
+- Server terminals carry no `herdr.space`/`herdr.tab` labels on purpose, so they never appear as tabs; don't add those labels.
+- Start through `$SHELL -lic`, or version managers (nvm, fnm, mise) aren't on PATH. `open` is macOS-only.
+- Remove (trash or `d`) has no confirmation. The icon buttons have no tooltips.
+- Branch reads run `git` for every server every 4s; keep the list short.
+- No dependency on `gitview` or other mods in this repo; the `leader` mod reads `servers.hasKeys` but isn't needed.
+
+## Done when
+
+- `herdr-app check ~/.config/herdr-app/mods/servers` passes.
+- Add → pick a folder with a package.json → `pnpm run dev` (or the lockfile's manager) is listed first → Add server writes it to `servers.json`.
+- `s` starts it: spinner, then a green dot, `running`, the branch, and within ~4s its `localhost:<port>` URL.
+- `hc ls` shows a `srv-<id>` terminal labeled `herdr.server=<id>`; quitting and reopening Herdr shows it still running.
+- `l` peeks at its output; `R` restarts it; `s` stops it and `hc ls` no longer lists it.
+- A command that exits on its own shows `exited (<code>)` in red, and Logs still opens.
+- `d` on a stopped server removes it from the panel and from `servers.json`.
