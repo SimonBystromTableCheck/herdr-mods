@@ -95,7 +95,7 @@ instead, set that block's `content` to `{ "mod": "changes" }`.
   those paths too. The `leader` mod (separate item) looks for `<mod>.hasKeys` by these names.
 - `git/config.json` ships this author's settings: editor `nvim` and a `ctrl-p` custom command
   that prunes local branches whose upstream is gone. Review before using.
-- Assumptions: projects live in `~/code` (the Servers add-folder picker), Claude skills in
+- Assumptions: projects live in `~/code` (the Servers add-folder picker; changeable there with Change…), Claude skills in
   `~/.claude/skills`, deleted todo pages go to `~/.Trash` (macOS), `nvim` is installed.
 - The context bar needs a Claude Code status line that runs
   `hc label "$HC_TERMINAL_ID" claude.context=<pct> claude.model=<name>`; not included here.

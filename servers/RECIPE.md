@@ -1,6 +1,6 @@
 # Servers
 
-A panel of your local dev servers. Each card shows whether the server is running, the branch its folder is on, the localhost URL it printed, and the command it runs; start, stop, restart and its logs are one click or key away. Servers run as labeled herdr-core terminals, so they keep running when Herdr closes and are found again when it reopens. Adding one is a two-step picker: choose a folder under `~/code`, then pick a detected start command (package.json scripts, Procfile, Rails, Docker Compose, Django, Cargo, Go) or type one.
+A panel of your local dev servers. Each card shows whether the server is running, the branch its folder is on, the localhost URL it printed, and the command it runs; start, stop, restart and its logs are one click or key away. Servers run as labeled herdr-core terminals, so they keep running when Herdr closes and are found again when it reopens. Adding one is a two-step picker: choose a folder under your projects root (`~/code` by default, changeable), then pick a detected start command (package.json scripts, Procfile, Rails, Docker Compose, Django, Cargo, Go) or type one.
 
 
 **Install:** Point your Herdr agent at this folder: copy `mods/servers/` into `~/.config/herdr-app/mods/`, then `herdr-app check ~/.config/herdr-app/mods/servers`.
@@ -16,7 +16,7 @@ Panel: theme `background`, text 13px, rounded 10 with a 1px border (`accent` whi
   - Line 3: `~/code/app $ pnpm run dev` in the mono font, 11.5px, `dim`, truncated.
   - An error line in `ansi1` if starting failed.
 - Empty: "No servers yet" and a primary "Add a server" button.
-- **Add, step 1/2 "Pick a folder"** (replaces the list): header with `~/code`; a folder tree of 28px rows indented 16px per level with chevrons and a folder icon (`accent` when the folder is a git repo or has a package.json, else `muted`), `git` / `pkg` tags on the right, selected row `selected`. Under it "Selected: ~/code/app"; footer with Cancel and Next (30px buttons, primary `solid`/`solid_foreground`; Next dimmed to 0.45 until a folder is picked).
+- **Add, step 1/2 "Pick a folder"** (replaces the list): header with the projects root (e.g. `~/code`) and a **Change…** button on its right that opens the system folder picker (`pickFolder`) and saves the choice; a folder tree of 28px rows indented 16px per level with chevrons and a folder icon (`accent` when the folder is a git repo or has a package.json, else `muted`), `git` / `pkg` tags on the right, selected row `selected`. Under it "Selected: ~/code/app" (the root, tilde-shortened); footer with Cancel and Next (30px buttons, primary `solid`/`solid_foreground`; Next dimmed to 0.45 until a folder is picked).
 - **Add, step 2/2 "Command"**: a Name input (defaults to the folder name), "Start command" with detected options (radio dot, command in mono 12px, source hint below in 11px `dim`; picked one: `accent` border on `selected`), a free-text command input, and Back / Add server.
 - **Footer, 28px**: keycap chips (start/stop, restart, logs, move, open url, add, remove) and a `?` keycap that opens the all-keys card.
 
@@ -42,7 +42,7 @@ Panel: theme `background`, text 13px, rounded 10 with a 1px border (`accent` whi
 ## Watch out
 
 - `place: "none"`: nothing shows it by default. Show it with a layout block `{ "content": { "mod": "servers" } }` (it was built for the hidden right-hand `panel` column of the `my-main` layout) or as a pane: `herdr-app do pane.split '{"direction":"right","mod":"servers"}'`. `mod.open` does not apply (no overlay in `mod.json`). `q` hides the layout node `panel`, which only exists in such a layout.
-- The folder picker is hardcoded to `~/code` and only browses with the mouse. Folders outside it can only be added by editing `servers.json`.
+- The projects root is `servers.json` `"root"` (a path, `~` allowed), set by Change…; without it, `~/code` if that folder exists, else home. Saving keeps `root` next to `servers`. Existing servers keep their absolute `cwd`, so changing the root never moves them. The tree only browses with the mouse.
 - Writes `~/.config/herdr-app/servers.json` (outside its folder, not in this repo). Local machine only: no `on`, so remote spaces' servers aren't supported.
 - Server terminals carry no `herdr.space`/`herdr.tab` labels on purpose, so they never appear as tabs; don't add those labels.
 - Start through `$SHELL -lic`, or version managers (nvm, fnm, mise) aren't on PATH. `open` is macOS-only.

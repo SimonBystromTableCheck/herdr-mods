@@ -2,14 +2,14 @@
 // so it outlives the app (and is found again by its label after a restart or crash).
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { exec, hc, home, appHome, readTextFile, writeTextFile, terminals, theme, settings, run, nextCommand, focused, setShared } from "herdr";
+import { exec, hc, home, appHome, readTextFile, writeTextFile, terminals, theme, settings, run, nextCommand, focused, setShared, pickFolder } from "herdr";
 import { keybar, keysCard } from "./keybar.js";
 
 const ICON = "mods/servers", CHROME = "mods/workspace-chrome";
 const LABEL = "herdr.server";
 const configPath = () => `${appHome()}/servers.json`;
-const codeRoot = () => `${home()}/code`;
 const tilde = p => p.startsWith(home()) ? "~" + p.slice(home().length) : p;
+const untilde = p => p === "~" || p.startsWith("~/") ? home() + p.slice(1) : p;
 const URL_RE = /https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1?\])(?::\d+)?[^\s'"\x1b)]*/;
 
 function keyOf(e) {
@@ -79,8 +79,14 @@ export default class Servers extends View {
     this.servers = []; this.raw = null; this.loaded = false;
     this.branches = {}; this.urls = {}; this.busy = {}; this.errors = {};
     this.add = null; this.sel = 0;
+    // Where "Add server" browses for project folders: servers.json "root" (set with
+    // Change… in the add flow), else ~/code when it exists, else home.
+    this.rootSetting = null; this.defaultRoot = home();
     this.handle = cx.focus_handle();
-    cx.spawn(async cx => { this.shell = await userShell(); await this.load(); this.poll(cx); cx.notify(); });
+    cx.spawn(async cx => {
+      const code = `${home()}/code`;
+      if ((await exec("test", ["-d", code]).catch(() => null))?.code === 0) this.defaultRoot = code;
+      this.shell = await userShell(); await this.load(); this.poll(cx); cx.notify(); });
     cx.timer.every(4000, cx => this.poll(cx));
     // pane.go moved the keyboard here, or `servers.key:<k>` from keys.json.
     cx.spawn(async cx => {
@@ -148,12 +154,16 @@ export default class Servers extends View {
     const text = await readTextFile(configPath()).catch(() => null);
     if (this.loaded && text === this.raw) return false;
     this.raw = text; this.loaded = true;
-    try { this.servers = text ? JSON.parse(text).servers ?? [] : []; } catch { this.servers = []; }
+    try {
+      const json = text ? JSON.parse(text) : {};
+      this.servers = json.servers ?? [];
+      this.rootSetting = typeof json.root === "string" && json.root.trim() ? json.root.trim() : null;
+    } catch { this.servers = []; }
     return true;
   }
 
   async save() {
-    const text = JSON.stringify({ servers: this.servers }, null, 2) + "\n";
+    const text = JSON.stringify({ ...(this.rootSetting ? { root: this.rootSetting } : {}), servers: this.servers }, null, 2) + "\n";
     try { await writeTextFile(configPath(), text, this.raw); }
     catch { await writeTextFile(configPath(), text, await readTextFile(configPath()).catch(() => null)); }
     this.raw = text;
@@ -228,6 +238,19 @@ export default class Servers extends View {
 
   // ---- Add flow -------------------------------------------------------------
 
+  root() { return this.rootSetting ? untilde(this.rootSetting) : this.defaultRoot; }
+
+  changeRoot(cx) {
+    cx.spawn(async cx => {
+      const dir = await pickFolder({ prompt: "Folder to pick servers from" });
+      if (!dir) return;
+      this.rootSetting = tilde(dir.replace(/\/+$/, ""));
+      await this.save();
+      if (this.add) { this.add.entries = new Map(); this.add.open = new Set(); this.add.selected = null; this.add.error = null; this.loadDir("", cx); }
+      cx.notify();
+    });
+  }
+
   openAdd(cx) {
     this.add = { step: "folder", entries: new Map(), open: new Set(), selected: null, error: null };
     this.loadDir("", cx);
@@ -236,7 +259,7 @@ export default class Servers extends View {
   loadDir(rel, cx) {
     const add = this.add;
     cx.spawn(async cx => {
-      try { add.entries.set(rel, await listDirs(rel ? `${codeRoot()}/${rel}` : codeRoot())); }
+      try { add.entries.set(rel, await listDirs(rel ? `${this.root()}/${rel}` : this.root())); }
       catch (e) { add.error = String(e); }
       cx.notify();
     });
@@ -251,7 +274,7 @@ export default class Servers extends View {
   }
 
   toCommand(cx) {
-    const add = this.add, dir = `${codeRoot()}/${add.selected}`;
+    const add = this.add, dir = `${this.root()}/${add.selected}`;
     add.step = "command"; add.dir = dir; add.commands = null; add.choice = 0;
     add.name = InputState.new({ value: add.selected.split("/").pop(), placeholder: "Name" });
     add.custom = InputState.new({ value: "", placeholder: "or type a command, e.g. pnpm start --port 3001" });
@@ -344,11 +367,13 @@ export default class Servers extends View {
     const footer = (...children) => h_flex().flex_none().p(10).gap(8).justify_end().border_t(1).border_color(t.border).children(children);
     if (add.step === "folder") {
       return v_flex().flex_1().min_h(0)
-        .child(header("Add server · 1/2 · Pick a folder", tilde(codeRoot())))
+        .child(h_flex().flex_none().items_center().border_b(1).border_color(t.border)
+          .child(div().flex_1().min_w(0).child(header("Add server · 1/2 · Pick a folder", tilde(this.root())).border_b(0)))
+          .child(div().flex_none().pr(10).child(this.button("add-root", "Change…", false, cx => this.changeRoot(cx), t))))
         .child(v_flex().id("dir-tree").flex_1().min_h(0).overflow_y_scrollbar().p(6).children(this.dirRows("", 0, [], t))
           .when(!add.entries.has("") || Boolean(add.error), el => el.child(div().p(8).text_size(12).text_color(add.error ? t.ansi1 : t.dim).child(add.error ?? "Loading…"))))
         .child(h_flex().flex_none().px(14).pt(8).text_size(11.5).text_color(t.dim).truncate()
-          .child(add.selected ? `Selected: ~/code/${add.selected}` : "Click a folder to select it (and expand it)"))
+          .child(add.selected ? `Selected: ${tilde(this.root())}/${add.selected}` : "Click a folder to select it (and expand it)"))
         .child(footer(this.button("add-cancel", "Cancel", false, cx => { this.add = null; cx.notify(); }, t),
           this.button("add-next", "Next", true, cx => this.toCommand(cx), t, !add.selected)));
     }
