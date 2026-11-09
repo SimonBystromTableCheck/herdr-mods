@@ -7,6 +7,13 @@ import { spaces, panes, focused, agents, knownAgents, exec, hc, run, theme, sett
 import * as G from "./git.js";
 import { graphCell } from "./graph.js";
 
+const commitDraft = root => (shared("git.commitDrafts") ?? {})[root] ?? "";
+function setCommitDraft(root, msg) {
+  const all = { ...(shared("git.commitDrafts") ?? {}) };
+  if (msg) all[root] = msg; else delete all[root];
+  setShared("git.commitDrafts", all);
+}
+
 const ROW = 22, LINE = 18;
 const CHROME = "mods/workspace-chrome";
 const SECTIONS = [
@@ -333,14 +340,15 @@ export default class Git extends View {
     cx.notify();
   }
 
-  ask(title, value, onSubmit, cx, { hint, live } = {}) {
+  // `onClose(text)`: esc closed it, with what was typed. `select: false` puts the cursor at the end.
+  ask(title, value, onSubmit, cx, { hint, live, onClose, select = true } = {}) {
     const input = InputState.new({ value: value ?? "", placeholder: hint ?? "" });
-    if (value) input.set_selected_range({ start: 0, end: value.length });
+    if (value) input.set_selected_range(select ? { start: 0, end: value.length } : { start: value.length, end: value.length });
     input.on("submit", (_e, cx) => { const v = input.value(); this.prompt = null; this.typing = false; this.handle.focus(); onSubmit(v.trim(), cx); cx.notify(); });
     input.on("change", (_e, cx) => { live?.(input.value(), cx); cx.notify(); });
     input.on("focus", (_e, cx) => { this.typing = true; cx.notify(); });
     input.on("blur", (_e, cx) => { this.typing = false; cx.notify(); });
-    this.prompt = { title, input, onCancel: live ? cx => live("", cx) : null };
+    this.prompt = { title, input, onCancel: cx => { live?.("", cx); onClose?.(input.value(), cx); } };
     this.typing = true;
     input.focus();
     cx.notify();
@@ -682,11 +690,19 @@ export default class Git extends View {
   commit(cx) {
     const files = this.status?.files ?? [];
     if (this.conflicts().length) { this.flash("Resolve conflicts first"); cx.notify(); return; }
-    const go = (cx, stageAll) => this.ask("Commit message", this.draft ?? "", (msg, cx) => {
+    // The message is kept per repo (shared "git.commitDrafts", by root) until a commit lands:
+    // esc and a failed commit keep it for next time; a commit that moved HEAD clears it.
+    const ctx = this.ctx, root = ctx.root;
+    const head = () => G.git(ctx, ["rev-parse", "-q", "--verify", "HEAD"]).then(r => r.stdout.trim(), () => "");
+    const go = (cx, stageAll) => this.ask("Commit message", commitDraft(root), (msg, cx) => {
       if (!msg) return;
-      this.draft = msg;
-      this.cmd(`git commit -m "${msg}"`, `${stageAll ? "git add -A && " : ""}git commit -m ${q(msg)}`, cx, { after: () => { this.draft = null; } });
-    }, cx, { hint: "Summary line" });
+      setCommitDraft(root, msg);
+      cx.spawn(async cx => {
+        const before = await head();
+        const settle = async () => { if ((await head()) !== before) setCommitDraft(root, null); };
+        this.cmd(`git commit -m "${msg}"`, `${stageAll ? "git add -A && " : ""}git commit -m ${q(msg)}`, cx, { after: settle, onFail: settle });
+      });
+    }, cx, { hint: "Summary line", select: false, onClose: text => setCommitDraft(root, text.trim()) });
     const amend = (cx, stageAll) => {
       const head = (this.commits ?? []).find(c => c.refs.some(r => r.startsWith("HEAD")));
       const run = cx => this.cmd("git commit --amend --no-edit", `${stageAll ? "git add -A && " : ""}git commit --amend --no-edit`, cx);
