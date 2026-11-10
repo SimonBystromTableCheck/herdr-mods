@@ -26,12 +26,14 @@ const PR_COLOR = { OPEN: "ansi2", MERGED: "ansi5", CLOSED: "ansi1" };
 const { q } = G;
 
 // `fixed`: the repo an expanded Git tab was opened on (its props, read once in init).
-function location(fixed) {
+// `keep`: the last place; a mod pane in focus (the conflicts pane, a diff) has no folder, so it stays.
+function location(fixed, keep) {
   if (fixed) return fixed;
   const space = spaces().find(s => s.active), f = focused();
   const pane = f?.pane ? panes().find(x => x.pane === f.pane) : null;
+  if (keep && pane && !pane.terminal && keep.space === space?.id) return keep;
   const on = f?.pane === null ? (f.terminal?.includes("/") ? f.terminal.split("/")[0] : null) : space?.machine ?? null;
-  return { cwd: pane?.cwd || f?.cwd || space?.folder, on };
+  return { cwd: pane?.cwd || f?.cwd || space?.folder, on, space: space?.id ?? null };
 }
 
 // lazygit spells keys "<c-p>", "<a-x>", "<space>"; keys here are "ctrl-p", "alt-x", "space".
@@ -110,7 +112,7 @@ export default class Git extends View {
 
   tick(cx) {
     if (this.flashMsg && Date.now() > this.flashMsg.until) { this.flashMsg = null; cx.notify(); }
-    const k = JSON.stringify(location(this.fixed));
+    const k = JSON.stringify(location(this.fixed, this.loc));
     if (k !== this.locKey) return this.refresh(cx, true);
     if (this.dirty || Date.now() - (this.lastHeavy ?? 0) > 30000) { const heavy = this.dirty !== "light"; this.dirty = null; this.refresh(cx, heavy); }
   }
@@ -133,7 +135,7 @@ export default class Git extends View {
   refresh(cx, heavy) {
     if (this.refreshing) { this.again = this.again || (heavy ? "heavy" : "light"); return; }
     this.refreshing = true;
-    const loc = location(this.fixed), k = JSON.stringify(loc);
+    const loc = this.loc = location(this.fixed, this.loc), k = JSON.stringify(loc);
     cx.spawn(async cx => {
       try {
         if (k !== this.locKey) {
@@ -370,6 +372,28 @@ export default class Git extends View {
 
   conflicts() { return (this.status?.files ?? []).filter(f => f.conflict); }
 
+  // The conflicts pane (mods/git-conflicts) beside the tab, on demand: v, or Resolve on the banner.
+  openConflicts() {
+    const tab = focused()?.tab, ctx = this.ctx;
+    if (!tab || !ctx) return;
+    const open = panes().find(p => p.tab === tab && p.mod === "git-conflicts");
+    if (open) return run("pane.focus", { pane: open.pane });
+    const p = { tab, root: ctx.root, gitDir: ctx.gitDir, on: ctx.on ?? null };
+    (async () => {
+      // Full height at the tab's right edge, as the Changes panel opens its diff (gitview's sidebar op).
+      try {
+        const cfg = JSON.parse(await readTextFile(`${appHome()}/mods/gitview/config.json`));
+        const r = await exec("/usr/bin/env", ["GITVIEW_HOST=app", `HERDR_APP_HOME=${appHome()}`, ...(cfg.herdr_app ? [`GITVIEW_HERDR_APP=${cfg.herdr_app}`] : []), ...(cfg.hc ? [`GITVIEW_HC=${cfg.hc}`] : []),
+          cfg.bin, "json", "sidebar", "--tab", tab, "--mod", "git-conflicts", "--props", JSON.stringify(p)]);
+        const out = JSON.parse(r.stdout);
+        if (r.code !== 0 || out.error) throw new Error(out.error);
+        if (out.pane) run("pane.focus", { pane: out.pane });
+      } catch {
+        run("pane.split", { direction: "right", mod: "git-conflicts", props: p });
+      }
+    })();
+  }
+
   conflictPrompt() {
     const op = this.op, root = this.ctx.root, files = this.conflicts().map(f => `- ${f.path}`);
     const what = op.kind === "rebase"
@@ -537,6 +561,7 @@ export default class Git extends View {
       { key: "c", label: `Continue ${op.kind}`, disabled: n > 0, hint: n ? "resolve conflicts first" : null, run: cx => this.cmd(`git ${op.kind} --continue`, `git ${op.kind} --continue`, cx) },
       op.kind !== "merge" && { key: "s", label: `Skip this commit`, run: cx => this.cmd(`git ${op.kind} --skip`, `git ${op.kind} --skip`, cx) },
       { key: "a", label: `Abort ${op.kind}`, danger: true, run: cx => this.confirm(`Abort the ${op.kind}?`, `Abort ${op.kind}`, cx => this.cmd(`git ${op.kind} --abort`, `git ${op.kind} --abort`, cx), cx) },
+      n > 0 && { key: "v", label: "Resolve conflicts (chunk picker)", run: () => this.openConflicts() },
       n > 0 && { key: "i", label: "Ask AI to resolve conflicts", run: cx => this.askAI(cx) },
       n > 0 && { key: "e", label: `Open conflicted file${n > 1 ? "s" : ""} in ${this.config?.editor ?? "editor"}`, run: () => cx_open(this, this.conflicts().map(f => f.path)) },
       n > 0 && { key: "r", label: `Mark conflicted file${n > 1 ? "s" : ""} resolved`, hint: "git add", run: cx => this.cmd("git add (resolved)", `git add -- ${this.conflicts().map(f => q(f.path)).join(" ")}`, cx, { term: false }) },
@@ -577,6 +602,15 @@ export default class Git extends View {
     }));
   }
 
+  openWorktree(path) {
+    const on = this.ctx?.on ?? null;
+    const inside = cwd => cwd === path || cwd?.startsWith(`${path}/`);
+    const all = panes();
+    const s = spaces().find(s => (s.machine ?? null) === on && all.some(p => inside(p.cwd) && (s.tabs ?? []).some(t => t.id === p.tab)));
+    if (s) run("space.select", { id: s.id });
+    else run("space.new", { folder: path, machine: on ?? "" });
+  }
+
   actions() {
     const sec = this.sec, it = this.selected(), A = this.customActions();
     const add = (key, label, run, extra) => A.push({ key, label, run, ...extra });
@@ -586,9 +620,10 @@ export default class Git extends View {
       if (remote) add("space", it.local ? `Check out ${it.local}` : `Check out as local ${it.short}`, cx => it.local
         ? this.cmd(`git switch ${it.local}`, `git switch ${q(it.local)}`, cx)
         : this.cmd(`git switch -c ${it.short} --track ${ref}`, `git switch -c ${q(it.short)} --track ${q(ref)}`, cx));
-      else add("space", "Check out", cx => {
+      else add("space", it.worktree ? "Go to its worktree" : "Check out", cx => {
         if (it.head) return;
-        if (it.worktree) { this.flash(`Checked out in worktree ${it.worktree}`); cx.notify(); return; }
+        // Git won't check a branch out twice: go to its worktree's space instead (opening one if none).
+        if (it.worktree) return this.openWorktree(it.worktree);
         this.cmd(`git switch ${ref}`, `git switch ${q(ref)}`, cx);
       });
       add("n", "New branch from here", cx => this.ask(`New branch from ${ref}`, "", (name, cx) => name && this.cmd(`git switch -c ${name} ${ref}`, `git switch -c ${q(name)} ${q(ref)}`, cx), cx));
@@ -682,6 +717,7 @@ export default class Git extends View {
     // section's own first: what's marked global or custom only lives in x / ?.
     const firstGlobal = A.length;
     if (this.op) add("m", `${this.op.kind}: continue / skip / abort…`, cx => this.opMenu(cx));
+    if (this.op && this.conflicts().length) add("v", "Resolve conflicts (chunk picker)", () => this.openConflicts());
     add("i", "Ask AI (conflicts or failed command)", cx => this.askAI(cx));
     add("P", "Push", cx => this.push(cx));
     add("p", "Pull", cx => this.cmd("git pull", "git pull", cx));
@@ -895,7 +931,7 @@ export default class Git extends View {
   // ---- Rendering -------------------------------------------------------------
 
   render(cx) {
-    if (JSON.stringify(location(this.fixed)) !== this.locKey && !this.refreshing) this.refresh(cx, true);
+    if (JSON.stringify(location(this.fixed, this.loc)) !== this.locKey && !this.refreshing) this.refresh(cx, true);
     this.rangeSet = new Set(this.rangeRows().map(r => r.sha));
     const hasKeys = this.hadKeys = this.keyboard();
     const t = theme(), mono = settings().font_family ?? "JetBrains Mono";
@@ -972,6 +1008,7 @@ export default class Git extends View {
     const what = op.kind === "rebase" ? `Rebasing ${op.branch ?? "HEAD"} onto ${op.other ?? "?"}${op.step ? ` · ${op.step}/${op.total}` : ""}`
       : op.kind === "merge" ? `Merging ${op.other ?? "?"} into ${this.status?.info.head ?? "HEAD"}` : `${op.kind} of ${op.other ?? "?"} in progress`;
     return this.banner("op", n ? t.ansi1 : t.ansi3, t, `${what}${n ? ` · ${n} conflict${n > 1 ? "s" : ""}` : " · no conflicts left"}`, [
+      n > 0 && ["Resolve (v)", () => this.openConflicts()],
       n > 0 && ["Ask AI (i)", cx => this.askAI(cx)],
       !n && [`Continue`, cx => this.cmd(`git ${op.kind} --continue`, `git ${op.kind} --continue`, cx)],
       ["More (m)", cx => this.opMenu(cx)],

@@ -50,6 +50,19 @@
           ]
         },
         {
+          "id": "sysstat",
+          "type": "block",
+          "content": {
+            "mod": "sysstat",
+            "props": {
+              "stacked": true
+            }
+          },
+          "size": {
+            "px": 44
+          }
+        },
+        {
           "id": "sidebar-footer",
           "type": "block",
           "content": {

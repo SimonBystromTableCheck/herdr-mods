@@ -29,7 +29,7 @@ It follows the "Layouts and mods other people made" steps in your `~/.config/her
 
 | Mod | |
 | --- | --- |
-| [git](git/) | a lazygit-style git panel: sections, vim-ish keys, writes run in core terminals, conflicts handed to an agent |
+| [git](git/) | a lazygit-style git panel: sections, vim-ish keys, writes run in core terminals, conflicts handed to an agent, plus a Conflicts pane with a lazygit-style chunk picker |
 | [leader](leader/) | a tmux-style prefix: `ctrl-a`, then a key, with a popup of the bindings |
 | [changes-expand](changes-expand/) | `cmd-g` opens [herdr-gitview](https://github.com/ChmaraX/herdr-gitview)'s own tab on the repo you're in, even with its diff pane focused |
 | [todos](todos/) | todo pages as Markdown files in `~/.config/herdr-app/todos` |

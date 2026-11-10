@@ -84,10 +84,14 @@ export async function loadBranches(ctx, base) {
     base ? out(ctx, ["branch", "--format=%(refname:short)", "--merged", base]) : "",
   ]);
   const mergedSet = new Set(merged.split("\n").filter(Boolean));
+  const baseSha = base ? (await out(ctx, ["rev-parse", base]).catch(() => "")).trim() : null;
   const local = locals.split("\n").filter(Boolean).map(l => {
     const [head, name, upstream, track, date, sha, subject, worktree] = l.split(US);
     const ahead = +(track.match(/ahead (\d+)/)?.[1] ?? 0), behind = +(track.match(/behind (\d+)/)?.[1] ?? 0);
-    return { kind: "local", name, head: head === "*", upstream: upstream || null, gone: track.includes("gone"), ahead, behind, date, sha, subject, worktree: head !== "*" && worktree ? worktree : null, merged: mergedSet.has(name) };
+    return { kind: "local", name, head: head === "*", upstream: upstream || null, gone: track.includes("gone"), ahead, behind, date, sha, subject, worktree: head !== "*" && worktree ? worktree : null,
+      // --merged also lists branches with no commits of their own (just made, work still uncommitted):
+      // not "merged" when it sits exactly on the base or is checked out in another worktree.
+      merged: mergedSet.has(name) && !baseSha?.startsWith(sha) && !(head !== "*" && worktree) };
   });
   const tracked = new Map(local.filter(b => b.upstream).map(b => [b.upstream, b.name]));
   const remote = remotes.split("\n").filter(Boolean).map(l => {

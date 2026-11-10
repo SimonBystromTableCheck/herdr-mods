@@ -10,7 +10,7 @@ third-party gitview instead of Herdr's stock panel.
 
 **Install:** Point your Herdr agent at this folder: copy `layouts/pond.json` to
 `~/.config/herdr-app/layouts/` and every folder in `mods/` (`pond-agents`, `pond-files`, `pond-tabs`,
-`git`, `skills`, `todos`, `servers`, `remote-checker`) to `~/.config/herdr-app/mods/`, renaming any that clash
+`git`, `git-conflicts`, `skills`, `todos`, `servers`, `remote-checker`) to `~/.config/herdr-app/mods/`, renaming any that clash
 (and the `mod` names in the layout), run `herdr-app check ~/.config/herdr-app/mods/<name>` on
 each, install and patch gitview (below), then `herdr-app do layout.switch --name pond`.
 
@@ -24,6 +24,9 @@ everything; 1px `border` dividers; terminals padded 14x12.
   - spaces list (shipped `spaces`) and agents list (`pond-agents`), sharing the height equally,
     each at least 90px. Agents rows are 66px with a 45px pixel duck acting out the status
     and, for Claude Code, a green/yellow/red context bar and the model;
+  - system stats, 44px (`sysstat`, props `{ "stacked": true }`, not included: see Watch out):
+    `CPU 12% ▁▂▃  GPU 9%` over `MEM 21.4/32.0G  HERDR 3.0G`, the second of each pair pushed to the
+    right edge;
   - footer, 69px (`workspace-chrome` with `footer: true`).
 - **Work column**, the rest:
   - tab bar, 42px (`pond-tabs`), drags the window: tab pills, `+` menu, then panel buttons
@@ -48,7 +51,8 @@ everything; 1px `border` dividers; terminals padded 14x12.
 - Files, Git, Skills, Todos, Servers, Remote Checker and gitview are `focusable`: `pane.go` moves the keyboard
   into them, the border turns accent, a keycap footer lists their keys and `?` shows them all.
 - Git: lazygit-style sections and vim keys; writes run in core terminals with a log; conflicts
-  and failures can be handed to an agent. Skills: `~/.claude/skills` and the repo's
+  and failures can be handed to an agent, and `v` opens a Conflicts pane (`git-conflicts`) beside the
+  tab with a lazygit-style chunk picker (see the `git` item's recipe). Skills: `~/.claude/skills` and the repo's
   `.claude/skills`; run one in an agent here or a new tab, edit in nvim, scaffold a new one.
   Todos: pages of `- [ ]` items saved at once as Markdown in `~/.config/herdr-app/todos`.
   Servers: dev servers saved in `~/.config/herdr-app/servers.json`, each run as a core terminal
@@ -70,11 +74,11 @@ keys are reordered but the tree, ids, sizes and look are the shipped ones except
 | `panel-body` stack | 2 children | + `git`, `skills`, `todos`, `servers`, `remote` (`remote-checker`) blocks |
 
 Tree: `root` row → `sidebar` column [`brand`, `sidebar-lists` column [`spaces`, `agents`],
-`sidebar-footer`] + `work` column [`tabs`, `work-body` row [`main` (`tab: active` with the
+`sysstat` (44px), `sidebar-footer`] + `work` column [`tabs`, `work-body` row [`main` (`tab: active` with the
 pane frame), `panel` column [`panel-body` stack, `active: files`]], `status`].
 
 Mods: shipped `workspace-chrome`, `spaces`, `pane`, `workspace-status` (and the `new-menu`,
-`files`/`changes` icons `pond-tabs` borrows); this repo's eight in `mods/`; `gitview` from
+`files`/`changes` icons `pond-tabs` borrows); this repo's nine in `mods/` (`git-conflicts` belongs with `git`); `sysstat` and `gitview` from
 outside. `pond-agents` and `pond-files` have their own recipes in this repo; `pond-tabs` differs from
 shipped `tabs` only by the five buttons (`enabled` always adds `git`, `skills`, `todos`,
 `servers`, `remote` to shared `workspace.panels`) and its own `mods/pond-tabs/win-*.svg` paths.
@@ -123,6 +127,11 @@ gitview needs no other change.
 - The context bar needs a Claude Code status line that runs
   `hc label "$HC_TERMINAL_ID" claude.context=<pct> claude.model=<name>`; not included here.
 - The panel buttons for Git/Skills/Todos/Servers always show, even if the mods are missing.
+- The `sysstat` block uses a third-party mod that isn't in this repo: github.com/DarkoKuzmanovic/herdr-mods
+  (`sysstat`), which reads Linux `/proc`. This layout was built with a local version that adds a macOS
+  fallback (`iostat`, `vm_stat`, `sysctl`, `ioreg`), a `HERDR` figure (resident memory of the Herdr app and
+  every herdr-core process tree, from one `ps -axo pid=,ppid=,rss=,comm=`) and the two-row `stacked` prop.
+  Without the mod the block is an empty 44px strip: install it, or delete the `sysstat` node.
 
 ## Done when
 
