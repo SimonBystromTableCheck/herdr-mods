@@ -12,7 +12,7 @@ third-party gitview instead of Herdr's stock panel.
 `~/.config/herdr-app/layouts/` and every folder in `mods/` (`pond-agents`, `pond-files`, `pond-tabs`,
 `git`, `skills`, `todos`, `servers`, `remote-checker`) to `~/.config/herdr-app/mods/`, renaming any that clash
 (and the `mod` names in the layout), run `herdr-app check ~/.config/herdr-app/mods/<name>` on
-each, install gitview (below), then `herdr-app do layout.switch --name pond`.
+each, install and patch gitview (below), then `herdr-app do layout.switch --name pond`.
 
 ## What you see
 
@@ -87,6 +87,27 @@ read it. Without gitview the Changes button still opens the `changes` slot, but 
 a mod that doesn't exist and stays empty (see `herdr-app status`). To use Herdr's stock panel
 instead, set that block's `content` to `{ "mod": "changes" }`.
 
+**Patch gitview** after installing it (gitview's own files; reapply after every gitview update).
+Stock gitview never says when its file list has the keyboard, and the `leader` mod needs that.
+In `mods/gitview/main.js`, `init()` already has a `cx.timer.every(300, …)` (it handles `reviveAt` and
+`stale()`). At the top of that callback, add:
+
+```js
+// LOCAL PATCH (not upstream): tell the leader mod when the list has the keys.
+const keys = this.handle.is_focused() || Boolean(this.typing);
+if (keys !== this.sharedKeys) { this.sharedKeys = keys; setShared("gitview.hasKeys", keys); }
+```
+
+Also add `setShared` to that file's `herdr` import if it isn't there. If upstream has renamed `this.handle` (the list's focus handle) or `this.typing` (set while
+a prompt or commit message takes typing), use what replaced them. Without the patch, the
+leader can't tell that Changes holds the keyboard:
+- leader `h` from Changes falls back to the generic move. The keyboard then goes to the terminal and is lost again, because the popup's
+  close sends `focus` back to gitview and gitview's focus loop grabs it.
+- leader `e` treats Changes as a terminal, so it doesn't open `gitview-tab`.
+
+Everything else (entering Changes with `pane.go`, moving before closing the popup) lives in `leader`;
+gitview needs no other change.
+
 ## Watch out
 
 - Keep the node ids `sidebar`, `panel`, `panel-body` and the child ids `files`, `changes`,
@@ -111,5 +132,7 @@ instead, set that block's `content` to `{ "mod": "changes" }`.
   right with that mod, and clicking it again hides the panel.
 - A working agent's duck jabs a knife; a blocked one shows "Needs you".
 - With gitview installed, Changes shows gitview's file list for the space's repo.
+- With the gitview patch: while Changes has the keyboard, `shared.json` has `"gitview.hasKeys": true`,
+  and after leader `h` from Changes the terminal has the keyboard and keeps it.
 - Starting a server from Servers raises the green count on its button.
 - `layout.switch` (`ctrl-shift-l` by default) cycles back to the previous layout.

@@ -106,8 +106,9 @@ Bindings (aliases in brackets, not shown):
   `gitview-tab` (third-party, github.com/ChmaraX/herdr-gitview, not in this
   repo). Without them the popup still works: missing flags read as "not
   focused", tabs/panes/spaces keys are unaffected, and `e` falls through to zen
-  mode or the toast. `gitview.hasKeys` comes only from a local patch to gitview;
-  stock gitview never sets it, so the Changes panel counts as a terminal for `e`.
+  mode or the toast. `gitview.hasKeys` comes only from a local patch to gitview
+  (see "Patch gitview" in `pond/RECIPE.md`). Stock gitview never sets it, so for `e` the Changes panel counts as a
+  terminal, and `h` from Changes loses the keyboard after the popup closes.
 - `fromPanel` is read in `init`, before the popup steals focus; computing it
   later always gives null.
 - `ctrl-a` forwarding uses `hc keys` on the focused terminal; with a mod
