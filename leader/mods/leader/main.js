@@ -1,7 +1,7 @@
 // A tmux-style prefix: ctrl-a opens this popup, the next key runs a binding from bindings.js.
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { props, closeOverlay, theme, run, focused, hc, layout, settings, nextCommand, shared, setShared, spaces, panes, notify } from "herdr";
+import { props, closeOverlay, theme, run, focused, hc, layout, settings, nextCommand, shared, setShared, spaces, panes, notify, exec } from "herdr";
 import BINDINGS from "./bindings.js";
 
 const MODIFIERS = new Set(["shift", "control", "alt", "platform", "function", "capslock", "cmd", "ctrl"]);
@@ -100,9 +100,14 @@ export default class Leader extends View {
   // after a gitview upgrade drops it, the Changes panel is treated like a terminal here.
   expand(cx) {
     const f = focused(), space = spaces().find(s => s.active);
-    // gitview's launcher is an overlay window too: started in the same moment this popup closes
-    // (inside gitview's tab) it never runs. Start it first, close this popup a moment later.
-    const gitview = () => { run("mod.open", { name: "gitview-tab" }); cx.timer.after(80, () => this.close()); };
+    // The `changes-expand` launcher (also cmd-g) focuses the terminal when gitview's diff pane has
+    // the focus, then opens gitview's tab. A launcher window opened from this popup's own handler
+    // never starts, so close, then ask the app through `herdr-app do`, as a key would. No timers.
+    const gitview = () => {
+      this.close();
+      exec("herdr-app", ["do", "mod.open", JSON.stringify({ name: "changes-expand" })])
+        .catch((e) => notify({ title: "Couldn't open gitview's tab", body: String(e?.message ?? e), level: "error" }));
+    };
     const fromGitTab = this.fromGitTab, ownTab = f?.tab && (shared("gitview.own") ?? {})[space?.id] === f.tab;
     // A list that closed while it had the keys can leave the flag set, so it counts only while Changes shows.
     const changesShown = !find(layout(), "panel")?.hidden && find(layout(), "panel-body")?.active === "changes";

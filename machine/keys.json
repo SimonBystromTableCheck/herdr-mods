@@ -59,7 +59,7 @@
     "ctrl-9": "space.select:9",
     "ctrl-a": "mod.open:leader",
     "cmd-shift-g": "mod.open:gitview-sidebar",
-    "cmd-g": "mod.open:gitview-tab"
+    "cmd-g": "mod.open:changes-expand"
   },
   "terminal": {
     "cmd-f": "terminal.search",

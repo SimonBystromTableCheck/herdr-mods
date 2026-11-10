@@ -59,7 +59,7 @@ Bindings (aliases in brackets, not shown):
   the move starts from the panel, not the last terminal. From gitview the leader moves itself,
   before closing the popup: `h` is `pane.focus` on the focused pane, `j`/`k`/`l` are `pane.go`.
 - `e` (expand), in order: inside gitview's own tab, or from gitview's list while
-  Changes shows → opens `gitview-tab`; from the git mod's tab → `git.collapse`;
+  Changes shows → closes the popup and opens gitview's tab through `changes-expand` (this repo); from the git mod's tab → `git.collapse`;
   from the git panel → `git.expand`; from another panel → an info toast
   "<Panel> has no expanded view" (2.5s); from a terminal → zen mode: hides
   `sidebar` and `panel`, remembering which were open; `e` again restores them.
@@ -77,10 +77,11 @@ Bindings (aliases in brackets, not shown):
   from keys.json).
 - `herdr`: `props`, `closeOverlay`, `theme`, `settings` (`font_family`), `run`,
   `focused`, `hc(["keys", <terminal>, "ctrl+a"])`, `layout`, `shared`,
-  `setShared("leader.zen")`, `spaces`, `notify`, `nextCommand`.
+  `setShared("leader.zen")`, `spaces`, `panes`, `notify`, `nextCommand`,
+  `exec("herdr-app", ["do", "mod.open", '{"name":"changes-expand"}'])`.
 - Commands: `tab.new/next/prev/rename/close/select`, `pane.split/go/zoom/close/focus`,
   `layout.select/show/hide/toggle`, `mod.open {name: "picker"}`,
-  `mod.open {name: "gitview-tab"}`, `space.rename/next/prev`, `app.help`,
+  `space.rename/next/prev`, `app.help`,
   `git.expand`, `git.collapse`, `<panel>.go:<dir>`, `pane.go`, `pane.focus`.
 - Reads shared flags written by other mods: `<mod>.hasKeys` for git, skills,
   todos, gitview, pond-files, servers, remote-checker; `git.tabHasKeys`; `gitview.own`.
@@ -102,13 +103,17 @@ Bindings (aliases in brackets, not shown):
   (as in this repo's `pond` layout). Shipped `main` has only `files` and
   `changes`; other panel keys then do nothing useful. `b` needs a `sidebar` node.
 - References mods not shipped with Herdr: `git`, `skills`, `todos`, `servers`, `remote-checker`,
-  `pond-files` (this repo), `picker` (shipped with Terminals), and `gitview` /
+  `pond-files`, `changes-expand` (this repo), `picker` (shipped with Terminals), and `gitview` /
   `gitview-tab` (third-party, github.com/ChmaraX/herdr-gitview, not in this
   repo). Without them the popup still works: missing flags read as "not
   focused", tabs/panes/spaces keys are unaffected, and `e` falls through to zen
   mode or the toast. `gitview.hasKeys` comes only from a local patch to gitview
   (see "Patch gitview" in `pond/RECIPE.md`). Stock gitview never sets it, so for `e` the Changes panel counts as a
   terminal, and `h` from Changes loses the keyboard after the popup closes.
+- Expanding gitview goes through `herdr-app do mod.open`, not `run("mod.open")`. A launcher window
+  (`changes-expand`, `gitview-tab`) opened from this popup's own key handler, before or after the
+  popup closes, stays open and never starts. Don't paper over it with a timed close: the CLI
+  reaches the app the way a key does.
 - `fromPanel` is read in `init`, before the popup steals focus; computing it
   later always gives null.
 - `ctrl-a` forwarding uses `hc keys` on the focused terminal; with a mod

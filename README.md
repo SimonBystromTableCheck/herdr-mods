@@ -31,6 +31,7 @@ It follows the "Layouts and mods other people made" steps in your `~/.config/her
 | --- | --- |
 | [git](git/) | a lazygit-style git panel: sections, vim-ish keys, writes run in core terminals, conflicts handed to an agent |
 | [leader](leader/) | a tmux-style prefix: `ctrl-a`, then a key, with a popup of the bindings |
+| [changes-expand](changes-expand/) | `cmd-g` opens [herdr-gitview](https://github.com/ChmaraX/herdr-gitview)'s own tab on the repo you're in, even with its diff pane focused |
 | [todos](todos/) | todo pages as Markdown files in `~/.config/herdr-app/todos` |
 | [servers](servers/) | local dev servers as labelled herdr-core terminals that survive restarts |
 | [remote-checker](remote-checker/) | the focused branch's GitHub pull request: CI checks, reviewers, comments, diff size and commits, refetched every 10s |
