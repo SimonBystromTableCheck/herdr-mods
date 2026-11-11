@@ -54,7 +54,8 @@ For each chosen mod (folder `mods/<installed>`, published `<path>`):
    (shallow clone, very old version): say you can't tell and ask.
 2. **Back up** the installed folder to `backups/mods/<installed>-<version>-<time>/`
    in the Herdr home. Never inside `mods/`: a folder there loads as a mod.
-3. **Replace:** `rsync -a --delete <tmp>/<path>/ mods/<installed>/`. Herdr reloads
+3. **Replace:** `rsync -a --delete --exclude gpui-kit.d.ts --exclude herdr.d.ts --exclude jsconfig.json --exclude '*.error' --exclude node_modules <tmp>/<path>/ mods/<installed>/`
+   (the excluded files are Herdr's, written into each mod folder). Herdr reloads
    it at once. Installed under another name: redo that install's renames in the
    new files (its own `mods/<published>/` paths and self-opening overlay names).
 4. **Keys:** if the item has `keys` and that file changed since the installed
