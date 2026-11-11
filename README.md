@@ -36,7 +36,7 @@ It follows the "Layouts and mods other people made" steps in your `~/.config/her
 | [servers](servers/) | local dev servers as labelled herdr-core terminals that survive restarts |
 | [remote-checker](remote-checker/) | the focused branch's GitHub pull request: CI checks, reviewers, comments, diff size and commits, refetched every 10s |
 | [skills](skills/) | Claude skills (personal and the repo's): run, edit, scaffold |
-| [pond-agents](pond-agents/) | Herdr's agents list with a pixel duck per agent that acts out its status, plus the Claude context bar and model |
+| [pond-agents](pond-agents/) | Herdr's agents list with a pixel duck per agent that acts out its status, plus the Claude context bar and model; swap figures per space (emoji, your pictures) |
 | [pond-files](pond-files/) | Herdr's Files panel with focus, vim keys and a key bar |
 | [pond-tabs](pond-tabs/) | Herdr's tab bar with Git, Skills, Todos, Servers and PR panel buttons (needs those mods) |
 

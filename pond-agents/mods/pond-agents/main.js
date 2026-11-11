@@ -4,7 +4,11 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { agents, terminals, panes, focused, spaces, run, theme, shared, setShared, setAgentOrder, openOverlay, closeOverlay, props, window, layout } from "herdr";
-import { duck } from "./duck.js";
+import { figureFor, load } from "./figures.js";
+import { Editor } from "./editor.js";
+
+// The figure editor, as a dialog; `space` opens it on that space's pick.
+const openFigures = (space) => openOverlay({ mod: "pond-agents", kind: "dialog", width: 860, height: 640, props: { figures: true, ...(space ? { space } : {}) } });
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -84,6 +88,15 @@ function contextBar(t, pct, model, address) {
 export default class Agents extends View {
   init(_props, cx) {
     if (props()?.sortMenu) return;
+    if (props()?.figures) { this.editor = new Editor(cx); return; }
+    // Figure sets come from ~/.config/herdr-app/pond-agents.json; hand edits show within seconds.
+    this.file = {};
+    const reload = (cx) => cx.spawn(async (cx) => {
+      const error = await load(this.file);
+      if (error !== this.fileError) { this.fileError = error; cx.notify(); }
+    });
+    reload(cx);
+    cx.timer.every(4000, reload);
     this.folded = new Set();
     // Each agent's last state and when it changed (ms), kept across restarts.
     this.changed = JSON.parse(localStorage.getItem("changed") ?? "{}");
@@ -190,10 +203,16 @@ export default class Agents extends View {
     });
   }
 
-  subRow(t, s, shown, compact) {
+  // A figure that opens the figure editor on its space when right-clicked.
+  figure(space, status, height, waited, id) {
+    return div().id(id).on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openFigures(space); })
+      .child(figureFor(space, status, height, waited));
+  }
+
+  subRow(t, s, shown, compact, space) {
     const k = s.t;
     const st = kidStatus(k, this.listed);
-    const pic = duck(st, 27, Date.now() - (this.changed[k.address]?.at ?? Date.now()));
+    const pic = this.figure(space, st, 27, Date.now() - (this.changed[k.address]?.at ?? Date.now()), `fig-${k.address}`);
     const on = k.address === shown;
     return h_flex()
       .id(`sub-${k.address}`)
@@ -230,6 +249,7 @@ export default class Agents extends View {
   render(cx) {
     const t = theme();
     if (props()?.sortMenu) return this.sortMenu(t);
+    if (this.editor) return this.editor.render(cx);
     const collapsed = narrow();
     const sort = sortOf();
     let list = agents();
@@ -259,7 +279,7 @@ export default class Agents extends View {
       const subs = collapsed ? [] : this.tree(all, a.address);
       const r = row(a, i, subs);
       if (this.folded.has(a.address)) return [r];
-      return [r, ...subs.map((s) => this.subRow(t, s, shown, byPriority))];
+      return [r, ...subs.map((s) => this.subRow(t, s, shown, byPriority, a.space_name))];
     };
 
     // The fold chevron; folded, the count too, colored by the most urgent one.
@@ -314,7 +334,7 @@ export default class Agents extends View {
     }));
 
     const row = (a, i, subs = []) => {
-      const pic = duck(a.status, 45, now - this.since(a));
+      const pic = figureFor(a.space_name, a.status, 45, now - this.since(a));
       const ctx = contextOf.get(a.address);
       const more = detail.get(a.address);
       // An agent on another machine (`vps/t7`) says which.
@@ -375,7 +395,8 @@ export default class Agents extends View {
         })
         .on_click(() => run("pane.focus", { pane: a.pane }))
         .child(div().id(`agent-fold-${a.address}`)
-          .tooltip(a.program?.name ? `${a.program.name} · ${a.status}` : a.status)
+          .tooltip(`${a.program?.name ? `${a.program.name} · ` : ""}${a.status} · right-click to change figures`)
+          .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openFigures(a.space_name); })
           .when(subs.length > 0, el => el.on_click((_e, cx) => {
             cx.stop_propagation();
             this.folded.has(a.address) ? this.folded.delete(a.address) : this.folded.add(a.address);
@@ -451,7 +472,17 @@ export default class Agents extends View {
             .items_center()
             .justify_between()
             .child(div().text_size(11.5).font_medium().text_color(t.dim).child("Agents"))
-            .child(
+            .child(h_flex().gap(10).items_center()
+              .when(Boolean(this.fileError), (el) => el.child(div().id("ag-file-error").text_size(11).font_bold().text_color(t.blocked)
+                .tooltip(`${this.fileError}. Using the last good figures.`).child("!")))
+              .child(div()
+                .id("ag-figures")
+                .text_color(t.dim)
+                .hover((s) => s.text_color(t.foreground))
+                .on_click(() => openFigures(focused()?.space ? spaces().find((s) => s.id === focused().space)?.name : null))
+                .tooltip("Pond figures: how agents look, per space")
+                .child(svg("mods/pond-agents/duck-icon.svg").size(14)))
+              .child(
               div()
                 .id("ag-sort")
                 .text_size(11)
@@ -460,7 +491,7 @@ export default class Agents extends View {
                 .on_click(() => openOverlay({ mod: "pond-agents", kind: "popup", width: 200, height: 140, props: { sortMenu: true } }))
                 .tooltip(`Sort agents: ${sort.label}`)
                 .child(svg(`mods/workspace-chrome/${sort.icon}.svg`).size(14)),
-            ),
+            )),
         ),
       )
       .when(list.length === 0 && !collapsed, (el) =>

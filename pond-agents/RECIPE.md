@@ -5,7 +5,9 @@ acts out the agent's status: it jabs a knife while the agent works, glares (then
 while it waits for you, hops and flaps when it finishes, and bobs contentedly when idle.
 Rows are taller and show the name over its detail, plus a thin context-use bar and the model
 for Claude Code agents. Everything else (grouping, priority sort, pins, sub-agent trees,
-the narrow rail) is the shipped `agents` mod unchanged.
+the narrow rail) is the shipped `agents` mod unchanged. The duck is the default **figure set**:
+a "Pond figures" dialog lets you swap it, per space, for emoji, your own pictures (PNG, JPEG,
+GIF, WebP, SVG) or a still duck.
 
 
 **Install:** Point your Herdr agent at this folder: copy `mods/pond-agents/` into
@@ -18,7 +20,9 @@ then set the `agents` block's `content` to `{ "mod": "pond-agents" }`).
 
 The sidebar's agents block, top to bottom, on `chrome` with a 1px `border` line on top, text 13px:
 
-- **Header** (41px, 16px side padding): "Agents" 11.5px medium in `dim`; on the right a 14px
+- **Header** (41px, 16px side padding): "Agents" 11.5px medium in `dim`; on the right, 10px
+  apart, a bold `blocked` "!" when `pond-agents.json` is invalid (tooltip: the error, "Using the
+  last good figures."), a 14px duck icon (`duck-icon.svg`, opens Pond figures) and the 14px
   sort icon (`clock` for Priority, `layers` for Grouped by space).
 - **Group headers** (30px, 11px medium): in Priority view "Needs you" (`blocked` color),
   "Done" (`done`), "Working" (`working`), "Idle" (`dim`) with a count; in Grouped view the
@@ -44,6 +48,17 @@ The sidebar's agents block, top to bottom, on `chrome` with a 1px `border` line 
 The duck (all native divs, colors fixed, not themed): body `#F5DA81`, beak and feet
 `#EFC787`, eyes `#000000`, cheeks `#FFA798`, blade `#DBDBDB`, hilt `#A5A5A5`.
 
+- **Pond figures** dialog (860x640): title "Pond figures", "How each agent state looks, per
+  space", tabs **Sets** and **Spaces**.
+  - Sets: a list of "Built-in" sets (Classic duck, Classic duck (still), Emoji pond) and
+    "Yours"; for the selected set a name field and five slots (Working, Needs you, Still
+    waiting = blocked over a minute, Done, Idle). Each slot picks a Figure (Duck with a mood,
+    Picture, Emoji), a Motion (Still, Bob, Hop, Wiggle, Shake, Pulse, or Own animation for
+    GIF/WebP), and for emoji Frames and Speed (Slow 800ms, Normal 400ms, Fast 180ms).
+    Built-in sets are read-only ("Duplicate this one to pick your own figures"). Pictures
+    can be dropped on the picture list or opened from the folder. "Tweak with AI" opens a tab.
+  - Spaces: one row per space, choosing "Default (…)" or a set; plus the default set.
+
 ## How it behaves
 
 | Status | Duck | Status mark |
@@ -54,7 +69,20 @@ The duck (all native divs, colors fixed, not themed): body `#F5DA81`, beak and f
 | done | blushing cheeks, arched happy eyes, hopping 18 units every 300ms, wings flapping, feet tapping in turn | 7px dot in `done` |
 | idle | blushing, happy eyes, gentle bob | 7px ring in `idle` |
 
-- Hover the duck: "Claude Code · working" (program name and status).
+- Hover the duck: "Claude Code · working · right-click to change figures".
+- Right-click any figure (row or sub-agent): Pond figures on that space's Spaces tab. The
+  header duck icon opens it on the Sets tab for the focused space.
+- The figure for a row comes from the set the agent's space uses (by space name), else the
+  default set, else Classic duck. A slot missing from a set falls back (waiting → blocked,
+  then Classic). Every figure takes the duck's box, centred on the duck's body, so rows line up.
+- Editor changes save to `~/.config/herdr-app/pond-agents.json` at once. The list rereads the
+  file every 4s, so hand edits show within seconds; an invalid file keeps the last good one.
+- Picking an animated SVG with Own animation converts it once to an animated WebP (headless
+  Chrome renders frames on black and white, ImageMagick joins them) and keeps the original
+  as `source`. Without Chrome or ImageMagick the slot shows the error and offers Tweak with AI.
+- Tweak with AI: `tab.new` in the Herdr home running the most-picked installed agent
+  (`knownAgents()`), with a task describing the set, its pictures and the file format, asking
+  it to look and ask before editing; new files go to `pond-figures/<set>/`.
 - Click a row: `pane.focus` on its pane. Click a sub-agent: focus it if it has a pane, else
   `terminal.peek`. Click the duck of a parent: fold or unfold its sub-agents.
 - Hover a row: the time is replaced by a pin button; click it to `terminal.pin` / unpin.
@@ -74,6 +102,18 @@ Clone of shipped `agents` (`cloned_from: {name: "agents", version: "0.1.14"}`). 
   rectangles, in SVG units of a 368x240 canvas (`KNIFE_ROOM` 118 + 250 body). `mood()`
   maps working→stab, blocked→angry/scowl (`BLOCKED_SCOWL` 60s), done→happy, else content.
   Motion is `.loop("top" | "left" | "width", {from, to, period, easing})`.
+- `figures.js` (new): `SLOTS`, `MOTIONS`, the read-only `SHIPPED` sets, `figureFor(spaceName,
+  status, height, waited)`, `figure(spec, height)`, `load`/`save` of `pond-agents.json`
+  (`{ default, spaces: { spaceName: setId }, sets: { setId: { name, slots } } }`, written with
+  `writeTextFile(path, text, expected)`), `library()` (pictures in `mods/pond-agents/figures/`
+  and `pond-figures/`), `addPictures`, `openFolder`. A figure is `{duck, still?}`,
+  `{image, motion?, source?}` or `{text: [frames], ms?, motion?}`; text steps with `.frames()`,
+  motion is `.loop("top" | "left" | "opacity")`.
+- `editor.js` (new): the `Editor` class drawn when `props().figures`; the dialog opens
+  `mod: "pond-agents"`, `kind: "dialog"`, props `{figures: true, space?}`.
+- `animate.js` (new): `svgAnimates`, `PLAYS` (gif/webp), `svgToWebp` (Chrome + `magick`).
+- `duck.js` also exports `duckMood(mood, height, {still})`, `MOODS` and `DUCK_CENTER`.
+- `figures/`: shipped pictures folder (only a README for now); `sparkles.svg`, `duck-icon.svg`.
 - `main.js`: drops the `icon()` program-icon helper and the `image` import; rows use
   `duck(a.status, 45, now - since)` and sub rows `duck(st, 27, …)`; row 66px with `pl(4)`,
   gap 6; name/detail stacked in a `v_flex` instead of "name · detail" on one line; the duck
@@ -89,6 +129,12 @@ Clone of shipped `agents` (`cloned_from: {name: "agents", version: "0.1.14"}`). 
   `clock`, `layers`, `check`, `chevron-down`, `chevron-right` (`.svg`).
 
 ## Watch out
+
+- It runs programs and writes outside its folder: `pond-agents.json` and `pond-figures/` in
+  the Herdr home, `exec` of `mkdir`, `cp`, `rm`, `open`/`xdg-open`/`explorer`, and for SVG conversion Chrome
+  (or Chromium, Edge, Brave) and ImageMagick. Tweak with AI starts an agent in a new tab.
+- Sets are picked by space **name**: renaming a space loses its pick.
+- Herdr glitches on animated WebP frames that only carry what changed; write whole frames.
 
 - The context bar only appears if something sets the labels. Here that is a Claude Code
   status line script that runs, when `$HC_TERMINAL_ID` is set:
@@ -111,3 +157,6 @@ Clone of shipped `agents` (`cloned_from: {name: "agents", version: "0.1.14"}`). 
 - A Claude Code agent with the status line labels shows a colored context bar and its model.
 - The sort popup switches between Priority and Grouped; clicking a row focuses that agent's pane.
 - Narrowing the sidebar below 160px shows the numbered rail without ducks.
+- The header duck icon opens Pond figures; choosing Emoji pond for a space switches that
+  space's agents to emoji and writes `pond-agents.json`; right-clicking a figure opens it on
+  that space.

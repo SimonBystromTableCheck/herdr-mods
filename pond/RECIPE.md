@@ -22,7 +22,7 @@ everything; 1px `border` dividers; terminals padded 14x12.
 - **Sidebar**, 268px on `chrome` (44–480px, edge not draggable), top to bottom:
   - brand bar, 46px (shipped `workspace-chrome`), drags the window;
   - spaces list (shipped `spaces`) and agents list (`pond-agents`), sharing the height equally,
-    each at least 90px. Agents rows are 66px with a 45px pixel duck acting out the status
+    each at least 90px. Agents rows are 66px with a 45px pixel duck (or the space's chosen figure set) acting out the status
     and, for Claude Code, a green/yellow/red context bar and the model;
   - system stats, 44px (`sysstat`, props `{ "stacked": true }`, not included: see Watch out):
     `CPU 12% ▁▂▃  GPU 9%` over `MEM 21.4/32.0G  HERDR 3.0G`, the second of each pair pushed to the
