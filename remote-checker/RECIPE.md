@@ -4,6 +4,10 @@ A panel showing the GitHub pull request for the branch checked out in the focuse
 
 **Install:** Point your Herdr agent at this folder: copy `mods/remote-checker/` into `~/.config/herdr-app/mods/`, then `herdr-app check ~/.config/herdr-app/mods/remote-checker`. Needs `gh` installed and logged in (`gh auth login`).
 
+**Version:** 1.0.0 (see Changes at the end; also `"version"` in `mod.json`).
+
+**Update:** ask your Herdr agent to update it from this folder, replacing `mods/remote-checker/` (say *update*: installing again adds a second copy next to the old one). Your settings and data live outside the mod folder and are kept; edits you made inside the mod folder are not.
+
 ## What you see
 
 Panel: theme `background`, text 13px, rounded 10 with a 1px border (`accent` while it has the keyboard, else `border`).
@@ -64,3 +68,9 @@ Panel: theme `background`, text 13px, rounded 10 with a 1px border (`accent` whi
 - `j`/`k`, `gg`/`G`, `]`/`[` move the selection and keep it in view; `enter` opens the selected check's CI page; `y` copies a link.
 - `h`, `escape`, `cmd-alt-left` and leader `h` give the keyboard back to the terminal and it stays there; `q` hides the panel.
 - A local commit not yet pushed shows `↑1 unpushed` on the PR card.
+
+## Changes
+
+### 1.0.0 (2026-11-11)
+
+- First versioned release: the focused branch's GitHub PR, checks, reviews and comments (2026-11-09).

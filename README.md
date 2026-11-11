@@ -19,26 +19,40 @@ Give your Herdr agent the folder's link, e.g.
 
 It follows the "Layouts and mods other people made" steps in your `~/.config/herdr-app/AGENTS.md`: read the recipe, copy `mods/<name>/`, merge `keys.json` if there is one, `herdr-app check`.
 
+## Update one
+
+Nothing updates by itself: an installed mod is a copy, not a link to this repo. To get a newer version, ask your Herdr agent, e.g.
+
+> Update my Herdr mod pond-agents from https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/pond-agents, replacing `mods/pond-agents/`
+
+Say *update* and *replacing*: the install steps never overwrite, so "install" again would add a second copy (`pond-agents-2`) beside the old one. Herdr reloads the mod at once.
+
+- **Kept:** your settings and data. They live outside the mod folder (e.g. `pond-agents.json`, `pond-figures/`, `servers.json`, `todos/`), and Herdr keeps your clicks on a layout (sizes, open panels) in `layouts/.state/`.
+- **Replaced:** anything you edited inside `mods/<name>/` or the layout file. To keep your own changes, duplicate the mod first (`herdr-app do mod.clone '{"name":"pond-agents","as":"my-pond-agents"}'`); a clone never updates.
+- **Keys:** if the item has a `keys.json` and it changed, merge it again.
+
+Which version you have: `"version"` in `~/.config/herdr-app/mods/<name>/mod.json` (or the root of the layout file). What changed: the **Changes** section at the end of each item's `RECIPE.md`.
+
 ## Layout
 
-| Layout | |
-| --- | --- |
-| [pond](pond/) | Herdr's main layout with my own tabs, agents and files panels, and git, skills, todos, servers and remote-checker panels on the right |
+| Layout | Version | |
+| --- | --- | --- |
+| [pond](pond/) | 1.0.0 | Herdr's main layout with my own tabs, agents and files panels, and git, skills, todos, servers and remote-checker panels on the right |
 
 ## Mods
 
-| Mod | |
-| --- | --- |
-| [git](git/) | a lazygit-style git panel: sections, vim-ish keys, writes run in core terminals, conflicts handed to an agent, plus a Conflicts pane with a lazygit-style chunk picker |
-| [leader](leader/) | a tmux-style prefix: `ctrl-a`, then a key, with a popup of the bindings |
-| [changes-expand](changes-expand/) | `cmd-g` opens [herdr-gitview](https://github.com/ChmaraX/herdr-gitview)'s own tab on the repo you're in, even with its diff pane focused |
-| [todos](todos/) | todo pages as Markdown files in `~/.config/herdr-app/todos` |
-| [servers](servers/) | local dev servers as labelled herdr-core terminals that survive restarts |
-| [remote-checker](remote-checker/) | the focused branch's GitHub pull request: CI checks, reviewers, comments, diff size and commits, refetched every 10s |
-| [skills](skills/) | Claude skills (personal and the repo's): run, edit, scaffold |
-| [pond-agents](pond-agents/) | Herdr's agents list with a pixel duck per agent that acts out its status, plus the Claude context bar and model; swap figures per space (emoji, your pictures) |
-| [pond-files](pond-files/) | Herdr's Files panel with focus, vim keys and a key bar |
-| [pond-tabs](pond-tabs/) | Herdr's tab bar with Git, Skills, Todos, Servers and PR panel buttons (needs those mods) |
+| Mod | Version | |
+| --- | --- | --- |
+| [git](git/) | 1.0.0 | a lazygit-style git panel: sections, vim-ish keys, writes run in core terminals, conflicts handed to an agent, plus a Conflicts pane with a lazygit-style chunk picker |
+| [leader](leader/) | 1.0.0 | a tmux-style prefix: `ctrl-a`, then a key, with a popup of the bindings |
+| [changes-expand](changes-expand/) | 1.0.0 | `cmd-g` opens [herdr-gitview](https://github.com/ChmaraX/herdr-gitview)'s own tab on the repo you're in, even with its diff pane focused |
+| [todos](todos/) | 1.0.0 | todo pages as Markdown files in `~/.config/herdr-app/todos` |
+| [servers](servers/) | 1.0.0 | local dev servers as labelled herdr-core terminals that survive restarts |
+| [remote-checker](remote-checker/) | 1.0.0 | the focused branch's GitHub pull request: CI checks, reviewers, comments, diff size and commits, refetched every 10s |
+| [skills](skills/) | 1.0.0 | Claude skills (personal and the repo's): run, edit, scaffold |
+| [pond-agents](pond-agents/) | 1.0.0 | Herdr's agents list with a pixel duck per agent that acts out its status, plus the Claude context bar and model; swap figures per space (emoji, your pictures) |
+| [pond-files](pond-files/) | 1.0.0 | Herdr's Files panel with focus, vim keys and a key bar |
+| [pond-tabs](pond-tabs/) | 1.0.0 | Herdr's tab bar with Git, Skills, Todos, Servers and PR panel buttons (needs those mods) |
 
 Some panels integrate with [herdr-gitview](https://github.com/ChmaraX/herdr-gitview) when it's installed. It isn't part of this repo.
 
@@ -50,3 +64,4 @@ This repo is a snapshot of them:
 - `./sync.sh`: copies the mods and layouts listed in `items.conf` from the config into their item folders, and `keys.json` / `settings.json` into `machine/`.
 - `./install.sh [--machine]`: copies everything back into `~/.config/herdr-app` on a new machine; `--machine` also installs `machine/*.json` (old ones kept as `*.bak-<time>`).
 - New mod to publish: add a line to `items.conf`, run `./sync.sh`, write its `RECIPE.md`.
+- Changed an item: bump `"version"` in its live `mod.json` (or layout root) — patch for fixes, minor for new behaviour, major when it needs the person to redo something (keys, layout, settings) — add a `### x.y.z (date)` entry to its recipe's Changes, and update the version here.

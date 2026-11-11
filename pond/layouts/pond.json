@@ -1,5 +1,6 @@
 {
   "id": "root",
+  "version": "1.0.0",
   "cloned_from": {
     "name": "main",
     "version": "0.1.13"

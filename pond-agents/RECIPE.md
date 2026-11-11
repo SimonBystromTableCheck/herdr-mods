@@ -16,6 +16,10 @@ It is `"place": "none"`: to use it, point a layout block at it instead of the sh
 `agents` (clone the layout first: `herdr-app do layout.clone '{"name":"main","as":"my-main"}'`,
 then set the `agents` block's `content` to `{ "mod": "pond-agents" }`).
 
+**Version:** 1.0.0 (see Changes at the end; also `"version"` in `mod.json`).
+
+**Update:** ask your Herdr agent to update it from this folder, replacing `mods/pond-agents/` (say *update*: installing again adds a second copy next to the old one). Your settings and data live outside the mod folder and are kept (your figure sets in `pond-agents.json` and pictures in `pond-figures/`); edits you made inside the mod folder are not.
+
 ## What you see
 
 The sidebar's agents block, top to bottom, on `chrome` with a 1px `border` line on top, text 13px:
@@ -160,3 +164,11 @@ Clone of shipped `agents` (`cloned_from: {name: "agents", version: "0.1.14"}`). 
 - The header duck icon opens Pond figures; choosing Emoji pond for a space switches that
   space's agents to emoji and writes `pond-agents.json`; right-clicking a figure opens it on
   that space.
+
+## Changes
+
+### 1.0.0 (2026-11-11)
+
+- First versioned release.
+- Figure sets per space: the duck, a still duck, emoji or your own pictures, chosen in the Pond figures dialog (2026-11-11).
+- Pictures keep their own animation (GIF, WebP; animated SVGs converted once), and Tweak with AI hands a set to an agent (2026-11-11).

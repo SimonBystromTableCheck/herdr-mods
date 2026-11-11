@@ -13,6 +13,10 @@ It is `"place": "none"`: it replaces the shipped `files` mod in a layout block. 
 layout (`herdr-app do layout.clone '{"name":"main","as":"my-main"}'`) and set the `files`
 block's `content` to `{ "mod": "pond-files" }`.
 
+**Version:** 1.0.0 (see Changes at the end; also `"version"` in `mod.json`).
+
+**Update:** ask your Herdr agent to update it from this folder, replacing `mods/pond-files/` (say *update*: installing again adds a second copy next to the old one). Your settings and data live outside the mod folder and are kept; edits you made inside the mod folder are not.
+
 ## What you see
 
 One rounded (10px) card on `background`, 1px border (`border`; `accent` while it holds the
@@ -109,3 +113,11 @@ Clone of shipped `files` (`cloned_from: {name: "files", version: "0.1.14"}`). Fi
 - A long line in the preview wraps to the panel's right edge; `w` (or clicking "wrap on")
   turns it off and the label reads "wrap off"; reopening the panel keeps the choice.
 - `q` hides the panel and puts the keyboard back in the terminal; `esc` in the tree does the latter.
+
+## Changes
+
+### 1.0.0 (2026-11-11)
+
+- First versioned release.
+- Word wrap in the preview (`w`, footer toggle) (2026-11-09).
+- Leaving to the left gives the keyboard back to the terminal (2026-11-09).

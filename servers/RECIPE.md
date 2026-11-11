@@ -5,6 +5,10 @@ A panel of your local dev servers. Each card shows whether the server is running
 
 **Install:** Point your Herdr agent at this folder: copy `mods/servers/` into `~/.config/herdr-app/mods/`, then `herdr-app check ~/.config/herdr-app/mods/servers`.
 
+**Version:** 1.0.0 (see Changes at the end; also `"version"` in `mod.json`).
+
+**Update:** ask your Herdr agent to update it from this folder, replacing `mods/servers/` (say *update*: installing again adds a second copy next to the old one). Your settings and data live outside the mod folder and are kept (your servers in `servers.json`); edits you made inside the mod folder are not.
+
 ## What you see
 
 Panel: theme `background`, text 13px, rounded 10 with a 1px border (`accent` while it has the keyboard, else `border`).
@@ -59,3 +63,10 @@ Panel: theme `background`, text 13px, rounded 10 with a 1px border (`accent` whi
 - `l` peeks at its output; `R` restarts it; `s` stops it and `hc ls` no longer lists it.
 - A command that exits on its own shows `exited (<code>)` in red, and Logs still opens.
 - `d` on a stopped server removes it from the panel and from `servers.json`.
+
+## Changes
+
+### 1.0.0 (2026-11-11)
+
+- First versioned release.
+- Configurable projects root (Change… in the add flow, saved in `servers.json`) (2026-11-09).

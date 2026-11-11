@@ -14,6 +14,10 @@ third-party gitview instead of Herdr's stock panel.
 (and the `mod` names in the layout), run `herdr-app check ~/.config/herdr-app/mods/<name>` on
 each, install and patch gitview (below), then `herdr-app do layout.switch --name pond`.
 
+**Version:** 1.0.0 (see Changes at the end; also `"version"` in `layouts/pond.json`, and each mod's own in its `mod.json`).
+
+**Update:** ask your Herdr agent to update it from this folder, replacing `layouts/pond.json` and each folder in `mods/` (say *update*: installing again adds second copies). Sizes and panels you clicked are kept (Herdr keeps them in `layouts/.state/`), and so are the mods' settings and data; edits you made inside `pond.json` or the mod folders are not. Reapply the gitview patch if gitview updated too.
+
 ## What you see
 
 Left to right; no system title bar (macOS traffic lights at 12,16); `canvas` behind
@@ -145,3 +149,11 @@ gitview needs no other change.
   and after leader `h` from Changes the terminal has the keyboard and keeps it.
 - Starting a server from Servers raises the green count on its button.
 - `layout.switch` (`ctrl-shift-l` by default) cycles back to the previous layout.
+
+## Changes
+
+### 1.0.0 (2026-11-11)
+
+- First versioned release. Mods at: pond-agents 1.0.0, pond-files 1.0.0, pond-tabs 1.0.0, git 1.0.0, skills 1.0.0, todos 1.0.0, servers 1.0.0, remote-checker 1.0.0.
+- Agents list: figure sets per space (pond-agents) (2026-11-11).
+- Git: Conflicts pane (2026-11-10). PR panel (remote-checker) on the tab bar (2026-11-09).

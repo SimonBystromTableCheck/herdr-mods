@@ -15,6 +15,10 @@ replacing an existing `ctrl-a`). This takes `ctrl-a` from terminal programs:
 readline/shell beginning-of-line and a tmux prefix; leader `ctrl-a` gives it
 back once. The mod is `"place": "none"`: it only ever opens as this popup.
 
+**Version:** 1.0.0 (see Changes at the end; also `"version"` in `mod.json`).
+
+**Update:** ask your Herdr agent to update it from this folder, replacing `mods/leader/` (say *update*: installing again adds a second copy next to the old one). Your settings and data live outside the mod folder and are kept; edits you made inside the mod folder are not. If its `keys.json` changed, merge it again.
+
 ## What you see
 
 A popup 620×330px, at the top of the window 40px down, `popover` background,
@@ -131,3 +135,11 @@ Bindings (aliases in brackets, not shown):
 - In `pond`, `ctrl-a` `T` opens Todos with the keyboard; again hides it.
 - `ctrl-a` `e` in a terminal hides sidebar and panel; again brings back exactly
   what was open.
+
+## Changes
+
+### 1.0.0 (2026-11-11)
+
+- First versioned release.
+- `e` opens gitview's tab through changes-expand, with no timed close (2026-11-10).
+- Opens panels with the keyboard in them via `pane.go`, all six; hides only a focused panel (2026-11-09).

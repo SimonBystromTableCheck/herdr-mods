@@ -15,6 +15,10 @@ gitview's tab it closes the tab again. The `leader` mod's `e` uses it too.
 Needs gitview installed (its `gitview-tab` mod) and `herdr-app` on the PATH that Herdr's `exec`
 sees (macOS installs link it at `~/.local/bin/herdr-app`).
 
+**Version:** 1.0.0 (see Changes at the end; also `"version"` in `mod.json`).
+
+**Update:** ask your Herdr agent to update it from this folder, replacing `mods/changes-expand/` (say *update*: installing again adds a second copy next to the old one). Your settings and data live outside the mod folder and are kept; edits you made inside the mod folder are not. If its `keys.json` changed, merge it again.
+
 ## What you see
 
 Nothing of its own: a 2x2px frameless window that closes at once. Then gitview's tab opens, or
@@ -60,3 +64,9 @@ closes if you're already in it.
   pick a file (the diff pane opens), press `cmd-g`. gitview's tab opens and lists the changes.
 - `cmd-g` inside gitview's tab closes it and goes back to the tab you came from.
 - After either, `herdr-app status` shows no overlays left.
+
+## Changes
+
+### 1.0.0 (2026-11-11)
+
+- First versioned release: `cmd-g` opens gitview's tab on the repo you're in, and closes it from inside (2026-11-10).

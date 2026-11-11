@@ -5,6 +5,10 @@ A panel of your Claude Code skills: the personal ones in `~/.claude/skills` and 
 
 **Install:** Point your Herdr agent at this folder: copy `mods/skills/` into `~/.config/herdr-app/mods/`, then `herdr-app check ~/.config/herdr-app/mods/skills`.
 
+**Version:** 1.0.0 (see Changes at the end; also `"version"` in `mod.json`).
+
+**Update:** ask your Herdr agent to update it from this folder, replacing `mods/skills/` (say *update*: installing again adds a second copy next to the old one). Your settings and data live outside the mod folder and are kept; edits you made inside the mod folder are not.
+
 ## What you see
 
 Panel: theme `background`, text 12.5px, rounded 10 with a 1px border (`accent` while it has the keyboard, else `border`).
@@ -55,3 +59,10 @@ Panel: theme `background`, text 12.5px, rounded 10 with a 1px border (`accent` w
 - `enter` on a skill with an agent open in the space lists it; picking it types `/name` into that agent.
 - `n` → name → description → `l` creates `~/.claude/skills/<name>/SKILL.md` and opens it in nvim in a new tab.
 - `/` filters cards; `escape` clears it; `cd` into another repo switches the Repo group within a second.
+
+## Changes
+
+### 1.0.0 (2026-11-11)
+
+- First versioned release.
+- Leaving to the left gives the keyboard back to the terminal (2026-11-09).

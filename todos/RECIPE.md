@@ -17,6 +17,10 @@ layout (in a cloned layout, as a child of the right `panel-body` stack, or as a
 column of its own), or open it beside a terminal with
 `herdr-app do pane.split --direction right --mod todos`.
 
+**Version:** 1.0.0 (see Changes at the end; also `"version"` in `mod.json`).
+
+**Update:** ask your Herdr agent to update it from this folder, replacing `mods/todos/` (say *update*: installing again adds a second copy next to the old one). Your settings and data live outside the mod folder and are kept (your pages in `~/.config/herdr-app/todos/`); edits you made inside the mod folder are not.
+
 ## What you see
 
 One rounded card (radius 10, `background`, 1px `border`; the border turns
@@ -120,3 +124,10 @@ One rounded card (radius 10, `background`, 1px `border`; the border turns
 - Editing the file in another editor updates the panel without a reload.
 - `d` deletes with a 4-second "Deleted · u to undo" flash, and `u` restores it.
 - `q` hides the panel and the terminal gets the keyboard back.
+
+## Changes
+
+### 1.0.0 (2026-11-11)
+
+- First versioned release.
+- Leaving to the left gives the keyboard back to the terminal; `cmd-alt-arrows` caught (2026-11-09).

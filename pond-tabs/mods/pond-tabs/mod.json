@@ -1,6 +1,7 @@
 {
   "place": "none",
   "title": "Tabs",
+  "version": "1.0.0",
   "cloned_from": {
     "name": "tabs",
     "version": "0.1.13"

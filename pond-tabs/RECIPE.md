@@ -14,6 +14,10 @@ It is `"place": "none"` and replaces the layout's `tabs` block: clone a layout
 `tabs` block's `content` to `{ "mod": "pond-tabs" }`. This repo's `pond`
 layout already does, at 42px tall.
 
+**Version:** 1.0.0 (see Changes at the end; also `"version"` in `mod.json`).
+
+**Update:** ask your Herdr agent to update it from this folder, replacing `mods/pond-tabs/` (say *update*: installing again adds a second copy next to the old one). Your settings and data live outside the mod folder and are kept; edits you made inside the mod folder are not.
+
 ## What you see
 
 One bar filling its block (`chrome` background, 1px `border` bottom, 10px side
@@ -102,3 +106,10 @@ padding, 3px gaps), left to right:
   forth, restores each.
 - Starting a server through `servers` shows a green `1` on Servers.
 - An agent working in a tab shows the spinning ring on its pill.
+
+## Changes
+
+### 1.0.0 (2026-11-11)
+
+- First versioned release.
+- PR button for remote-checker (2026-11-09).

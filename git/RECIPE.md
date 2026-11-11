@@ -5,6 +5,10 @@ A lazygit-style git panel for the repo of the focused terminal. Numbered section
 
 **Install:** Point your Herdr agent at this folder: copy `mods/git/` and `mods/git-conflicts/` into `~/.config/herdr-app/mods/`, then `herdr-app check` each of them.
 
+**Version:** 1.0.0 (see Changes at the end; also `"version"` in `mod.json`).
+
+**Update:** ask your Herdr agent to update it from this folder, replacing `mods/git/` and `mods/git-conflicts/` (say *update*: installing again adds a second copy next to the old one). Your settings and data live outside the mod folder and are kept (commit-message drafts and panel state); edits you made inside the mod folder are not.
+
 ## What you see
 
 Panel: theme `background`, text 12.5px, rounded 10 with a 1px border (`accent` while it has the keyboard, else `border`). Opened as its own tab (expanded), it has no border or radius.
@@ -89,3 +93,12 @@ Panel: theme `background`, text 12.5px, rounded 10 with a 1px border (`accent` w
 - Merge a branch that conflicts: the banner offers Resolve (v); `v` opens the Conflicts pane with the keyboard in it, on the first file with chunks; `enter`, `↓`, `space` keeps theirs for the first conflict, the file's count drops, and after the last one the file turns green as `resolved` and is staged. `z` brings it back.
 - A file deleted on the other side shows its own changes against the base; `r` keeps it (green, `kept`), `d` deletes it.
 - With every file decided, `c` continues; a continue blocked by a failing hook shows the red failure box with the hook's error, and `f` offers to send it to an agent.
+
+## Changes
+
+### 1.0.0 (2026-11-11)
+
+- First versioned release.
+- Conflicts pane: chunk picker, hand conflicts to an agent, continue/abort (2026-11-10).
+- Go to a branch's worktree from Branches; the merged badge no longer marks fresh branches (2026-11-10).
+- Commit message drafts kept per repo until a commit lands (2026-11-09).
