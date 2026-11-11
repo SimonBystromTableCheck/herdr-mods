@@ -14,7 +14,7 @@ third-party gitview instead of Herdr's stock panel.
 (and the `mod` names in the layout), run `herdr-app check ~/.config/herdr-app/mods/<name>` on
 each, install and patch gitview (below), then `herdr-app do layout.switch --name pond`.
 
-**Version:** 1.0.0 (see Changes at the end; also `"version"` in `layouts/pond.json`, and each mod's own in its `mod.json`).
+**Version:** 1.0.1 (see Changes at the end; also `"version"` in `layouts/pond.json`, and each mod's own in its `mod.json`).
 
 **Update:** tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `layouts/pond.json` and each folder in `mods/` with this folder's copies (asking an agent to *install* again adds second copies instead). Sizes and panels you clicked are kept (Herdr keeps them in `layouts/.state/`), and so are the mods' settings and data; edits you made inside `pond.json` or the mod folders are not. Reapply the gitview patch if gitview updated too.
 
@@ -28,9 +28,6 @@ everything; 1px `border` dividers; terminals padded 14x12.
   - spaces list (shipped `spaces`) and agents list (`pond-agents`), sharing the height equally,
     each at least 90px. Agents rows are 66px with a 45px pixel duck (or the space's chosen figure set) acting out the status
     and, for Claude Code, a green/yellow/red context bar and the model;
-  - system stats, 44px (`sysstat`, props `{ "stacked": true }`, not included: see Watch out):
-    `CPU 12% ▁▂▃  GPU 9%` over `MEM 21.4/32.0G  HERDR 3.0G`, the second of each pair pushed to the
-    right edge;
   - footer, 69px (`workspace-chrome` with `footer: true`).
 - **Work column**, the rest:
   - tab bar, 42px (`pond-tabs`), drags the window: tab pills, `+` menu, then panel buttons
@@ -78,11 +75,11 @@ keys are reordered but the tree, ids, sizes and look are the shipped ones except
 | `panel-body` stack | 2 children | + `git`, `skills`, `todos`, `servers`, `remote` (`remote-checker`) blocks |
 
 Tree: `root` row → `sidebar` column [`brand`, `sidebar-lists` column [`spaces`, `agents`],
-`sysstat` (44px), `sidebar-footer`] + `work` column [`tabs`, `work-body` row [`main` (`tab: active` with the
+`sidebar-footer`] + `work` column [`tabs`, `work-body` row [`main` (`tab: active` with the
 pane frame), `panel` column [`panel-body` stack, `active: files`]], `status`].
 
 Mods: shipped `workspace-chrome`, `spaces`, `pane`, `workspace-status` (and the `new-menu`,
-`files`/`changes` icons `pond-tabs` borrows); this repo's nine in `mods/` (`git-conflicts` belongs with `git`); `sysstat` and `gitview` from
+`files`/`changes` icons `pond-tabs` borrows); this repo's nine in `mods/` (`git-conflicts` belongs with `git`); `gitview` from
 outside. `pond-agents` and `pond-files` have their own recipes in this repo; `pond-tabs` differs from
 shipped `tabs` only by the five buttons (`enabled` always adds `git`, `skills`, `todos`,
 `servers`, `remote` to shared `workspace.panels`) and its own `mods/pond-tabs/win-*.svg` paths.
@@ -131,11 +128,11 @@ gitview needs no other change.
 - The context bar needs a Claude Code status line that runs
   `hc label "$HC_TERMINAL_ID" claude.context=<pct> claude.model=<name>`; not included here.
 - The panel buttons for Git/Skills/Todos/Servers always show, even if the mods are missing.
-- The `sysstat` block uses a third-party mod that isn't in this repo: github.com/DarkoKuzmanovic/herdr-mods
-  (`sysstat`), which reads Linux `/proc`. This layout was built with a local version that adds a macOS
-  fallback (`iostat`, `vm_stat`, `sysctl`, `ioreg`), a `HERDR` figure (resident memory of the Herdr app and
-  every herdr-core process tree, from one `ps -axo pid=,ppid=,rss=,comm=`) and the two-row `stacked` prop.
-  Without the mod the block is an empty 44px strip: install it, or delete the `sysstat` node.
+- My own copy has a system-stats strip between the lists and the footer, from a third-party mod that
+  isn't in this repo: github.com/DarkoKuzmanovic/herdr-mods (`sysstat`, Linux `/proc`; mine is a local
+  version with a macOS fallback and a two-row `stacked` prop). It's cut from the published layout. To
+  add it, install that mod and put this after the `sidebar-lists` node in `sidebar`:
+  `{ "id": "sysstat", "type": "block", "content": { "mod": "sysstat", "props": { "stacked": true } }, "size": { "px": 44 } }`.
 
 ## Done when
 
@@ -151,6 +148,10 @@ gitview needs no other change.
 - `layout.switch` (`ctrl-shift-l` by default) cycles back to the previous layout.
 
 ## Changes
+
+### 1.0.1 (2026-11-11)
+
+- The system-stats block (`sysstat`, a third-party mod not in this repo) is gone from the published layout, so it no longer leaves an empty strip; Watch out says how to add it back. Mods unchanged (all 1.0.0).
 
 ### 1.0.0 (2026-11-11)
 

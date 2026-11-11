@@ -6,6 +6,20 @@ import json, os, shutil, sys
 
 REPO = sys.argv[1]
 URL = "https://github.com/SimonBystromTableCheck/herdr-mods"
+# Mods my own layouts use that aren't published (third-party, with local patches):
+# their blocks are cut from the published layouts. Each recipe says how to add them back.
+PRIVATE = {"sysstat"}
+
+def strip(node):
+    """Drops blocks showing a PRIVATE mod from a layout tree (children and floating)."""
+    if isinstance(node, dict):
+        for key in ("children", "floating"):
+            if isinstance(node.get(key), list):
+                node[key] = [c for c in node[key] if not (isinstance(c, dict) and (c.get("content") or {}).get("mod") in PRIVATE)]
+        for v in node.values(): strip(v)
+    elif isinstance(node, list):
+        for v in node: strip(v)
+    return node
 
 items = []  # (item, kind, mods, layouts, keys)
 for line in open(os.path.join(REPO, "items.conf")):
@@ -44,6 +58,10 @@ for item, kind, mods, layouts, keys in items:
             if not v: sys.exit(f"{m}: no \"version\" in mod.json")
             index["mods"][m] = {"version": v, "item": item, "path": f"{item}/mods/{m}"}
     for l in layouts:
+        lp = os.path.join(REPO, item, "layouts", f"{l}.json")
+        tree = strip(json.load(open(lp)))
+        if any(f'"mod": "{m}"' in json.dumps(tree) for m in PRIVATE): sys.exit(f"layout {l}: a private mod is still referenced")
+        open(lp, "w").write(json.dumps(tree, indent=2) + "\n")
         v = stamp(os.path.join(REPO, item, "layouts", f"{l}.json"), {"repo": URL, "item": item, "layout": l})
         if not v: sys.exit(f"layout {l}: no \"version\"")
         index["layouts"][l] = {"version": v, "item": item, "path": f"{item}/layouts/{l}.json", "mods": mods}

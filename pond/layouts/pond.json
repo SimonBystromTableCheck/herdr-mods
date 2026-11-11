@@ -1,6 +1,6 @@
 {
   "id": "root",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "source": {
     "repo": "https://github.com/SimonBystromTableCheck/herdr-mods",
     "item": "pond",
@@ -54,19 +54,6 @@
               "min": 90
             }
           ]
-        },
-        {
-          "id": "sysstat",
-          "type": "block",
-          "content": {
-            "mod": "sysstat",
-            "props": {
-              "stacked": true
-            }
-          },
-          "size": {
-            "px": 44
-          }
         },
         {
           "id": "sidebar-footer",
