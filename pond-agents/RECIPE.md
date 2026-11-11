@@ -18,7 +18,7 @@ then set the `agents` block's `content` to `{ "mod": "pond-agents" }`).
 
 **Version:** 1.0.0 (see Changes at the end; also `"version"` in `mod.json`).
 
-**Update:** ask your Herdr agent to update it from this folder, replacing `mods/pond-agents/` (say *update*: installing again adds a second copy next to the old one). Your settings and data live outside the mod folder and are kept (your figure sets in `pond-agents.json` and pictures in `pond-figures/`); edits you made inside the mod folder are not.
+**Update:** tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/pond-agents/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept (your figure sets in `pond-agents.json` and pictures in `pond-figures/`); edits you made inside the mod folder are not.
 
 ## What you see
 

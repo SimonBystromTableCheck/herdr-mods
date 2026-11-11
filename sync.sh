@@ -31,4 +31,7 @@ done < "$REPO/items.conf"
 for f in keys.json settings.json programs.json; do
   [[ -f "$HOME_DIR/$f" ]] && cp "$HOME_DIR/$f" "$REPO/machine/$f"
 done
+
+# Where each mod came from, UPDATE.md in every mod, and versions.json (for updating).
+python3 "$REPO/tools/stamp.py" "$REPO"
 echo "synced from $HOME_DIR"

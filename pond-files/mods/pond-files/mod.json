@@ -6,5 +6,10 @@
   },
   "focusable": true,
   "title": "Files",
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "source": {
+    "repo": "https://github.com/SimonBystromTableCheck/herdr-mods",
+    "item": "pond-files",
+    "mod": "pond-files"
+  }
 }

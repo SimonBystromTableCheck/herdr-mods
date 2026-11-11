@@ -1,0 +1,172 @@
+{
+  "repo": "https://github.com/SimonBystromTableCheck/herdr-mods",
+  "update": "tools/UPDATE.md",
+  "mods": {
+    "git": {
+      "version": "1.0.0",
+      "item": "git",
+      "path": "git/mods/git"
+    },
+    "git-conflicts": {
+      "version": "1.0.0",
+      "item": "git",
+      "path": "git/mods/git-conflicts"
+    },
+    "leader": {
+      "version": "1.0.0",
+      "item": "leader",
+      "path": "leader/mods/leader"
+    },
+    "changes-expand": {
+      "version": "1.0.0",
+      "item": "changes-expand",
+      "path": "changes-expand/mods/changes-expand"
+    },
+    "todos": {
+      "version": "1.0.0",
+      "item": "todos",
+      "path": "todos/mods/todos"
+    },
+    "servers": {
+      "version": "1.0.0",
+      "item": "servers",
+      "path": "servers/mods/servers"
+    },
+    "remote-checker": {
+      "version": "1.0.0",
+      "item": "remote-checker",
+      "path": "remote-checker/mods/remote-checker"
+    },
+    "skills": {
+      "version": "1.0.0",
+      "item": "skills",
+      "path": "skills/mods/skills"
+    },
+    "pond-agents": {
+      "version": "1.0.0",
+      "item": "pond-agents",
+      "path": "pond-agents/mods/pond-agents"
+    },
+    "pond-files": {
+      "version": "1.0.0",
+      "item": "pond-files",
+      "path": "pond-files/mods/pond-files"
+    },
+    "pond-tabs": {
+      "version": "1.0.0",
+      "item": "pond-tabs",
+      "path": "pond-tabs/mods/pond-tabs"
+    }
+  },
+  "layouts": {
+    "pond": {
+      "version": "1.0.0",
+      "item": "pond",
+      "path": "pond/layouts/pond.json",
+      "mods": [
+        "pond-agents",
+        "pond-files",
+        "pond-tabs",
+        "git",
+        "git-conflicts",
+        "skills",
+        "todos",
+        "servers",
+        "remote-checker"
+      ]
+    }
+  },
+  "items": {
+    "git": {
+      "kind": "mod",
+      "recipe": "git/RECIPE.md",
+      "mods": [
+        "git",
+        "git-conflicts"
+      ]
+    },
+    "leader": {
+      "kind": "mod",
+      "recipe": "leader/RECIPE.md",
+      "mods": [
+        "leader"
+      ],
+      "keys": "leader/keys.json"
+    },
+    "changes-expand": {
+      "kind": "mod",
+      "recipe": "changes-expand/RECIPE.md",
+      "mods": [
+        "changes-expand"
+      ],
+      "keys": "changes-expand/keys.json"
+    },
+    "todos": {
+      "kind": "mod",
+      "recipe": "todos/RECIPE.md",
+      "mods": [
+        "todos"
+      ]
+    },
+    "servers": {
+      "kind": "mod",
+      "recipe": "servers/RECIPE.md",
+      "mods": [
+        "servers"
+      ]
+    },
+    "remote-checker": {
+      "kind": "mod",
+      "recipe": "remote-checker/RECIPE.md",
+      "mods": [
+        "remote-checker"
+      ]
+    },
+    "skills": {
+      "kind": "mod",
+      "recipe": "skills/RECIPE.md",
+      "mods": [
+        "skills"
+      ]
+    },
+    "pond-agents": {
+      "kind": "mod",
+      "recipe": "pond-agents/RECIPE.md",
+      "mods": [
+        "pond-agents"
+      ]
+    },
+    "pond-files": {
+      "kind": "mod",
+      "recipe": "pond-files/RECIPE.md",
+      "mods": [
+        "pond-files"
+      ]
+    },
+    "pond-tabs": {
+      "kind": "mod",
+      "recipe": "pond-tabs/RECIPE.md",
+      "mods": [
+        "pond-tabs"
+      ]
+    },
+    "pond": {
+      "kind": "layout",
+      "recipe": "pond/RECIPE.md",
+      "mods": [
+        "pond-agents",
+        "pond-files",
+        "pond-tabs",
+        "git",
+        "git-conflicts",
+        "skills",
+        "todos",
+        "servers",
+        "remote-checker"
+      ],
+      "layouts": [
+        "pond"
+      ]
+    }
+  }
+}

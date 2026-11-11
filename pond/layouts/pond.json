@@ -1,6 +1,11 @@
 {
   "id": "root",
   "version": "1.0.0",
+  "source": {
+    "repo": "https://github.com/SimonBystromTableCheck/herdr-mods",
+    "item": "pond",
+    "layout": "pond"
+  },
   "cloned_from": {
     "name": "main",
     "version": "0.1.13"

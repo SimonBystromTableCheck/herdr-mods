@@ -2,6 +2,11 @@
   "place": "none",
   "title": "Tabs",
   "version": "1.0.0",
+  "source": {
+    "repo": "https://github.com/SimonBystromTableCheck/herdr-mods",
+    "item": "pond-tabs",
+    "mod": "pond-tabs"
+  },
   "cloned_from": {
     "name": "tabs",
     "version": "0.1.13"

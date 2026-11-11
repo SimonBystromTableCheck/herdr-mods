@@ -19,17 +19,17 @@ Give your Herdr agent the folder's link, e.g.
 
 It follows the "Layouts and mods other people made" steps in your `~/.config/herdr-app/AGENTS.md`: read the recipe, copy `mods/<name>/`, merge `keys.json` if there is one, `herdr-app check`.
 
-## Update one
+## Update one (or all)
 
-Nothing updates by itself: an installed mod is a copy, not a link to this repo. To get a newer version, ask your Herdr agent, e.g.
+Nothing updates by itself: an installed mod is a copy, not a link to this repo. Tell your Herdr agent:
 
-> Update my Herdr mod pond-agents from https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/pond-agents, replacing `mods/pond-agents/`
+> Update my herdr mods
 
-Say *update* and *replacing*: the install steps never overwrite, so "install" again would add a second copy (`pond-agents-2`) beside the old one. Herdr reloads the mod at once.
+(or "update pond mods", "check my Herdr mods for updates"). Every mod from here carries `UPDATE.md` and a `"source"` in its `mod.json`, so the agent finds what you installed from this repo, compares each `"version"` with [`versions.json`](versions.json), shows what's newer with its Changes, and updates the ones you pick: it shows your own edits before replacing them, backs each one up to `~/.config/herdr-app/backups/`, merges changed keys, and runs `herdr-app check`. Herdr reloads each mod at once.
 
 - **Kept:** your settings and data. They live outside the mod folder (e.g. `pond-agents.json`, `pond-figures/`, `servers.json`, `todos/`), and Herdr keeps your clicks on a layout (sizes, open panels) in `layouts/.state/`.
-- **Replaced:** anything you edited inside `mods/<name>/` or the layout file. To keep your own changes, duplicate the mod first (`herdr-app do mod.clone '{"name":"pond-agents","as":"my-pond-agents"}'`); a clone never updates.
-- **Keys:** if the item has a `keys.json` and it changed, merge it again.
+- **Replaced:** anything you edited inside `mods/<name>/` or the layout file (the agent asks first and keeps a backup). To keep a changed version for good, duplicate it (`herdr-app do mod.clone '{"name":"pond-agents","as":"my-pond-agents"}'`); clones are never updated.
+- By hand: copy the item's `mods/<name>/` over yours. Don't ask an agent to *install* it again: installs never overwrite, so you'd get a second copy (`pond-agents-2`).
 
 Which version you have: `"version"` in `~/.config/herdr-app/mods/<name>/mod.json` (or the root of the layout file). What changed: the **Changes** section at the end of each item's `RECIPE.md`.
 
@@ -61,7 +61,7 @@ Some panels integrate with [herdr-gitview](https://github.com/ChmaraX/herdr-gitv
 The live copies are in `~/.config/herdr-app` (Herdr hot-reloads from there, and not through symlinks).
 This repo is a snapshot of them:
 
-- `./sync.sh`: copies the mods and layouts listed in `items.conf` from the config into their item folders, and `keys.json` / `settings.json` into `machine/`.
+- `./sync.sh`: copies the mods and layouts listed in `items.conf` from the config into their item folders, and `keys.json` / `settings.json` into `machine/`. Then `tools/stamp.py` adds `"source"` to each published `mod.json` and layout, copies `tools/UPDATE.md` into every mod folder and writes `versions.json`; none of that touches the live config.
 - `./install.sh [--machine]`: copies everything back into `~/.config/herdr-app` on a new machine; `--machine` also installs `machine/*.json` (old ones kept as `*.bak-<time>`).
 - New mod to publish: add a line to `items.conf`, run `./sync.sh`, write its `RECIPE.md`.
 - Changed an item: bump `"version"` in its live `mod.json` (or layout root) — patch for fixes, minor for new behaviour, major when it needs the person to redo something (keys, layout, settings) — add a `### x.y.z (date)` entry to its recipe's Changes, and update the version here.

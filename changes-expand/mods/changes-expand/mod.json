@@ -1,1 +1,1 @@
-{ "place": "none", "title": "Changes: expand into gitview's tab", "version": "1.0.0", "overlay": {"kind": "window", "width": 2, "height": 2, "frame": "none"} }
+{ "place": "none", "title": "Changes: expand into gitview's tab", "version": "1.0.0", "source": {"repo": "https://github.com/SimonBystromTableCheck/herdr-mods", "item": "changes-expand", "mod": "changes-expand"}, "overlay": {"kind": "window", "width": 2, "height": 2, "frame": "none"} }
