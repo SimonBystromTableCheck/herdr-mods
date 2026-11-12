@@ -3,7 +3,7 @@
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { agents, terminals, panes, focused, spaces, run, theme, shared, setShared, setAgentOrder, openOverlay, closeOverlay, props, window, layout } from "herdr";
+import { agents, terminals, panes, focused, spaces, run, theme, shared, setShared, setAgentOrder, openOverlay, closeOverlay, props, window, layout, readTextFile, home } from "herdr";
 import { figureFor, load } from "./figures.js";
 import { Editor } from "./editor.js";
 
@@ -76,14 +76,22 @@ function duration(ms) {
 // A thin context-use bar with its %, colored like Claude's status line:
 // green, yellow from 60%, red from 80%.
 // Then the model, when the status line reported one.
-function contextBar(t, pct, model, address) {
+function contextBar(t, pct, model, address, accountLabel) {
   const color = pct >= 80 ? t.ansi1 : pct >= 60 ? t.ansi3 : t.ansi2;
-  return h_flex().id(`ctx-${address}`).mt(2).gap(5).items_center().tooltip(`Context ${pct}% used${model ? ` · ${model}` : ""}`)
+  return h_flex().id(`ctx-${address}`).mt(2).gap(5).items_center().tooltip(`Context ${pct}% used${model ? ` · ${model}` : ""}${accountLabel ? ` · ${accountLabel} account` : ""}`)
     .child(div().w(72).h(3).flex_none().rounded(2).bg(t.border)
       .child(div().h_full().rounded(2).bg(color).w(Math.max(2, (72 * pct) / 100))))
     .child(div().flex_none().text_size(10).text_color(t.dim).child(`${pct}%`))
     .when(Boolean(model), el => el.child(div().min_w(0).truncate().text_size(10).text_color(t.muted).child(`· ${model}`)));
 }
+
+// The Claude account an agent runs on (herdr.claude-profile, from pond-profiles' launch hook),
+// named as pond-profiles' local settings name it (~/.cvm/herdr/pond-profiles.json).
+function accountBadge(t, label, gateway) {
+  return div().flex_none().px(4).h(14).flex().items_center().rounded(3).text_size(9.5)
+    .bg(gateway ? t.ansi5 : t.ansi4).text_color(t.background).child(label);
+}
+const accountLabel = (accounts, name) => name ? accounts?.[name]?.label ?? name[0].toUpperCase() + name.slice(1) : null;
 
 export default class Agents extends View {
   init(_props, cx) {
@@ -97,6 +105,16 @@ export default class Agents extends View {
     });
     reload(cx);
     cx.timer.every(4000, reload);
+    // Claude account names and kinds, from the Claude panel's local settings.
+    const accounts = (cx) => cx.spawn(async (cx) => {
+      const text = await readTextFile(`${home()}/.cvm/herdr/pond-profiles.json`).catch(() => null);
+      if (text === this.accountsText) return;
+      this.accountsText = text;
+      try { this.accounts = JSON.parse(text ?? "{}").accounts ?? {}; } catch { this.accounts = {}; }
+      cx.notify();
+    });
+    accounts(cx);
+    cx.timer.every(5000, accounts);
     this.folded = new Set();
     // Each agent's last state and when it changed (ms), kept across restarts.
     this.changed = JSON.parse(localStorage.getItem("changed") ?? "{}");
@@ -330,7 +348,7 @@ export default class Agents extends View {
     // Context use (0–100) and model that Claude's status line labels its terminal with.
     const contextOf = new Map(all.flatMap((k) => {
       const v = Number.parseInt(k.labels?.["claude.context"], 10);
-      return Number.isFinite(v) ? [[k.address, { pct: Math.max(0, Math.min(100, v)), model: k.labels?.["claude.model"] || null }]] : [];
+      return Number.isFinite(v) ? [[k.address, { pct: Math.max(0, Math.min(100, v)), model: k.labels?.["claude.model"] || null, account: k.labels?.["herdr.claude-profile"] || null }]] : [];
     }));
 
     const row = (a, i, subs = []) => {
@@ -386,6 +404,7 @@ export default class Agents extends View {
         .items_center()
         .gap(6)
         .when(a.focused, (el) => el.bg(t.selected))
+        .relative()
         .cursor_pointer()
         .hover((s) => s.bg(t.hover))
         .on_hover((on, cx) => {
@@ -405,12 +424,13 @@ export default class Agents extends View {
         .child(v_flex().flex_1().min_w(0).gap(1)
           .child(div().min_w(0).truncate().text_color(idle ? t.muted : t.foreground).child(name))
           .when(full && Boolean(more), el => el.child(div().min_w(0).truncate().text_size(11.5).text_color(t.dim).child(more)))
-          .when(ctx != null, el => el.child(contextBar(t, ctx.pct, ctx.model, a.address))))
+          .when(ctx != null, el => el.child(contextBar(t, ctx.pct, ctx.model, a.address, accountLabel(this.accounts, ctx.account)))))
         .when(Boolean(machine), el => el.child(div().text_size(10).text_color(t.dim).child(machine)))
         .when(subs.length > 0, el => el.child(fold(a, subs)))
         .when(this.hovered === a.address, el => el.child(pin))
         .when(this.hovered !== a.address && Boolean(when), el => el.child(div().flex_none().text_size(11).text_color(t.dim).child(duration(now - when))))
-        .child(this.status(t, a, byPriority && !isPinned));
+        .child(this.status(t, a, byPriority && !isPinned))
+        .when(Boolean(ctx?.account), el => el.child(div().absolute().right(8).bottom(7).child(accountBadge(t, accountLabel(this.accounts, ctx.account), this.accounts?.[ctx.account]?.gateway))));
     };
 
     // Groups in list order: spaces (grouped) or priority sections. Agents of a

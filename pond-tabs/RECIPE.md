@@ -14,7 +14,7 @@ It is `"place": "none"` and replaces the layout's `tabs` block: clone a layout
 `tabs` block's `content` to `{ "mod": "pond-tabs" }`. This repo's `pond`
 layout already does, at 42px tall.
 
-**Version:** 1.0.0 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.1.0 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/pond-tabs/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept; edits you made inside the mod folder are not.
 
@@ -59,12 +59,13 @@ padding, 3px gaps), left to right:
 - A clone of Herdr's shipped `tabs` mod (`mod.json` has
   `cloned_from: { name: "tabs", version: "0.1.13" }`). Differences from the
   shipped one, all in `main.js`:
-  - `enabled` panels = `workspace.panels` plus `"git", "skills", "todos", "servers", "remote"`,
+  - `enabled` panels = `workspace.panels` plus `"git", "skills", "todos", "servers", "remote", "profiles"`,
     so per-space restore accepts those too.
   - Five extra `panelButton`s after Changes: Git
     (`mods/workspace-chrome/git-branch.svg`), Skills (`mods/skills/skills.svg`),
     Todos (`mods/todos/todos.svg`), Servers (`mods/workspace-chrome/server.svg`),
-    PR (child `remote`, `mods/remote-checker/pr.svg`).
+    PR (child `remote`, `mods/remote-checker/pr.svg`), then the Claude account
+    (child `profiles`, `mods/pond-profiles/claude.svg`, labelled with the active cvp profile).
   - `panelButton` takes a `badge` count; Servers passes
     `terminals().filter(x => x.state === "live" && x.labels?.["herdr.server"]).length`
     (imports `terminals`).
@@ -108,6 +109,10 @@ padding, 3px gaps), left to right:
 - An agent working in a tab shows the spinning ring on its pill.
 
 ## Changes
+
+### 1.1.0 (2026-11-12)
+
+- Claude account button (child `profiles`, `mods/pond-profiles/claude.svg`) labelled with the active account, with a dot (`ansi4` claude.ai, `ansi5` gateway); it reads `~/.cvm/active-profile` and `~/.cvm/herdr/pond-profiles.json` every 3s. Needs pond-profiles.
 
 ### 1.0.0 (2026-11-11)
 

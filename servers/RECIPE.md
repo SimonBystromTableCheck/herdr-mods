@@ -5,7 +5,7 @@ A panel of your local dev servers. Each card shows whether the server is running
 
 **Install:** Point your Herdr agent at this folder: copy `mods/servers/` into `~/.config/herdr-app/mods/`, then `herdr-app check ~/.config/herdr-app/mods/servers`.
 
-**Version:** 1.0.0 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.0.1 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/servers/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept (your servers in `servers.json`); edits you made inside the mod folder are not.
 
@@ -65,6 +65,10 @@ Panel: theme `background`, text 13px, rounded 10 with a 1px border (`accent` whi
 - `d` on a stopped server removes it from the panel and from `servers.json`.
 
 ## Changes
+
+### 1.0.1 (2026-11-12)
+
+- A poll stuck on a call that never answers is given up after 15s, so branches keep updating; git calls time out after 5s.
 
 ### 1.0.0 (2026-11-11)
 

@@ -1,6 +1,6 @@
 {
   "id": "root",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "source": {
     "repo": "https://github.com/SimonBystromTableCheck/herdr-mods",
     "item": "pond",
@@ -185,6 +185,13 @@
                       "type": "block",
                       "content": {
                         "mod": "remote-checker"
+                      }
+                    },
+                    {
+                      "id": "profiles",
+                      "type": "block",
+                      "content": {
+                        "mod": "pond-profiles"
                       }
                     }
                   ],

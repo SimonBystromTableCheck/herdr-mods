@@ -10,11 +10,11 @@ third-party gitview instead of Herdr's stock panel.
 
 **Install:** Point your Herdr agent at this folder: copy `layouts/pond.json` to
 `~/.config/herdr-app/layouts/` and every folder in `mods/` (`pond-agents`, `pond-files`, `pond-tabs`,
-`git`, `git-conflicts`, `skills`, `todos`, `servers`, `remote-checker`) to `~/.config/herdr-app/mods/`, renaming any that clash
+`git`, `git-conflicts`, `skills`, `todos`, `servers`, `remote-checker`, `pond-profiles`) to `~/.config/herdr-app/mods/`, renaming any that clash
 (and the `mod` names in the layout), run `herdr-app check ~/.config/herdr-app/mods/<name>` on
 each, install and patch gitview (below), then `herdr-app do layout.switch --name pond`.
 
-**Version:** 1.0.1 (see Changes at the end; also `"version"` in `layouts/pond.json`, and each mod's own in its `mod.json`).
+**Version:** 1.1.0 (see Changes at the end; also `"version"` in `layouts/pond.json`, and each mod's own in its `mod.json`).
 
 **Update:** tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `layouts/pond.json` and each folder in `mods/` with this folder's copies (asking an agent to *install* again adds second copies instead). Sizes and panels you clicked are kept (Herdr keeps them in `layouts/.state/`), and so are the mods' settings and data; edits you made inside `pond.json` or the mod folders are not. Reapply the gitview patch if gitview updated too.
 
@@ -38,7 +38,7 @@ everything; 1px `border` dividers; terminals padded 14x12.
       radius 10, 8px apart, framed even when alone, each with the shipped `pane` header (30px, top);
     - the panel, 368px (280–900), hidden until a panel button opens it: a stack showing one of
       `files` (`pond-files`), `changes` (`gitview`), `git`, `skills`, `todos`, `servers`,
-      `remote` (`remote-checker`);
+      `remote` (`remote-checker`), `profiles` (`pond-profiles`);
   - status bar, 28px (shipped `workspace-status`).
 
 ## How it behaves
@@ -72,18 +72,18 @@ keys are reordered but the tree, ids, sizes and look are the shipped ones except
 | `tabs` block | `tabs` | `pond-tabs` (5 extra panel buttons, Servers badge) |
 | `files` (stack child) | `files` | `pond-files` (vim keys, keybar, plain-text preview) |
 | `changes` (stack child) | `changes` | `gitview`, props `{ "replaces": { "mod": "changes" } }` |
-| `panel-body` stack | 2 children | + `git`, `skills`, `todos`, `servers`, `remote` (`remote-checker`) blocks |
+| `panel-body` stack | 2 children | + `git`, `skills`, `todos`, `servers`, `remote` (`remote-checker`), `profiles` (`pond-profiles`) blocks |
 
 Tree: `root` row → `sidebar` column [`brand`, `sidebar-lists` column [`spaces`, `agents`],
 `sidebar-footer`] + `work` column [`tabs`, `work-body` row [`main` (`tab: active` with the
 pane frame), `panel` column [`panel-body` stack, `active: files`]], `status`].
 
 Mods: shipped `workspace-chrome`, `spaces`, `pane`, `workspace-status` (and the `new-menu`,
-`files`/`changes` icons `pond-tabs` borrows); this repo's nine in `mods/` (`git-conflicts` belongs with `git`); `gitview` from
+`files`/`changes` icons `pond-tabs` borrows); this repo's ten in `mods/` (`git-conflicts` belongs with `git`); `gitview` from
 outside. `pond-agents` and `pond-files` have their own recipes in this repo; `pond-tabs` differs from
 shipped `tabs` only by the five buttons (`enabled` always adds `git`, `skills`, `todos`,
 `servers`, `remote` to shared `workspace.panels`) and its own `mods/pond-tabs/win-*.svg` paths.
-Programs the panels run: `git`, `sh`, `hc`, `nvim` (git and skills), `mv` (todos), `gh` (remote-checker).
+Programs the panels run: `git`, `sh`, `hc`, `nvim` (git and skills), `mv` (todos), `gh` (remote-checker), `python3`, `cvm`, `claude` (pond-profiles; see its recipe).
 
 **gitview** (github.com/ChmaraX/herdr-gitview, not in this repo): install it with that repo's
 instructions. It brings several `gitview*` mod folders plus a `herdr-gitview` engine binary
@@ -148,6 +148,10 @@ gitview needs no other change.
 - `layout.switch` (`ctrl-shift-l` by default) cycles back to the previous layout.
 
 ## Changes
+
+### 1.1.0 (2026-11-12)
+
+- Claude profiles panel (`pond-profiles` 1.0.0, panel child `profiles`) with an account button on the tab bar and account badges in the agents list. Mods at: pond-agents 1.1.0, pond-tabs 1.1.0, servers 1.0.1, pond-profiles 1.0.0; others unchanged (1.0.0).
 
 ### 1.0.1 (2026-11-11)
 

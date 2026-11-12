@@ -74,6 +74,8 @@ async function detectCommands(dir) {
   return out;
 }
 
+const POLL_LOST_MS = 15000;
+
 export default class Servers extends View {
   init(_props, cx) {
     this.servers = []; this.raw = null; this.loaded = false;
@@ -200,28 +202,35 @@ export default class Servers extends View {
     return mine.find(x => x.state === "live") ?? mine.sort((a, b) => (b.created_ms ?? 0) - (a.created_ms ?? 0))[0] ?? null;
   }
 
+  // One poll at a time, but a poll stuck on a call that never answers (the app can drop a
+  // mod's pending exec when a mod pane closes) is given up after POLL_LOST_MS, so the
+  // branches keep following; a late reply from the old poll writes nothing.
   poll(cx) {
-    if (this.polling) return;
-    this.polling = true;
+    if (this.polling && Date.now() - this.polling < POLL_LOST_MS) return;
+    const gen = this.pollGen = (this.pollGen ?? 0) + 1;
+    this.polling = Date.now();
     cx.spawn(async cx => {
       try {
         await this.load();
         for (const s of this.servers) {
-          const r = await exec("git", ["branch", "--show-current"], { cwd: s.cwd }).catch(() => null);
+          const r = await exec("git", ["branch", "--show-current"], { cwd: s.cwd, timeout: 5000 }).catch(() => null);
+          if (gen !== this.pollGen) return;
           let branch = r?.code === 0 ? r.stdout.trim() : null;
           if (r?.code === 0 && !branch) {
-            const h = await exec("git", ["rev-parse", "--short", "HEAD"], { cwd: s.cwd }).catch(() => null);
+            const h = await exec("git", ["rev-parse", "--short", "HEAD"], { cwd: s.cwd, timeout: 5000 }).catch(() => null);
+            if (gen !== this.pollGen) return;
             branch = h?.code === 0 ? `detached @ ${h.stdout.trim()}` : null;
           }
           this.branches[s.id] = branch;
           const term = this.terminal(s);
           if (term?.state === "live" && !this.urls[s.id]?.startsWith(term.address + "|")) {
             const out = await hc(["read", term.address, "--lines", "400"]).catch(() => null);
+            if (gen !== this.pollGen) return;
             const m = out?.stdout.match(URL_RE);
             if (m) this.urls[s.id] = `${term.address}|${m[0].replace("0.0.0.0", "localhost").replace(/[.,;]+$/, "")}`;
           }
         }
-      } finally { this.polling = false; cx.notify(); }
+      } finally { if (gen === this.pollGen) this.polling = 0; cx.notify(); }
     });
   }
 

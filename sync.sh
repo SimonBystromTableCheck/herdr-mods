@@ -4,7 +4,7 @@
 set -euo pipefail
 HOME_DIR="${HERDR_APP_HOME:-$HOME/.config/herdr-app}"
 REPO="$(cd "$(dirname "$0")" && pwd)"
-EXCLUDES=(--exclude gpui-kit.d.ts --exclude jsconfig.json --exclude .DS_Store --exclude '*.error' --exclude node_modules)
+EXCLUDES=(--exclude gpui-kit.d.ts --exclude jsconfig.json --exclude .DS_Store --exclude '*.error' --exclude node_modules --exclude '.handoff-*' --exclude __pycache__)
 
 while read -r item kind rest; do
   [[ -z "$item" || "$item" == \#* ]] && continue

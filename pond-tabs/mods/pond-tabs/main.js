@@ -1,6 +1,6 @@
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { spaces, panes, run, openOverlay, theme, window, shared, layout, settings, terminals } from "herdr";
+import { spaces, panes, run, openOverlay, theme, window, shared, layout, settings, terminals, readTextFile, home } from "herdr";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -12,8 +12,19 @@ function find(node, id) {
 }
 
 export default class Tabs extends View {
-  init() {
+  init(_props, cx) {
     this.pressed = null;
+    // The Claude account new sessions use (cvp's global profile), for the Claude button; its
+    // name and kind come from pond-profiles' local settings (~/.cvm/herdr/pond-profiles.json).
+    const account = cx => cx.spawn(async cx => {
+      const name = (await readTextFile(`${home()}/.cvm/active-profile`).catch(() => null))?.trim() || null;
+      let info = null;
+      try { info = JSON.parse(await readTextFile(`${home()}/.cvm/herdr/pond-profiles.json`) ?? "{}").accounts?.[name] ?? null; } catch {}
+      const key = `${name}|${info?.label}|${info?.gateway}`;
+      if (key !== this.accountKey) { this.accountKey = key; this.account = name; this.accountInfo = info; cx.notify(); }
+    });
+    account(cx);
+    cx.timer.every(3000, account);
     this.panels = JSON.parse(localStorage.getItem("panels") ?? "{}");
   }
 
@@ -77,9 +88,9 @@ export default class Tabs extends View {
       ? Math.max(10, (root.traffic_lights[0] + 64) / settings().zoom - (sidebar?.hidden ? 0 : sidebar?.size?.px ?? 0))
       : 10;
     const panel = find(root, "panel"), body = find(root, "panel-body");
-    const enabled = [...(shared("workspace.panels") ?? ["files", "changes"]), "git", "skills", "todos", "servers", "remote"];
+    const enabled = [...(shared("workspace.panels") ?? ["files", "changes"]), "git", "skills", "todos", "servers", "remote", "profiles"];
     this.syncPanel(space, panel, body, enabled);
-    const panelButton = (id, label, icon, badge) => {
+    const panelButton = (id, label, icon, badge, dot) => {
       const on = panel && !panel.hidden && body?.active === id;
       return h_flex().id(`panel-${id}`).h(26).px(8).gap(5).flex_none().items_center().rounded(6)
         .text_size(12).bg(on ? t.selected : t.chrome).text_color(on ? t.foreground : t.muted)
@@ -88,6 +99,7 @@ export default class Tabs extends View {
           if (on) run("layout.hide", { id: "panel" });
           else { run("layout.select", { stack: "panel-body", child: id }); run("layout.show", { id: "panel" }); }
         }).child(svg(icon).size(14)).child(label)
+        .when(Boolean(dot), el => el.child(div().size(6).flex_none().rounded_full().bg(dot)))
         .when(badge > 0, el => el.child(div().h(16).min_w(16).px(4).flex().items_center().justify_center().rounded_full()
           .bg(t.ansi2).text_color(t.background).text_size(10.5).font_semibold().child(String(badge))));
     };
@@ -103,6 +115,8 @@ export default class Tabs extends View {
       .child(panelButton("todos", "Todos", "mods/todos/todos.svg"))
       .child(panelButton("servers", "Servers", "mods/workspace-chrome/server.svg", terminals().filter(x => x.state === "live" && x.labels?.["herdr.server"]).length))
       .child(panelButton("remote", "PR", "mods/remote-checker/pr.svg"))
+      .child(panelButton("profiles", this.accountInfo?.label ?? (this.account ? this.account[0].toUpperCase() + this.account.slice(1) : "Claude"),
+        "mods/pond-profiles/claude.svg", 0, this.account ? (this.accountInfo?.gateway ? t.ansi5 : t.ansi4) : null))
       .when(w?.buttons, el => el.child(button("minimize", w.platform === "windows" ? svg("mods/pond-tabs/win-min.svg").size(16) : "−", () => run("window.minimize")))
         .child(button("maximize", w.platform === "windows" ? svg(`mods/pond-tabs/${w.maximized ? "win-restore" : "win-max"}.svg`).size(16) : "□", () => run("window.maximize")))
         .child(button("close-window", w.platform === "windows" ? svg("mods/pond-tabs/win-close.svg").size(16) : svg("mods/pane/close.svg").size(13), () => run("window.close"))));

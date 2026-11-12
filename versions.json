@@ -13,7 +13,7 @@
       "path": "git/mods/git-conflicts"
     },
     "leader": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "item": "leader",
       "path": "leader/mods/leader"
     },
@@ -28,7 +28,7 @@
       "path": "todos/mods/todos"
     },
     "servers": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "item": "servers",
       "path": "servers/mods/servers"
     },
@@ -43,7 +43,7 @@
       "path": "skills/mods/skills"
     },
     "pond-agents": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "item": "pond-agents",
       "path": "pond-agents/mods/pond-agents"
     },
@@ -53,14 +53,19 @@
       "path": "pond-files/mods/pond-files"
     },
     "pond-tabs": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "item": "pond-tabs",
       "path": "pond-tabs/mods/pond-tabs"
+    },
+    "pond-profiles": {
+      "version": "1.0.0",
+      "item": "pond-profiles",
+      "path": "pond-profiles/mods/pond-profiles"
     }
   },
   "layouts": {
     "pond": {
-      "version": "1.0.1",
+      "version": "1.1.0",
       "item": "pond",
       "path": "pond/layouts/pond.json",
       "mods": [
@@ -72,7 +77,8 @@
         "skills",
         "todos",
         "servers",
-        "remote-checker"
+        "remote-checker",
+        "pond-profiles"
       ]
     }
   },
@@ -150,6 +156,13 @@
         "pond-tabs"
       ]
     },
+    "pond-profiles": {
+      "kind": "mod",
+      "recipe": "pond-profiles/RECIPE.md",
+      "mods": [
+        "pond-profiles"
+      ]
+    },
     "pond": {
       "kind": "layout",
       "recipe": "pond/RECIPE.md",
@@ -162,7 +175,8 @@
         "skills",
         "todos",
         "servers",
-        "remote-checker"
+        "remote-checker",
+        "pond-profiles"
       ],
       "layouts": [
         "pond"

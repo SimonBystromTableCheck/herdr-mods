@@ -29,6 +29,7 @@ export default [
   { group: "Panels", key: "d", label: "Changes (diff)", panel: "changes", mod: "gitview", focus: true, toggle: true },
   { group: "Panels", key: "r", label: "Servers", panel: "servers", focus: true, toggle: true },
   { group: "Panels", key: "P", label: "Remote Checker (PR)", panel: "remote", mod: "remote-checker", focus: true, toggle: true },
+  { group: "Panels", key: "C", label: "Claude profiles (account, versions)", panel: "profiles", mod: "pond-profiles", focus: true, toggle: true },
   { group: "Panels", key: "b", label: "Toggle sidebar", run: "layout.toggle", args: { id: "sidebar" } },
 
   { group: "Spaces", key: "s", label: "Find space / tab", run: "mod.open", args: { name: "picker" } },
