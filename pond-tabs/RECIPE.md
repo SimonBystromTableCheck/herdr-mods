@@ -113,7 +113,7 @@ padding, 3px gaps), left to right:
 
 ### 1.3.1 (2026-11-12)
 
-- The update pill only shows when a newer version is published, and reads "Update available" (the version is in its tooltip); no more "Check for updates" pill while up to date (shared `update.js`).
+- The update pill only shows when a newer version is published, and reads "Update available" (the version is in its tooltip); no more "Check for updates" pill while up to date. Each panel checks GitHub when it starts and every time it comes back on screen (shared `update.js`).
 
 ### 1.3.0 (2026-11-12)
 

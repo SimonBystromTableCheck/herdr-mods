@@ -119,7 +119,7 @@ Clone of shipped `files` (`cloned_from: {name: "files", version: "0.1.14"}`). Fi
 
 ### 1.1.2 (2026-11-12)
 
-- The update pill only shows when a newer version is published, and reads "Update available" (the version is in its tooltip); no more "Check for updates" pill while up to date (shared `update.js`).
+- The update pill only shows when a newer version is published, and reads "Update available" (the version is in its tooltip); no more "Check for updates" pill while up to date. Each panel checks GitHub when it starts and every time it comes back on screen (shared `update.js`).
 
 ### 1.1.1 (2026-11-12)
 

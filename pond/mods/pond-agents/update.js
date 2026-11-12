@@ -6,9 +6,10 @@
 // shared state. When a newer version is published, the pill offers it; confirming starts Claude in
 // a new tab, which follows UPDATE.md (shipped in every mod folder) for that one mod or layout.
 import { h_flex } from "gpui-base";
-import { appHome, readTextFile, openOverlay, notify, shared, setShared } from "herdr";
+import { appHome, readTextFile, openOverlay, notify, shared, setShared, layout } from "herdr";
 
-const EVERY = 6 * 3600 * 1000;
+// Panels starting together (a launch) share one fetch; a panel opened again after this checks again.
+const FRESH = 30 * 1000;
 const KEY = "herdr-mods.versions"; // {repo, at, mods: {name: version}, layouts: {name: version}}
 
 const newer = (a, b) => { // a > b, semver-ish
@@ -17,6 +18,15 @@ const newer = (a, b) => { // a > b, semver-ish
   for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) > (y[i] ?? 0);
   return false;
 };
+
+// Whether a layout block showing `mod` is on screen: nothing hidden on the way, and each stack's chosen child.
+function onScreen(node, mod) {
+  if (!node || node.hidden) return false;
+  if (node.content?.mod === mod) return true;
+  const kids = node.children ?? [];
+  const shown = node.type === "stack" ? kids.filter(c => c.id === (node.active ?? kids[0]?.id)) : kids;
+  return shown.some(c => onScreen(c, mod)) || (node.floating ?? []).some(c => onScreen(c, mod));
+}
 
 export class SelfUpdate {
   // A mod: folder under mods/ (this mod's own), title as people call it ("Todos panel").
@@ -27,12 +37,20 @@ export class SelfUpdate {
     this.name = layout ? null : folder; this.meta = null; this.busy = false;
   }
 
-  // Call from init: reads mod.json (or the layout file), then checks GitHub if the shared result is old.
+  // Call from init: reads mod.json (or the layout file) and checks GitHub. A panel keeps running while
+  // hidden (init doesn't run again), so it also checks each time its block comes back on screen.
   // A layout's mods keep running when the layout file changes (an update, a switch), so it's re-read.
   start(cx) {
     this.load(cx, true);
     if (this.isLayout) cx.timer.every(30000, cx => this.load(cx));
+    else cx.timer.every(1000, cx => {
+      const on = onScreen(layout(), this.folder);
+      if (on && this.onScreen === false && this.stale()) this.check(cx);
+      this.onScreen = on;
+    });
   }
+
+  stale() { return Date.now() - (shared(KEY)?.at ?? 0) > FRESH; }
 
   load(cx, first = false) {
     cx.spawn(async cx => {
@@ -44,7 +62,7 @@ export class SelfUpdate {
       this.name = name; this.meta = meta;
       if (!meta) { if (changed) cx.notify(); return; }
       const c = shared(KEY);
-      if (first && (c?.repo !== meta.source?.repo || !c.layouts || Date.now() - (c.at ?? 0) > EVERY)) this.check(cx);
+      if (first && (c?.repo !== meta.source?.repo || !c.layouts || this.stale())) this.check(cx);
       if (changed) cx.notify();
     });
   }
@@ -108,7 +126,7 @@ export class SelfUpdate {
   }
 
   // Header pill "Update available" (compact: "Tabs ↑ x.y.z") when a newer version is published;
-  // null otherwise, so nothing shows while up to date. Checks run on start and every 6 hours.
+  // null otherwise, so nothing shows while up to date.
   pill(t, { compact = false } = {}) {
     const u = this.available();
     if (!u) return null;

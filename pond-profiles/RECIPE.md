@@ -176,7 +176,7 @@ function; the cvp step warns when new terminals can't find `hc`.
 
 ### 1.3.3 (2026-11-12)
 
-- The update pill only shows when a newer version is published, and reads "Update available" (the version is in its tooltip); no more "Check for updates" pill while up to date (shared `update.js`).
+- The update pill only shows when a newer version is published, and reads "Update available" (the version is in its tooltip); no more "Check for updates" pill while up to date. Each panel checks GitHub when it starts and every time it comes back on screen (shared `update.js`).
 
 ### 1.3.2 (2026-11-12)
 

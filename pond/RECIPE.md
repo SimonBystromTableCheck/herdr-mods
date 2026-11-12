@@ -151,7 +151,7 @@ gitview needs no other change.
 
 ### 1.6.1 (2026-11-12)
 
-- Update pills only show when there's an update ("Update available"; shared `update.js`). Mods at: git 1.1.2, git-conflicts 1.1.2, todos 1.1.2, servers 1.1.2, remote-checker 1.1.2, skills 1.1.2, pond-files 1.1.2, pond-tabs 1.3.1, pond-agents 1.2.2, pond-profiles 1.3.3; leader 1.1.0 and changes-expand 1.0.0 unchanged.
+- Update pills only show when there's an update ("Update available"), and panels check each time they're opened (shared `update.js`). Mods at: git 1.1.2, git-conflicts 1.1.2, todos 1.1.2, servers 1.1.2, remote-checker 1.1.2, skills 1.1.2, pond-files 1.1.2, pond-tabs 1.3.1, pond-agents 1.2.2, pond-profiles 1.3.3; leader 1.1.0 and changes-expand 1.0.0 unchanged.
 
 ### 1.6.0 (2026-11-12)
 
