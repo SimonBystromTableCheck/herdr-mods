@@ -6,6 +6,7 @@ import { v_flex, h_flex } from "gpui-base";
 import { agents, terminals, panes, focused, spaces, run, theme, shared, setShared, setAgentOrder, openOverlay, closeOverlay, props, window, layout, readTextFile, home } from "herdr";
 import { figureFor, load } from "./figures.js";
 import { Editor } from "./editor.js";
+import { SelfUpdate } from "./update.js";
 
 // The figure editor, as a dialog; `space` opens it on that space's pick.
 const openFigures = (space) => openOverlay({ mod: "pond-agents", kind: "dialog", width: 860, height: 640, props: { figures: true, ...(space ? { space } : {}) } });
@@ -95,6 +96,7 @@ const accountLabel = (accounts, name) => name ? accounts?.[name]?.label ?? name[
 
 export default class Agents extends View {
   init(_props, cx) {
+    this.selfUpdate = new SelfUpdate("pond-agents", "agents list"); if (!props()?.sortMenu) this.selfUpdate.start(cx);
     if (props()?.sortMenu) return;
     if (props()?.figures) { this.editor = new Editor(cx); return; }
     // Figure sets come from ~/.config/herdr-app/pond-agents.json; hand edits show within seconds.
@@ -496,6 +498,7 @@ export default class Agents extends View {
             .justify_between()
             .child(div().text_size(11.5).font_medium().text_color(t.dim).child("Agents"))
             .child(h_flex().gap(10).items_center()
+              .children([this.selfUpdate.pill(t, { quiet: true, compact: true })].filter(Boolean))
               .when(Boolean(this.fileError), (el) => el.child(div().id("ag-file-error").text_size(11).font_bold().text_color(t.blocked)
                 .tooltip(`${this.fileError}. Using the last good figures.`).child("!")))
               .child(div()

@@ -4,6 +4,7 @@ import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { keybar, keysCard } from "./keybar.js";
 import { spaces, panes, focused, exec, readTextFile, watchFolder, theme, settings, window, run, nextCommand, setShared, appHome } from "herdr";
+import { SelfUpdate } from "./update.js";
 
 function location() {
   const space = spaces().find(s => s.active), f = focused();
@@ -103,6 +104,7 @@ const parentOf = (path) => (path.includes("/") ? path.slice(0, path.lastIndexOf(
 
 export default class Files extends View {
   init(_props, cx) {
+    this.selfUpdate = new SelfUpdate("pond-files", "Files panel"); this.selfUpdate.start(cx);
     this.saved = new Map();
     this.entries = new Map(); this.folders = new Set(); this.pending = new Set(); this.marks = {};
     this.handle = cx.focus_handle();
@@ -475,7 +477,8 @@ export default class Files extends View {
       .child(h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
         .when(Boolean(this.file), el => el.child(div().id("files-back").w(20).cursor_pointer().text_color(t.muted).on_click((_e, cx) => this.back(cx)).child("←")))
         .child(div().font_semibold().child("Files"))
-        .child(div().flex_1().min_w(0).truncate().text_right().text_size(12).text_color(t.dim).child(this.file ?? this.root?.split(/[\\/]/).pop() ?? "")))
+        .child(div().flex_1().min_w(0).truncate().text_right().text_size(12).text_color(t.dim).child(this.file ?? this.root?.split(/[\\/]/).pop() ?? ""))
+        .children([this.selfUpdate.pill(t)].filter(Boolean)))
       .child(this.file ? this.preview(t, keys) : this.tree(t, keys))
       .child(keybar(t, { id: "files", chips: this.file ? [KEYS.preview[0], { ...KEYS.wrap(this.wrap), onClick: cx => this.toggleWrap(cx) }, ...KEYS.preview.slice(1)] : KEYS.tree, width: this.size?.width, onKeys: cx => { this.keysOpen = true; this.handle.focus(); cx.notify(); } }))
       .when(Boolean(this.keysOpen), el => el.child(keysCard(t, { id: "files", title: "Files: all keys", onClose: cx => { this.keysOpen = false; cx.notify(); }, groups: [

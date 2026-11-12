@@ -5,6 +5,7 @@ import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { exec, theme, settings, run, nextCommand, focused, panes, spaces, layout, setShared, home } from "herdr";
 import { keybar, keysCard } from "./keybar.js";
+import { SelfUpdate } from "./update.js";
 
 const ICON = "mods/remote-checker", CHROME = "mods/workspace-chrome";
 const POLL_MS = 10_000, LOOKUP_MS = 60_000;
@@ -143,6 +144,7 @@ function shape(pr) {
 
 export default class RemoteChecker extends View {
   init(_props, cx) {
+    this.selfUpdate = new SelfUpdate("remote-checker", "Remote Checker"); this.selfUpdate.start(cx);
     this.handle = cx.focus_handle();
     this.scrollY = 0;
     this.sel = 0;
@@ -629,6 +631,7 @@ export default class RemoteChecker extends View {
         .child(svg(`${ICON}/pr.svg`).size(15).flex_none().text_color(t.accent))
         .child(div().flex_none().font_semibold().child("Remote Checker"))
         .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).child(stamp))
+        .children([this.selfUpdate.pill(t)].filter(Boolean))
         .when(Boolean(d?.pr), (el) => el.child(this.iconButton("rc-open", `${ICON}/external.svg`, "Open on GitHub (O)", () => exec("open", [d.pr.url]), t)))
         .child(this.iconButton("rc-refresh", "mods/servers/restart.svg", "Refetch (r)", (cx) => this.refresh(cx, true), t, { spin: this.fetching })))
       .when(Boolean(branch), (el) => el.child(h_flex().h(28).flex_none().px(14).gap(6).items_center().border_b(1).border_color(t.border).text_size(11.5)

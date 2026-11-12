@@ -5,9 +5,9 @@ A lazygit-style git panel for the repo of the focused terminal. Numbered section
 
 **Install:** Point your Herdr agent at this folder: copy `mods/git/` and `mods/git-conflicts/` into `~/.config/herdr-app/mods/`, then `herdr-app check` each of them.
 
-**Version:** 1.0.0 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.1.0 (see Changes at the end; also `"version"` in `mod.json`).
 
-**Update:** tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/git/` and `mods/git-conflicts/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept (commit-message drafts and panel state); edits you made inside the mod folder are not.
+**Update:** from 1.1.0, an "Update to x.y.z" pill appears in the Git (and Conflicts) header when this repo publishes a newer version; click it, confirm, and a new Claude tab updates just this mod (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/git/` and `mods/git-conflicts/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept (commit-message drafts and panel state); edits you made inside the mod folder are not.
 
 ## What you see
 
@@ -51,6 +51,7 @@ Panel: theme `background`, text 12.5px, rounded 10 with a 1px border (`accent` w
 
 ## Built from
 
+- `update.js`: the self-update pill (the same file in every mod from this repo; `tools/stamp.py` refuses copies that differ). It reads `mod.json` `version` and `source`, fetches the repo's `versions.json` (shared between mods as `herdr-mods.versions`, every 6 hours or on click) and on confirm runs `tab.new` with `claude` in the Herdr home. No `source`: no pill.
 - `main.js` (view, keys, actions, rendering), `git.js` (reads and writes), `graph.js` (lane layout and graph cell), `keybar.js` (footer and keys card, shared design with the servers/skills mods), `seq-edit.pl` (a `GIT_SEQUENCE_EDITOR`: `replace` / `swap` / `move` modes driven by `HERDR_MODE`, `HERDR_A`, `HERDR_B`, `HERDR_OP`), `config.json`, icons `fetch.svg pull.svg push.svg popout.svg copy.svg ai.svg`.
 - `mod.json`: `{ "place": "none", "title": "Git", "focusable": true }`.
 - `props`: none in a layout block; `{ cwd, on }` pins it to one repo (the expanded tab).
@@ -95,6 +96,10 @@ Panel: theme `background`, text 12.5px, rounded 10 with a 1px border (`accent` w
 - With every file decided, `c` continues; a continue blocked by a failing hook shows the red failure box with the hook's error, and `f` offers to send it to an agent.
 
 ## Changes
+
+### 1.1.0 (2026-11-12)
+
+- Self-update pill: an "Update to x.y.z" pill appears in the Git (and Conflicts) header when this repo publishes a newer version; confirming starts a Claude tab that updates just this mod.
 
 ### 1.0.0 (2026-11-11)
 

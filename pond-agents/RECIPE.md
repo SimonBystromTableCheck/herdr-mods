@@ -16,9 +16,9 @@ It is `"place": "none"`: to use it, point a layout block at it instead of the sh
 `agents` (clone the layout first: `herdr-app do layout.clone '{"name":"main","as":"my-main"}'`,
 then set the `agents` block's `content` to `{ "mod": "pond-agents" }`).
 
-**Version:** 1.1.1 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.2.0 (see Changes at the end; also `"version"` in `mod.json`).
 
-**Update:** tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/pond-agents/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept (your figure sets in `pond-agents.json` and pictures in `pond-figures/`); edits you made inside the mod folder are not.
+**Update:** from 1.2.0, a small "↑ x.y.z" pill appears beside the figures and sort icons when this repo publishes a newer version; click it, confirm, and a new Claude tab updates just this mod (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/pond-agents/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept (your figure sets in `pond-agents.json` and pictures in `pond-figures/`); edits you made inside the mod folder are not.
 
 ## What you see
 
@@ -99,6 +99,7 @@ The duck (all native divs, colors fixed, not themed): body `#F5DA81`, beak and f
 
 ## Built from
 
+- `update.js`: the self-update pill (the same file in every mod from this repo; `tools/stamp.py` refuses copies that differ). It reads `mod.json` `version` and `source`, fetches the repo's `versions.json` (shared between mods as `herdr-mods.versions`, every 6 hours or on click) and on confirm runs `tab.new` with `claude` in the Herdr home. No `source`: no pill.
 Clone of shipped `agents` (`cloned_from: {name: "agents", version: "0.1.14"}`). Files:
 `mod.json` (`place: none`, title "Agents"), `main.js`, `duck.js`. Differences from shipped:
 
@@ -167,6 +168,10 @@ Clone of shipped `agents` (`cloned_from: {name: "agents", version: "0.1.14"}`). 
   that space.
 
 ## Changes
+
+### 1.2.0 (2026-11-12)
+
+- Self-update pill: a small "↑ x.y.z" pill appears beside the figures and sort icons when this repo publishes a newer version; confirming starts a Claude tab that updates just this mod.
 
 ### 1.1.1 (2026-11-12)
 

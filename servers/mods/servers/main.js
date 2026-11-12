@@ -4,6 +4,7 @@ import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { exec, hc, home, appHome, readTextFile, writeTextFile, terminals, theme, settings, run, nextCommand, focused, setShared, pickFolder } from "herdr";
 import { keybar, keysCard } from "./keybar.js";
+import { SelfUpdate } from "./update.js";
 
 const ICON = "mods/servers", CHROME = "mods/workspace-chrome";
 const LABEL = "herdr.server";
@@ -78,6 +79,7 @@ const POLL_LOST_MS = 15000;
 
 export default class Servers extends View {
   init(_props, cx) {
+    this.selfUpdate = new SelfUpdate("servers", "Servers panel"); this.selfUpdate.start(cx);
     this.servers = []; this.raw = null; this.loaded = false;
     this.branches = {}; this.urls = {}; this.busy = {}; this.errors = {};
     this.add = null; this.sel = 0;
@@ -449,6 +451,7 @@ export default class Servers extends View {
       .child(h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
         .child(div().font_semibold().child("Servers"))
         .child(div().flex_1().text_size(12).text_color(t.dim).child(this.servers.length ? `${running}/${this.servers.length} running` : ""))
+        .children([this.selfUpdate.pill(t)].filter(Boolean))
         .when(!this.add, el => el.child(h_flex().id("srv-add").h(26).px(8).gap(5).items_center().rounded(6).cursor_pointer()
           .text_size(12).text_color(t.muted).hover(s => s.bg(t.hover).text_color(t.foreground))
           .on_click((_e, cx) => this.openAdd(cx)).child(svg(`${CHROME}/plus.svg`).size(13)).child("Add"))))

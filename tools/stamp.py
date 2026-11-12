@@ -46,6 +46,15 @@ def stamp(path, src):
     open(path, "w").write(s + "\n")
     return d.get("version")
 
+# update.js (the self-update pill) is one file copied into each mod: copies must not drift.
+copies = {}
+for item, kind, mods, _, _ in items:
+    for m in mods:
+        f = os.path.join(REPO, item, "mods", m, "update.js")
+        if os.path.isfile(f): copies.setdefault(open(f).read(), []).append(m)
+if len(copies) > 1:
+    sys.exit("update.js differs between mods: " + " / ".join(", ".join(sorted(set(v))) for v in copies.values()) + ". Copy one to the others.")
+
 index = {"repo": URL, "update": "tools/UPDATE.md", "mods": {}, "layouts": {}, "items": {}}
 for item, kind, mods, layouts, keys in items:
     entry = {"kind": kind, "recipe": f"{item}/RECIPE.md", "mods": mods}

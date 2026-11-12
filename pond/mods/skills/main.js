@@ -4,6 +4,7 @@ import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { keybar, keysCard } from "./keybar.js";
 import { spaces, panes, focused, agents, knownAgents, exec, hc, run, theme, settings, home, readTextFile, writeTextFile, watchFolder, nextCommand, setShared } from "herdr";
+import { SelfUpdate } from "./update.js";
 
 const ICON = "mods/skills";
 const CARD = 90, GROUP = 26, GAP = 6;
@@ -78,6 +79,7 @@ const KEYS = {
 
 export default class Skills extends View {
   init(_props, cx) {
+    this.selfUpdate = new SelfUpdate("skills", "Skills panel"); this.selfUpdate.start(cx);
     this.handle = cx.focus_handle();
     this.skills = []; this.sel = 0; this.filter = "";
     this.localDir = `${home()}/.claude/skills`;
@@ -389,6 +391,7 @@ export default class Skills extends View {
         .child(div().text_size(11.5).text_color(t.dim).child(`${localItems.length} local${this.repo ? ` · ${repoItems.length} in ${base(this.repo)}` : ""}`))
         .when(Boolean(this.filter), el => el.child(div().text_size(11).text_color(t.accent).child(`/${this.filter}`)))
         .child(div().flex_1())
+        .children([this.selfUpdate.pill(t)].filter(Boolean))
         .child(this.button("skill-new", `${ICON}/plus.svg`, "New", cx => this.create(cx), t)))
       .child(this.target(t, mono))
       .child(this.list(items, t, mono))

@@ -4,6 +4,7 @@ import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { keybar, keysCard } from "./keybar.js";
 import { exec, run, theme, settings, appHome, home, readTextFile, writeTextFile, watchFolder, nextCommand, setShared, focused } from "herdr";
+import { SelfUpdate } from "./update.js";
 
 const ICON = "mods/todos";
 const ROW = 30, PAGE_ROW = 46;
@@ -73,6 +74,7 @@ const KEYS = {
 
 export default class Todos extends View {
   init(_props, cx) {
+    this.selfUpdate = new SelfUpdate("todos", "Todos panel"); this.selfUpdate.start(cx);
     this.handle = cx.focus_handle();
     this.dir = `${appHome()}/todos`;
     this.pages = []; this.page = null; this.sel = 0; this.pageSel = 0; this.top = {};
@@ -605,6 +607,7 @@ export default class Todos extends View {
         .when(Boolean(p), el => el.child(this.iconButton("todo-back", `${ICON}/back.svg`, cx => this.open(null, cx), t)))
         .child(div().flex_1().min_w(0).truncate().font_semibold().text_size(13).child(p ? p.title : "Todos"))
         .when(Boolean(p), el => el.child(this.progress(p, t, 60)))
+        .children([this.selfUpdate.pill(t)].filter(Boolean))
         .when(!p, el => el.child(this.iconButton("page-new", `${ICON}/plus.svg`, cx => this.newPage(cx), t, "New page"))))
       .child(p ? this.pageView(t, space) : this.pagesView(t, space))
       .child(keybar(t, { id: "todos", chips: this.chips(), flash: this.flashMsg, width: this.size?.width, onKeys: cx => { this.keysOpen = true; this.handle.focus(); cx.notify(); } }))

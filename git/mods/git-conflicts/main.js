@@ -6,6 +6,7 @@ import { View, div } from "gpui-kit";
 import { v_flex, h_flex, v_virtual_list, VirtualListScrollHandle, Scrollbar } from "gpui-base";
 import { agents, exec, hc, knownAgents, nextCommand, panes, props, readTextFile, run, settings, spaces, theme, writeTextFile } from "herdr";
 import { KINDS, conflictsOf, parse, resolve, rows, unmerged } from "./logic.mjs";
+import { SelfUpdate } from "./update.js";
 
 const ROW = 18, CROW = 22; // CROW: every row of the chunk list (one size: per-row sizes drew nothing)
 const MARKER = "__herdr_git_output__";
@@ -24,6 +25,7 @@ const tint = (c, a) => (typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c) ? c +
 
 export default class Conflicts extends View {
   init(_props, cx) {
+    this.selfUpdate = new SelfUpdate("git-conflicts", "Conflicts panel"); this.selfUpdate.start(cx);
     const p = props() ?? {};
     Object.assign(this, { p, files: [], order: [], how: {}, advance: null, sel: 0, n: 0, side: "ours", texts: {}, undo: {}, op: null, menu: null, flashMsg: null, running: null, gone: 0, mode: "files", diffs: {}, picked: false });
     this.handle = cx.focus_handle();
@@ -488,6 +490,7 @@ export default class Conflicts extends View {
         .child(div().size(7).flex_none().rounded_full().bg(left ? t.ansi1 : t.ansi2))
         .child(div().font_semibold().text_size(13).flex_none().child("Conflicts"))
         .child(div().flex_1())
+        .children([this.selfUpdate.pill(t, { quiet: true })].filter(Boolean))
         .when(Boolean(this.running), (e) => e.child(div().flex_none().text_size(11.5).text_color(t.working).child(`${this.running}…`)))
         .when(left > 0, (e) => e.child(this.button("ai-all", "Ask AI (i)", (cx) => this.askAI(this.files.map((f) => f.path), cx), t)))
         .child(this.button("continue", `Continue (c)`, (cx) => this.continueOp(cx), t, { primary: !left, disabled: left > 0 || !op || Boolean(this.running) }))

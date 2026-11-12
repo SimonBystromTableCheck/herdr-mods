@@ -5,9 +5,9 @@ A panel of your Claude Code skills: the personal ones in `~/.claude/skills` and 
 
 **Install:** Point your Herdr agent at this folder: copy `mods/skills/` into `~/.config/herdr-app/mods/`, then `herdr-app check ~/.config/herdr-app/mods/skills`.
 
-**Version:** 1.0.0 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.1.0 (see Changes at the end; also `"version"` in `mod.json`).
 
-**Update:** tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/skills/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept; edits you made inside the mod folder are not.
+**Update:** from 1.1.0, its header has a "Check for updates" pill that turns into "Update to x.y.z" when this repo publishes a newer version; click it, confirm, and a new Claude tab updates just this mod (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/skills/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept; edits you made inside the mod folder are not.
 
 ## What you see
 
@@ -33,6 +33,7 @@ Panel: theme `background`, text 12.5px, rounded 10 with a 1px border (`accent` w
 
 ## Built from
 
+- `update.js`: the self-update pill (the same file in every mod from this repo; `tools/stamp.py` refuses copies that differ). It reads `mod.json` `version` and `source`, fetches the repo's `versions.json` (shared between mods as `herdr-mods.versions`, every 6 hours or on click) and on confirm runs `tab.new` with `claude` in the Herdr home. No `source`: no pill.
 - `main.js` (scan, actions, rendering), `keybar.js` (footer keycaps and keys card, same file as the git and servers mods), icons `run.svg edit.svg plus.svg` (and `skills.svg`, which the code doesn't use).
 - `mod.json`: `{ "place": "none", "title": "Skills", "focusable": true }`. No `props`.
 - herdr: `spaces panes focused agents knownAgents exec hc run theme settings home readTextFile writeTextFile watchFolder nextCommand setShared`. Commands: `tab.new`, `terminal.open` (`place: "tab"`), `layout.hide`, `pane.focus`, `pane.go`.
@@ -61,6 +62,10 @@ Panel: theme `background`, text 12.5px, rounded 10 with a 1px border (`accent` w
 - `/` filters cards; `escape` clears it; `cd` into another repo switches the Repo group within a second.
 
 ## Changes
+
+### 1.1.0 (2026-11-12)
+
+- Self-update pill: its header has a "Check for updates" pill that turns into "Update to x.y.z" when this repo publishes a newer version; confirming starts a Claude tab that updates just this mod.
 
 ### 1.0.0 (2026-11-11)
 

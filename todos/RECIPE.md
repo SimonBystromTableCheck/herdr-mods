@@ -17,9 +17,9 @@ layout (in a cloned layout, as a child of the right `panel-body` stack, or as a
 column of its own), or open it beside a terminal with
 `herdr-app do pane.split --direction right --mod todos`.
 
-**Version:** 1.0.0 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.1.0 (see Changes at the end; also `"version"` in `mod.json`).
 
-**Update:** tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/todos/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept (your pages in `~/.config/herdr-app/todos/`); edits you made inside the mod folder are not.
+**Update:** from 1.1.0, its header has a "Check for updates" pill that turns into "Update to x.y.z" when this repo publishes a newer version; click it, confirm, and a new Claude tab updates just this mod (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/todos/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept (your pages in `~/.config/herdr-app/todos/`); edits you made inside the mod folder are not.
 
 ## What you see
 
@@ -77,6 +77,7 @@ One rounded card (radius 10, `background`, 1px `border`; the border turns
 
 ## Built from
 
+- `update.js`: the self-update pill (the same file in every mod from this repo; `tools/stamp.py` refuses copies that differ). It reads `mod.json` `version` and `source`, fetches the repo's `versions.json` (shared between mods as `herdr-mods.versions`, every 6 hours or on click) and on confirm runs `tab.new` with `claude` in the Herdr home. No `source`: no pill.
 - `mod.json`: `{ "place": "none", "title": "Todos", "focusable": true }`.
 - `main.js` (the View), `keybar.js` (keycap footer and all-keys card),
   lucide-style SVGs tinted with `svg()`: `back`, `check`, `chevron-down`,
@@ -126,6 +127,10 @@ One rounded card (radius 10, `background`, 1px `border`; the border turns
 - `q` hides the panel and the terminal gets the keyboard back.
 
 ## Changes
+
+### 1.1.0 (2026-11-12)
+
+- Self-update pill: its header has a "Check for updates" pill that turns into "Update to x.y.z" when this repo publishes a newer version; confirming starts a Claude tab that updates just this mod.
 
 ### 1.0.0 (2026-11-11)
 

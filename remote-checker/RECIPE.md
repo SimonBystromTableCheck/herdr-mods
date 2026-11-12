@@ -4,9 +4,9 @@ A panel showing the GitHub pull request for the branch checked out in the focuse
 
 **Install:** Point your Herdr agent at this folder: copy `mods/remote-checker/` into `~/.config/herdr-app/mods/`, then `herdr-app check ~/.config/herdr-app/mods/remote-checker`. Needs `gh` installed and logged in (`gh auth login`).
 
-**Version:** 1.0.0 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.1.0 (see Changes at the end; also `"version"` in `mod.json`).
 
-**Update:** tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/remote-checker/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept; edits you made inside the mod folder are not.
+**Update:** from 1.1.0, its header has a "Check for updates" pill that turns into "Update to x.y.z" when this repo publishes a newer version; click it, confirm, and a new Claude tab updates just this mod (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/remote-checker/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept; edits you made inside the mod folder are not.
 
 ## What you see
 
@@ -39,6 +39,7 @@ Panel: theme `background`, text 13px, rounded 10 with a 1px border (`accent` whi
 
 ## Built from
 
+- `update.js`: the self-update pill (the same file in every mod from this repo; `tools/stamp.py` refuses copies that differ). It reads `mod.json` `version` and `source`, fetches the repo's `versions.json` (shared between mods as `herdr-mods.versions`, every 6 hours or on click) and on confirm runs `tab.new` with `claude` in the Herdr home. No `source`: no pill.
 - `main.js` (all logic and rendering), `keybar.js` (footer keycaps and keys card, the same file as the servers, todos and skills mods), icons `pr.svg comment.svg dot.svg ring.svg minus.svg check.svg x.svg external.svg`.
 - `mod.json`: `{ "place": "none", "title": "Remote Checker", "focusable": true }`. No `props`.
 - herdr: `exec theme settings run nextCommand focused panes spaces layout setShared home`. Commands: `layout.hide`, `pane.focus`, `pane.go`.
@@ -70,6 +71,10 @@ Panel: theme `background`, text 13px, rounded 10 with a 1px border (`accent` whi
 - A local commit not yet pushed shows `↑1 unpushed` on the PR card.
 
 ## Changes
+
+### 1.1.0 (2026-11-12)
+
+- Self-update pill: its header has a "Check for updates" pill that turns into "Update to x.y.z" when this repo publishes a newer version; confirming starts a Claude tab that updates just this mod.
 
 ### 1.0.0 (2026-11-11)
 

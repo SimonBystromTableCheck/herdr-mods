@@ -14,9 +14,9 @@ It is `"place": "none"` and replaces the layout's `tabs` block: clone a layout
 `tabs` block's `content` to `{ "mod": "pond-tabs" }`. This repo's `pond`
 layout already does, at 42px tall.
 
-**Version:** 1.1.0 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.2.0 (see Changes at the end; also `"version"` in `mod.json`).
 
-**Update:** tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/pond-tabs/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept; edits you made inside the mod folder are not.
+**Update:** from 1.2.0, a small "↑ x.y.z" pill appears before + when this repo publishes a newer version; click it, confirm, and a new Claude tab updates just this mod (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/pond-tabs/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept; edits you made inside the mod folder are not.
 
 ## What you see
 
@@ -56,6 +56,7 @@ padding, 3px gaps), left to right:
 
 ## Built from
 
+- `update.js`: the self-update pill (the same file in every mod from this repo; `tools/stamp.py` refuses copies that differ). It reads `mod.json` `version` and `source`, fetches the repo's `versions.json` (shared between mods as `herdr-mods.versions`, every 6 hours or on click) and on confirm runs `tab.new` with `claude` in the Herdr home. No `source`: no pill.
 - A clone of Herdr's shipped `tabs` mod (`mod.json` has
   `cloned_from: { name: "tabs", version: "0.1.13" }`). Differences from the
   shipped one, all in `main.js`:
@@ -109,6 +110,10 @@ padding, 3px gaps), left to right:
 - An agent working in a tab shows the spinning ring on its pill.
 
 ## Changes
+
+### 1.2.0 (2026-11-12)
+
+- Self-update pill: a small "↑ x.y.z" pill appears before + when this repo publishes a newer version; confirming starts a Claude tab that updates just this mod.
 
 ### 1.1.0 (2026-11-12)
 
