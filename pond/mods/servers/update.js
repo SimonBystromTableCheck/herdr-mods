@@ -113,7 +113,7 @@ export class SelfUpdate {
     const u = this.available();
     if (!u) return null;
     const text = compact ? `${this.short ? `${this.short} ` : ""}↑ ${u.latest}` : "Update available";
-    return h_flex().id(`self-update-${this.isLayout ? "layout" : this.folder}`).h(compact ? 20 : 24).px(compact ? 7 : 9).flex_none().items_center().rounded(12)
+    return h_flex().id(`self-update-${this.isLayout ? "layout" : this.folder}`).h(compact ? 20 : 24).px(compact ? 7 : 9).flex_none().items_center().rounded(compact ? 4 : 6)
       .cursor_pointer().text_size(compact ? 11 : 11.5)
       .bg(t.accent).text_color(t.accent_foreground).hover(s => s.opacity(0.88))
       .tooltip(`${this.title} ${u.have} → ${u.latest}`)
