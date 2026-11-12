@@ -4,7 +4,7 @@ A panel showing the GitHub pull request for the branch checked out in the focuse
 
 **Install:** Point your Herdr agent at this folder: copy `mods/remote-checker/` into `~/.config/herdr-app/mods/`, then `herdr-app check ~/.config/herdr-app/mods/remote-checker`. Needs `gh` installed and logged in (`gh auth login`).
 
-**Version:** 1.1.0 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.1.1 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** from 1.1.0, its header has a "Check for updates" pill that turns into "Update to x.y.z" when this repo publishes a newer version; click it, confirm, and a new Claude tab updates just this mod (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/remote-checker/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept; edits you made inside the mod folder are not.
 
@@ -71,6 +71,10 @@ Panel: theme `background`, text 13px, rounded 10 with a 1px border (`accent` whi
 - A local commit not yet pushed shows `↑1 unpushed` on the PR card.
 
 ## Changes
+
+### 1.1.1 (2026-11-12)
+
+- `update.js` (shared) can also offer the layout's update; no change in this mod's behaviour.
 
 ### 1.1.0 (2026-11-12)
 

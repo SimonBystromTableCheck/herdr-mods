@@ -14,7 +14,8 @@ function find(node, id) {
 
 export default class Tabs extends View {
   init(_props, cx) {
-    this.selfUpdate = new SelfUpdate("pond-tabs", "tab bar"); this.selfUpdate.start(cx);
+    this.selfUpdate = new SelfUpdate("pond-tabs", "tab bar", { short: "Tabs" }); this.selfUpdate.start(cx);
+    this.layoutUpdate = new SelfUpdate("pond-tabs", "Pond layout", { layout: true, short: "Pond" }); this.layoutUpdate.start(cx);
     this.pressed = null;
     // The Claude account new sessions use (cvp's global profile), for the Claude button; its
     // name and kind come from pond-profiles' local settings (~/.cvm/herdr/pond-profiles.json).
@@ -109,7 +110,7 @@ export default class Tabs extends View {
       .on_mouse_up("left", () => { this.pressed = null; })
       .on_scroll_wheel(e => { if (Math.abs(e.delta.y) >= 1) run(e.delta.y > 0 ? "tab.prev" : "tab.next"); })
       .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(3).overflow_x_scrollbar().children(shown.map(item)))
-      .children([this.selfUpdate.pill(t, { quiet: true, compact: true })].filter(Boolean))
+      .children([this.layoutUpdate.pill(t, { quiet: true, compact: true }), this.selfUpdate.pill(t, { quiet: true, compact: true })].filter(Boolean).map(p => p.mr(3)))
       .child(button("tab-new", "+", () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 })))
       .when(enabled.includes("files"), el => el.child(panelButton("files", "Files", "mods/files/file.svg")))
       .when(enabled.includes("changes"), el => el.child(panelButton("changes", "Changes", "mods/changes/changes.svg")))

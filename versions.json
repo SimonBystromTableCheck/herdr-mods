@@ -3,12 +3,12 @@
   "update": "tools/UPDATE.md",
   "mods": {
     "git": {
-      "version": "1.1.0",
+      "version": "1.1.1",
       "item": "git",
       "path": "git/mods/git"
     },
     "git-conflicts": {
-      "version": "1.1.0",
+      "version": "1.1.1",
       "item": "git",
       "path": "git/mods/git-conflicts"
     },
@@ -23,49 +23,49 @@
       "path": "changes-expand/mods/changes-expand"
     },
     "todos": {
-      "version": "1.1.0",
+      "version": "1.1.1",
       "item": "todos",
       "path": "todos/mods/todos"
     },
     "servers": {
-      "version": "1.1.0",
+      "version": "1.1.1",
       "item": "servers",
       "path": "servers/mods/servers"
     },
     "remote-checker": {
-      "version": "1.1.0",
+      "version": "1.1.1",
       "item": "remote-checker",
       "path": "remote-checker/mods/remote-checker"
     },
     "skills": {
-      "version": "1.1.0",
+      "version": "1.1.1",
       "item": "skills",
       "path": "skills/mods/skills"
     },
     "pond-agents": {
-      "version": "1.2.0",
+      "version": "1.2.1",
       "item": "pond-agents",
       "path": "pond-agents/mods/pond-agents"
     },
     "pond-files": {
-      "version": "1.1.0",
+      "version": "1.1.1",
       "item": "pond-files",
       "path": "pond-files/mods/pond-files"
     },
     "pond-tabs": {
-      "version": "1.2.0",
+      "version": "1.3.0",
       "item": "pond-tabs",
       "path": "pond-tabs/mods/pond-tabs"
     },
     "pond-profiles": {
-      "version": "1.3.1",
+      "version": "1.3.2",
       "item": "pond-profiles",
       "path": "pond-profiles/mods/pond-profiles"
     }
   },
   "layouts": {
     "pond": {
-      "version": "1.5.0",
+      "version": "1.6.0",
       "item": "pond",
       "path": "pond/layouts/pond.json",
       "mods": [

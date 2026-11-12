@@ -96,7 +96,7 @@ const accountLabel = (accounts, name) => name ? accounts?.[name]?.label ?? name[
 
 export default class Agents extends View {
   init(_props, cx) {
-    this.selfUpdate = new SelfUpdate("pond-agents", "agents list"); if (!props()?.sortMenu) this.selfUpdate.start(cx);
+    this.selfUpdate = new SelfUpdate("pond-agents", "agents list", { short: "Agents" }); if (!props()?.sortMenu) this.selfUpdate.start(cx);
     if (props()?.sortMenu) return;
     if (props()?.figures) { this.editor = new Editor(cx); return; }
     // Figure sets come from ~/.config/herdr-app/pond-agents.json; hand edits show within seconds.

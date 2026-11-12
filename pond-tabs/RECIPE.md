@@ -14,9 +14,9 @@ It is `"place": "none"` and replaces the layout's `tabs` block: clone a layout
 `tabs` block's `content` to `{ "mod": "pond-tabs" }`. This repo's `pond`
 layout already does, at 42px tall.
 
-**Version:** 1.2.0 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.3.0 (see Changes at the end; also `"version"` in `mod.json`).
 
-**Update:** from 1.2.0, a small "↑ x.y.z" pill appears before + when this repo publishes a newer version; click it, confirm, and a new Claude tab updates just this mod (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/pond-tabs/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept; edits you made inside the mod folder are not.
+**Update:** from 1.2.0, a small "Tabs ↑ x.y.z" pill appears before + when this repo publishes a newer version (and "Pond ↑ x.y.z" for the shown layout, which updates the layout and offers its mods); click it, confirm, and a new Claude tab updates just this mod (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/pond-tabs/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept; edits you made inside the mod folder are not.
 
 ## What you see
 
@@ -110,6 +110,11 @@ padding, 3px gaps), left to right:
 - An agent working in a tab shows the spinning ring on its pill.
 
 ## Changes
+
+### 1.3.0 (2026-11-12)
+
+- "Pond ↑ x.y.z" pill before + when the shown layout came from this repo and a newer version is published: confirming starts a Claude tab that updates the layout (and offers its mods) following `UPDATE.md`. The layout file is re-read every 30 s, so the pill follows updates and layout switches.
+- The tab bar's own pill now reads "Tabs ↑ x.y.z".
 
 ### 1.2.0 (2026-11-12)
 
