@@ -107,19 +107,18 @@ export class SelfUpdate {
     } });
   }
 
-  // Header pill: "Check for updates" (outlined), or "Update to x.y.z" (accent) when there's one.
-  // quiet: only the "Update to" pill (for bars and lists). null when there's nothing to show.
-  pill(t, { quiet = false, compact = false } = {}) {
+  // Header pill "Update available" (compact: "Tabs ↑ x.y.z") when a newer version is published;
+  // null otherwise, so nothing shows while up to date. Checks run on start and every 6 hours.
+  pill(t, { compact = false } = {}) {
     const u = this.available();
-    if (!this.shown || (quiet && !u)) return null;
-    const text = this.busy ? "Checking…" : u ? (compact ? `${this.short ? `${this.short} ` : ""}↑ ${u.latest}` : `Update to ${u.latest}`) : "Check for updates";
+    if (!u) return null;
+    const text = compact ? `${this.short ? `${this.short} ` : ""}↑ ${u.latest}` : "Update available";
     return h_flex().id(`self-update-${this.isLayout ? "layout" : this.folder}`).h(compact ? 20 : 24).px(compact ? 7 : 9).flex_none().items_center().rounded(12)
       .cursor_pointer().text_size(compact ? 11 : 11.5)
-      .when(Boolean(u), el => el.bg(t.accent).text_color(t.accent_foreground).hover(s => s.opacity(0.88)))
-      .when(!u, el => el.border_1().border_color(t.border).text_color(t.muted).hover(s => s.bg(t.hover).text_color(t.foreground)))
-      .tooltip(u ? `${this.title} ${u.have} → ${u.latest}` : `${this.title} ${this.meta?.version ?? ""}: check GitHub for a newer one`)
+      .bg(t.accent).text_color(t.accent_foreground).hover(s => s.opacity(0.88))
+      .tooltip(`${this.title} ${u.have} → ${u.latest}`)
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-      .on_click((_e, cx) => { cx.stop_propagation(); if (this.busy) return; if (u) this.update(); else this.check(cx, true); })
+      .on_click((_e, cx) => { cx.stop_propagation(); this.update(); })
       .child(text);
   }
 }

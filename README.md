@@ -25,7 +25,7 @@ Nothing updates by itself: an installed mod is a copy, not a link to this repo. 
 
 > Update my herdr mods
 
-(or "update pond mods", "check my Herdr mods for updates"). Or click a panel's update pill: each mod from here shows "Update to x.y.z" when a newer version is published, and confirming starts Claude to update just that one. The pond layout's own pill ("Pond ↑ x.y.z") is in its tab bar. Every mod from here carries `UPDATE.md` and a `"source"` in its `mod.json`, so the agent finds what you installed from this repo, compares each `"version"` with [`versions.json`](versions.json), shows what's newer with its Changes, and updates the ones you pick: it shows your own edits before replacing them, backs each one up to `~/.config/herdr-app/backups/`, merges changed keys, and runs `herdr-app check`. Herdr reloads each mod at once.
+(or "update pond mods", "check my Herdr mods for updates"). Or click a panel's update pill: each mod from here shows "Update available" when a newer version is published (and nothing while it's up to date), and confirming starts Claude to update just that one. The pond layout's own pill ("Pond ↑ x.y.z") is in its tab bar. Every mod from here carries `UPDATE.md` and a `"source"` in its `mod.json`, so the agent finds what you installed from this repo, compares each `"version"` with [`versions.json`](versions.json), shows what's newer with its Changes, and updates the ones you pick: it shows your own edits before replacing them, backs each one up to `~/.config/herdr-app/backups/`, merges changed keys, and runs `herdr-app check`. Herdr reloads each mod at once.
 
 - **Kept:** your settings and data. They live outside the mod folder (e.g. `pond-agents.json`, `pond-figures/`, `servers.json`, `todos/`), and Herdr keeps your clicks on a layout (sizes, open panels) in `layouts/.state/`.
 - **Replaced:** anything you edited inside `mods/<name>/` or the layout file (the agent asks first and keeps a backup). To keep a changed version for good, duplicate it (`herdr-app do mod.clone '{"name":"pond-agents","as":"my-pond-agents"}'`); clones are never updated.
@@ -37,23 +37,23 @@ Which version you have: `"version"` in `~/.config/herdr-app/mods/<name>/mod.json
 
 | Layout | Version | |
 | --- | --- | --- |
-| [pond](pond/) | 1.6.0 | Herdr's main layout with my own tabs, agents and files panels, and git, skills, todos, servers, remote-checker and Claude profiles panels on the right |
+| [pond](pond/) | 1.6.1 | Herdr's main layout with my own tabs, agents and files panels, and git, skills, todos, servers, remote-checker and Claude profiles panels on the right |
 
 ## Mods
 
 | Mod | Version | |
 | --- | --- | --- |
-| [git](git/) | 1.1.1 | a lazygit-style git panel: sections, vim-ish keys, writes run in core terminals, conflicts handed to an agent, plus a Conflicts pane with a lazygit-style chunk picker |
+| [git](git/) | 1.1.2 | a lazygit-style git panel: sections, vim-ish keys, writes run in core terminals, conflicts handed to an agent, plus a Conflicts pane with a lazygit-style chunk picker |
 | [leader](leader/) | 1.1.0 | a tmux-style prefix: `ctrl-a`, then a key, with a popup of the bindings |
 | [changes-expand](changes-expand/) | 1.0.0 | `cmd-g` opens [herdr-gitview](https://github.com/ChmaraX/herdr-gitview)'s own tab on the repo you're in, even with its diff pane focused |
-| [todos](todos/) | 1.1.1 | todo pages as Markdown files in `~/.config/herdr-app/todos` |
-| [servers](servers/) | 1.1.1 | local dev servers as labelled herdr-core terminals that survive restarts |
-| [remote-checker](remote-checker/) | 1.1.1 | the focused branch's GitHub pull request: CI checks, reviewers, comments, diff size and commits, refetched every 10s |
-| [skills](skills/) | 1.1.1 | Claude skills (personal and the repo's): run, edit, scaffold |
-| [pond-agents](pond-agents/) | 1.2.1 | Herdr's agents list with a pixel duck per agent that acts out its status, plus the Claude context bar and model; swap figures per space (emoji, your pictures) |
-| [pond-files](pond-files/) | 1.1.1 | Herdr's Files panel with focus, vim keys and a key bar |
-| [pond-tabs](pond-tabs/) | 1.3.0 | Herdr's tab bar with Git, Skills, Todos, Servers, PR and Claude account panel buttons (needs those mods) |
-| [pond-profiles](pond-profiles/) | 1.3.2 | Claude Code accounts (claude.ai or a gateway) and versions via cvm/cvp: switch, pin per folder, usage limits, updates, agent-router models; with a setup wizard and a one-click update of the panel itself |
+| [todos](todos/) | 1.1.2 | todo pages as Markdown files in `~/.config/herdr-app/todos` |
+| [servers](servers/) | 1.1.2 | local dev servers as labelled herdr-core terminals that survive restarts |
+| [remote-checker](remote-checker/) | 1.1.2 | the focused branch's GitHub pull request: CI checks, reviewers, comments, diff size and commits, refetched every 10s |
+| [skills](skills/) | 1.1.2 | Claude skills (personal and the repo's): run, edit, scaffold |
+| [pond-agents](pond-agents/) | 1.2.2 | Herdr's agents list with a pixel duck per agent that acts out its status, plus the Claude context bar and model; swap figures per space (emoji, your pictures) |
+| [pond-files](pond-files/) | 1.1.2 | Herdr's Files panel with focus, vim keys and a key bar |
+| [pond-tabs](pond-tabs/) | 1.3.1 | Herdr's tab bar with Git, Skills, Todos, Servers, PR and Claude account panel buttons (needs those mods) |
+| [pond-profiles](pond-profiles/) | 1.3.3 | Claude Code accounts (claude.ai or a gateway) and versions via cvm/cvp: switch, pin per folder, usage limits, updates, agent-router models; with a setup wizard and a one-click update of the panel itself |
 
 Some panels integrate with [herdr-gitview](https://github.com/ChmaraX/herdr-gitview) when it's installed. It isn't part of this repo.
 

@@ -498,7 +498,7 @@ export default class Agents extends View {
             .justify_between()
             .child(div().text_size(11.5).font_medium().text_color(t.dim).child("Agents"))
             .child(h_flex().gap(10).items_center()
-              .children([this.selfUpdate.pill(t, { quiet: true, compact: true })].filter(Boolean))
+              .children([this.selfUpdate.pill(t, { compact: true })].filter(Boolean))
               .when(Boolean(this.fileError), (el) => el.child(div().id("ag-file-error").text_size(11).font_bold().text_color(t.blocked)
                 .tooltip(`${this.fileError}. Using the last good figures.`).child("!")))
               .child(div()

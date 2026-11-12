@@ -490,7 +490,7 @@ export default class Conflicts extends View {
         .child(div().size(7).flex_none().rounded_full().bg(left ? t.ansi1 : t.ansi2))
         .child(div().font_semibold().text_size(13).flex_none().child("Conflicts"))
         .child(div().flex_1())
-        .children([this.selfUpdate.pill(t, { quiet: true })].filter(Boolean))
+        .children([this.selfUpdate.pill(t)].filter(Boolean))
         .when(Boolean(this.running), (e) => e.child(div().flex_none().text_size(11.5).text_color(t.working).child(`${this.running}…`)))
         .when(left > 0, (e) => e.child(this.button("ai-all", "Ask AI (i)", (cx) => this.askAI(this.files.map((f) => f.path), cx), t)))
         .child(this.button("continue", `Continue (c)`, (cx) => this.continueOp(cx), t, { primary: !left, disabled: left > 0 || !op || Boolean(this.running) }))

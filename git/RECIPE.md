@@ -5,7 +5,7 @@ A lazygit-style git panel for the repo of the focused terminal. Numbered section
 
 **Install:** Point your Herdr agent at this folder: copy `mods/git/` and `mods/git-conflicts/` into `~/.config/herdr-app/mods/`, then `herdr-app check` each of them.
 
-**Version:** 1.1.1 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.1.2 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** from 1.1.0, an "Update to x.y.z" pill appears in the Git (and Conflicts) header when this repo publishes a newer version; click it, confirm, and a new Claude tab updates just this mod (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/git/` and `mods/git-conflicts/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept (commit-message drafts and panel state); edits you made inside the mod folder are not.
 
@@ -96,6 +96,10 @@ Panel: theme `background`, text 12.5px, rounded 10 with a 1px border (`accent` w
 - With every file decided, `c` continues; a continue blocked by a failing hook shows the red failure box with the hook's error, and `f` offers to send it to an agent.
 
 ## Changes
+
+### 1.1.2 (2026-11-12)
+
+- The update pill only shows when a newer version is published, and reads "Update available" (the version is in its tooltip); no more "Check for updates" pill while up to date (shared `update.js`).
 
 ### 1.1.1 (2026-11-12)
 
