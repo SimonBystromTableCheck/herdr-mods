@@ -9,12 +9,33 @@ the prompt-cache bar of [agent-router](https://github.com/alexandernicholson/age
 time it opens, a setup wizard installs whatever is missing. Nothing personal is in the mod folder:
 accounts, names, usage settings and sign-in tokens stay in `~/.cvm` on your machine.
 
-**Install:** point your Herdr agent at this folder: copy `mods/pond-profiles/` into
-`~/.config/herdr-app/mods/`, then `herdr-app check ~/.config/herdr-app/mods/pond-profiles`.
-It is `"place": "none"`: add a block `{ "id": "profiles", "type": "block", "content": { "mod": "pond-profiles" } }`
-to a layout (the `pond` layout has it as a child of its right `panel-body` stack, opened from
-pond-tabs' account button or `ctrl-a C` in leader). Needs macOS or Linux, `python3`, `curl`/`bash`
-for the cvm install, and a Claude login (claude.ai) for the default account.
+**Install:** tell your Herdr agent "Install the Herdr mod at
+https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/pond-profiles". Needs macOS or Linux,
+`python3`, `curl`/`bash` for the cvm install, and a Claude login (claude.ai) for the default account.
+
+1. Copy `mods/pond-profiles/` into `~/.config/herdr-app/mods/`, then
+   `herdr-app check ~/.config/herdr-app/mods/pond-profiles`.
+2. Add it to your layout. The mod is `"place": "none"`, so it shows only where a layout puts it.
+   - **On the `pond` layout** (this repo): nothing to do. Its right `panel-body` stack already has
+     the child `{ "id": "profiles", "type": "block", "content": { "mod": "pond-profiles" } }`, opened
+     from pond-tabs' account button or `ctrl-a C` (leader).
+   - **On Herdr's own `main` layout**, or any shipped one: clone it first, since shipped layouts are
+     read-only. Run `herdr-app do layout.clone '{"name":"main","as":"my-main"}'`, which also switches
+     to the clone.
+   - **In your own layout (or the clone):** add a column as the last child of the `root` row (on
+     `main`, after `work`):
+     ```json
+     { "id": "profiles-panel", "type": "column", "size": { "px": 380 }, "min": 300, "max": 700,
+       "children": [ { "id": "profiles", "type": "block", "content": { "mod": "pond-profiles" } } ] }
+     ```
+     If the layout already has a right-hand panel stack (like pond's `panel-body`), add just the
+     `profiles` block as one more child of it instead.
+   - Check `layouts/<name>.error` doesn't appear after saving.
+3. Show or hide the column with `herdr-app do layout.toggle --id profiles-panel`. For a stack child,
+   pick it with `herdr-app do layout.select --stack <stack id> --child profiles`. Bind a key in
+   `keys.json` if you want one, e.g. `"global": { "ctrl-shift-u": "layout.toggle:profiles-panel" }`.
+4. Open the panel once: the setup wizard installs cvm, puts it on PATH, installs Claude and cvp,
+   and offers gateway profiles and agent-router.
 
 **Version:** 1.0.0 (see Changes at the end; also `"version"` in `mod.json`).
 
