@@ -50,7 +50,10 @@ export function setupView(v, t) {
       text: "Installs Claude Code versions side by side and switches between them. Downloads cvm from github.com/alexandernicholson/cvm into ~/.cvm.",
       action: ["Install cvm", ["cvm"], "Installing…"] },
     { id: "path", title: "Run cvm's claude", done: d?.path?.ok, needs: d?.cvm,
-      text: `Adds ~/.cvm/bin at the end of ${rcName} so new terminals start cvm's claude. ${d?.path?.claude ? `Right now: ${d.path.claude}` : "No claude found yet."}`,
+      text: d?.path?.ok
+        ? `New terminals put ~/.cvm/bin first (checked in a fresh shell that loads ${rcName}).`
+        : `Adds ~/.cvm/bin at the end of ${rcName} so new terminals start cvm's claude. ${d?.path?.claude ? `Right now: ${d.path.claude}` : "No claude found yet."}`,
+      after: `Terminals already open keep their old PATH: run  source ${rcName}  in them, or open a new tab.`,
       action: [`Add to ${base(d?.rc) || "profile"}`, ["path"], "Saving…"] },
     { id: "claude", title: "Claude Code", done: d?.claude?.ok, needs: d?.cvm,
       text: "Installs the latest Claude Code with cvm. An existing install stays where it is; Claude's own auto-updater is turned off since cvm manages versions now.",
@@ -79,6 +82,7 @@ export function setupView(v, t) {
     return v_flex().id(`step-${s.id}`).gap(6).p(10).rounded(8).border_1().border_color(t.border).bg(t.background)
       .child(h_flex().gap(8).items_center().child(icon).child(div().flex_1().font_semibold().text_color(s.done ? t.muted : t.foreground).child(s.title)))
       .child(div().pl(26).text_size(11.5).text_color(t.dim).child(s.text))
+      .when(Boolean(s.done && s.after), el => el.child(div().pl(26).text_size(11.5).text_color(t.ansi3).child(s.after)))
       .when(Boolean(s.warn), el => el.child(div().pl(26).text_size(11.5).text_color(t.ansi3).child(s.warn)))
       .when(Boolean(s.form), el => el.child(div().pl(26).child(s.form)))
       .when(!s.done && (Boolean(s.action) || Boolean(s.button)), el => el.child(h_flex().pl(26).gap(8)

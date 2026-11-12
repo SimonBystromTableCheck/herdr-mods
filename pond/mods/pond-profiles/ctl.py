@@ -349,9 +349,26 @@ def shell_line(cmd):
     return hits[-1] or None if hits else None
 
 
+def path_state():
+    """Whether a new terminal (a fresh login shell, as if it ran `source ~/.zshrc`) puts
+    ~/.cvm/bin ahead of every other claude. Judged from PATH order, not `command -v claude`:
+    cvm's claude wrapper only exists once a Claude version is installed (the next step)."""
+    path = shell_line('printf %s "$PATH"') or ""
+    claude_path = shell_line("command -v claude")
+    bin_dir = os.path.dirname(CLAUDE)
+    ok = False
+    for d in path.split(":"):
+        if os.path.realpath(d or ".") == os.path.realpath(bin_dir):
+            ok = True
+            break
+        if d and os.access(os.path.join(d, "claude"), os.X_OK):
+            break  # another claude comes first
+    return {"ok": ok, "claude": claude_path, "onPath": bin_dir in path.split(":")}
+
+
 def cmd_doctor():
     c = config()
-    claude_path = shell_line("command -v claude")
+    path = path_state()
     node = shell_line("node --version")
     node_major = int(m.group(1)) if node and (m := re.match(r"v(\d+)", node)) else None
     versions = installed_versions()
@@ -359,7 +376,7 @@ def cmd_doctor():
     out(
         shell=user_shell(), rc=rc_file(),
         cvm=os.path.isfile(CVM),
-        path={"ok": claude_path == CLAUDE, "claude": claude_path},
+        path=path,
         claude={"ok": bool(versions) and bool((read(f"{CVM_DIR}/version") or "").strip()), "installed": versions},
         cvp=os.path.isfile(f"{CVP_DIR}/plugin.sh"),
         profiles=[{"name": p["name"], "label": p["label"], "gateway": p["gateway"], "hasKey": p["hasKey"]} for p in profs],
@@ -408,8 +425,7 @@ def setup_path():
         os.makedirs(os.path.dirname(rc), exist_ok=True)
         with open(rc, "a") as f:
             f.write(f"\n{PATH_MARK}\n{line}\n")
-    found = shell_line("command -v claude")
-    out(rc=rc, claude=found, ok=found == CLAUDE)
+    out(rc=rc, **path_state())
 
 
 def setup_claude():

@@ -37,7 +37,7 @@ https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/pond-profiles". N
 4. Open the panel once: the setup wizard installs cvm, puts it on PATH, installs Claude and cvp,
    and offers gateway profiles and agent-router.
 
-**Version:** 1.0.0 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.0.1 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/pond-profiles/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder (`~/.cvm/herdr/`) and are kept.
 
@@ -131,7 +131,9 @@ then optional "Add a gateway profile" and "Agent router" (with Skip), then Finis
 ## Watch out
 
 - cvm's `claude` must come first on PATH (setup adds `~/.cvm/bin` to your shell rc). A `claude`
-  earlier on PATH bypasses profiles.
+  earlier on PATH bypasses profiles. Terminals open before setup keep their old PATH (Herdr keeps shells alive):
+  run `source ~/.zshrc` in them or open a new tab. The PATH check reads `$PATH` order in a fresh
+  login shell, since cvm's `~/.cvm/bin/claude` wrapper only appears after `cvm install`.
 - `cvm profile use` run in a terminal still syncs into `settings.json` until the panel's next
   refresh cleans it; running sessions pick that up in between. Switch from the panel.
 - Split-pane agent teammates don't get the profile (they read `settings.json`, not the launch env).
@@ -151,6 +153,10 @@ then optional "Add a gateway profile" and "Agent router" (with Skip), then Finis
 - An agent-router role's model and effort dropdowns save and show the new value after reload.
 
 ## Changes
+
+### 1.0.1 (2026-11-12)
+
+- Setup: the PATH step turns done as soon as `~/.cvm/bin` comes first in a fresh login shell (it waited for cvm's claude wrapper, which only exists after the Claude step), and says to run `source ~/.zshrc` in terminals already open.
 
 ### 1.0.0 (2026-11-12)
 
