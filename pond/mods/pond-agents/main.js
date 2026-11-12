@@ -346,9 +346,12 @@ export default class Agents extends View {
     }
 
     // Context use (0–100) and model that Claude's status line labels its terminal with.
+    // The account comes separately (pond-profiles' launch hook), so it shows without a status line.
     const contextOf = new Map(all.flatMap((k) => {
       const v = Number.parseInt(k.labels?.["claude.context"], 10);
-      return Number.isFinite(v) ? [[k.address, { pct: Math.max(0, Math.min(100, v)), model: k.labels?.["claude.model"] || null, account: k.labels?.["herdr.claude-profile"] || null }]] : [];
+      const pct = Number.isFinite(v) ? Math.max(0, Math.min(100, v)) : null;
+      const account = k.labels?.["herdr.claude-profile"] || null;
+      return pct != null || account ? [[k.address, { pct, model: k.labels?.["claude.model"] || null, account }]] : [];
     }));
 
     const row = (a, i, subs = []) => {
@@ -424,7 +427,7 @@ export default class Agents extends View {
         .child(v_flex().flex_1().min_w(0).gap(1)
           .child(div().min_w(0).truncate().text_color(idle ? t.muted : t.foreground).child(name))
           .when(full && Boolean(more), el => el.child(div().min_w(0).truncate().text_size(11.5).text_color(t.dim).child(more)))
-          .when(ctx != null, el => el.child(contextBar(t, ctx.pct, ctx.model, a.address, accountLabel(this.accounts, ctx.account)))))
+          .when(ctx?.pct != null, el => el.child(contextBar(t, ctx.pct, ctx.model, a.address, accountLabel(this.accounts, ctx.account)))))
         .when(Boolean(machine), el => el.child(div().text_size(10).text_color(t.dim).child(machine)))
         .when(subs.length > 0, el => el.child(fold(a, subs)))
         .when(this.hovered === a.address, el => el.child(pin))

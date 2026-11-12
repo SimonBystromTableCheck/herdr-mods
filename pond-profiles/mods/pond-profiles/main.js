@@ -84,7 +84,7 @@ export default class Claude extends View {
     this.st = null; this.err = null; this.busy = {}; this.errors = {};
     this.remote = JSON.parse(localStorage.getItem("remote") ?? "null"); // {latest, errors, at}
     this.router = null; this.models = null; this.picking = null; this.keyEdit = null;
-    this.form = null; this.manage = false; this.removing = null;
+    this.form = null; this.manage = false; this.removing = null; this.varEdit = null;
     this.setupShown = false; this.doctor = null;
     this.sel = 0; this.scroll = ScrollHandle.new(); this.handle = cx.focus_handle();
     this.usage = {}; // profile -> {result, at}
@@ -288,6 +288,60 @@ export default class Claude extends View {
     cx.notify();
   }
 
+  // One profile variable: v = { k, v, secret } to edit, or null to add one.
+  openVar(profile, v, cx) {
+    const name = InputState.new({ placeholder: "VARIABLE_NAME" });
+    const value = InputState.new({ placeholder: v?.secret ? "Paste a new value (the current one stays hidden)" : "value" });
+    if (v) name.set_value(v.k);
+    if (v && !v.secret) value.set_value(v.v ?? "");
+    if (v?.secret) value.set_masked(true);
+    name.on("submit", (_e, cx) => this.saveVar(cx));
+    value.on("submit", (_e, cx) => this.saveVar(cx));
+    this.varEdit = { profile, old: v?.k ?? null, secret: Boolean(v?.secret), name, value };
+    this.keyEdit = null;
+    (v ? value : name).focus();
+    cx.notify();
+  }
+
+  saveVar(cx, remove = false) {
+    const e = this.varEdit;
+    if (!e) return;
+    const name = e.name.value().trim(), value = e.value.value().trim();
+    if (!remove && !name) return;
+    // A secret left empty keeps its value: only a rename needs saving then, and that needs the value.
+    if (!remove && e.secret && !value) { if (name === e.old) { this.varEdit = null; this.handle.focus(); cx.notify(); } return; }
+    this.varEdit = null; this.handle.focus();
+    const spec = remove ? { name: e.old, value: null } : { name, value, old: e.old };
+    const tmp = `${appHome()}/${ME}/.handoff-${Math.random().toString(36).slice(2)}`;
+    cx.spawn(async cx => {
+      try { await writeTextFile(tmp, JSON.stringify(spec), null); } catch (err) { this.errors.vars = String(err); cx.notify(); return; }
+      this.act("vars", "Saving…", ["profile-var", e.profile, tmp], cx,
+        { toast: remove ? `${e.old} removed from ${this.label(e.profile)}` : `${name} saved in ${this.label(e.profile)}` });
+    });
+  }
+
+  varRows(p, t) {
+    const e = this.varEdit?.profile === p.name ? this.varEdit : null;
+    const field = (input, w, masked) => Input.new(input).h(26).px(7).rounded(6).border_1().border_color(t.accent).bg(t.background)
+      .font_family("JetBrains Mono").text_size(11.5).when(Boolean(w), el => el.w(w).flex_none()).when(!w, el => el.flex_1().min_w(0));
+    const editor = () => v_flex().gap(6).p(8).rounded(6).border_1().border_color(t.border).bg(t.surface)
+      .child(h_flex().gap(6).child(field(e.name, 190)).child(field(e.value)))
+      .when(e.secret, el => el.child(div().text_size(10.5).text_color(t.dim).child("Hidden value: leave it empty to keep the current one.")))
+      .child(h_flex().gap(6)
+        .child(this.button("var-save", "Save", "primary", cx => this.saveVar(cx), t))
+        .when(Boolean(e.old), el => el.child(this.button("var-remove", "Remove", "danger", cx => this.saveVar(cx, true), t)))
+        .child(this.button("var-cancel", "Cancel", null, cx => { this.varEdit = null; this.handle.focus(); cx.notify(); }, t)));
+    const rows = (p.env ?? []).map(v => e?.old === v.k ? editor()
+      : h_flex().id(`var-${p.name}-${v.k}`).h(22).px(6).gap(8).items_center().rounded(5).cursor_pointer().hover(s => s.bg(t.hover))
+        .tooltip(`${v.k}=${v.secret ? "*****" : v.v} · click to edit`)
+        .on_click((ev, cx) => { cx.stop_propagation(); this.openVar(p.name, v, cx); })
+        .child(div().w(250).flex_none().truncate().font_family("JetBrains Mono").text_size(11).text_color(t.muted).child(v.k))
+        .child(div().flex_1().min_w(0).truncate().font_family("JetBrains Mono").text_size(11).text_color(v.secret ? t.dim : t.foreground).child(v.secret ? "*****" : v.v)));
+    if (e && !e.old) rows.push(editor());
+    else rows.push(h_flex().pl(6).pt(2).child(this.link(`var-add-${p.name}`, "+ Add variable", cx => this.openVar(p.name, null, cx), t, t.accent)));
+    return v_flex().ml(14).p(4).gap(1).rounded(6).bg(t.surface).children(rows);
+  }
+
   saveKey(cx) {
     const edit = this.keyEdit, key = edit?.input.value().trim();
     if (!key) return;
@@ -359,8 +413,8 @@ export default class Claude extends View {
 
   press(k, cx) {
     if (this.keysOpen) { if (k === "escape" || k === "?" || k === "q") this.keysOpen = false; cx.notify(); return true; }
-    if (this.keyEdit || this.form) {
-      if (k === "escape") { this.keyEdit = null; this.form = null; this.handle.focus(); cx.notify(); return true; }
+    if (this.keyEdit || this.form || this.varEdit) {
+      if (k === "escape") { this.keyEdit = null; this.form = null; this.varEdit = null; this.handle.focus(); cx.notify(); return true; }
       return false; // the inputs type
     }
     if (this.setupShown) {
@@ -476,6 +530,7 @@ export default class Claude extends View {
             .child(this.button("key-save", "Save", "primary", cx => this.saveKey(cx), t))
             .child(this.button("key-cancel", "Cancel", null, cx => { this.keyEdit = null; this.handle.focus(); cx.notify(); }, t)));
         }
+        body.push(this.varRows(p, t));
         body.push(...this.errorOf(`rm-${p.name}`, t));
       }
     }
@@ -484,7 +539,7 @@ export default class Claude extends View {
       .child(this.link("add-profile", "+ Add profile", cx => openProfileForm(this, cx), t, t.accent))
       .child(this.link("manage-profiles", this.manage ? "Done" : "Manage profiles", cx => { this.manage = !this.manage; this.removing = null; cx.notify(); }, t)));
     return this.card(0, "Account", "New Claude sessions start on this account; running ones keep theirs.", t,
-      [...body, ...this.errorOf("account", t), ...this.errorOf("key", t), ...this.errorOf("label", t)]);
+      [...body, ...this.errorOf("account", t), ...this.errorOf("key", t), ...this.errorOf("vars", t), ...this.errorOf("label", t)]);
   }
 
   usageCard(t) {
@@ -771,7 +826,7 @@ export default class Claude extends View {
     this.hadKeys = this.handle.is_focused();
     if (this.st && location() !== this.st.where) this.refresh(cx);
     const st = this.st;
-    const typing = Boolean(this.keyEdit || this.form);
+    const typing = Boolean(this.keyEdit || this.form || this.varEdit);
     const headerNote = !st ? "" : this.setupShown ? "Setup" : st.localMissing ? `${st.local.value}? (missing profile)` : this.label(st.effective);
     const iconButton = (id, icon, tip, action) => div().id(id).size(26).flex().items_center().justify_center().rounded(6).cursor_pointer().text_color(t.muted)
       .hover(s => s.bg(t.hover).text_color(t.foreground)).tooltip(tip)

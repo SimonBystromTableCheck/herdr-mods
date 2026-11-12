@@ -9,7 +9,7 @@ Everything personal lives on this machine, under ~/.cvm (never in the mod folder
 
   status <dir>                    local state (no network)
   doctor                          what setup still needs (asks the login shell)
-  setup <cvm|path|claude|cvp|router|done|reopen>
+  setup <cvm|path|claude|cvp|router|statusline|statusline-off|done|reopen>
   remote                          latest versions upstream (network)
   use <profile>                   global profile (cvm profile use)
   profile-add <file>              create/replace a profile from a JSON file (then deleted; holds the key)
@@ -21,6 +21,7 @@ Everything personal lives on this machine, under ~/.cvm (never in the mod folder
   use-version <ver>               cvm use
   uninstall <ver>                 cvm uninstall
   update <claude|cvm|cvp|agent-router|keepalive>
+  profile-var <profile> <file>    set/rename/remove one variable ({"name","value"|null,"old"?} in <file>, then deleted)
   set-key <profile> <file>        read the key from <file> (then deleted) into the profile
   models <profile>                the profile's gateway catalog (GET /v1/models)
   router                          agent-router + keepalive options (claude plugin configure --json)
@@ -70,6 +71,9 @@ for k in ("CVM_PROFILE", "CVM_VERSION", "CLAUDECODE"):
 # session only at launch instead (the env.d shim), so a switch leaves running sessions alone.
 ENV["CVP_NO_SETTINGS_SYNC"] = "1"
 SETTINGS_LEDGER = f"{PROFILES}/.settings-managed"
+STATUSLINE = f"{LOCAL}/statusline.sh"
+STATUSLINE_NEXT = f"{LOCAL}/statusline-next"
+STATUSLINE_SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "herdr-statusline.sh")
 OWN_SETTINGS = ("DISABLE_AUTOUPDATER", "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS")  # set by this panel's setup
 
 
@@ -217,6 +221,13 @@ def need_profile(name):
         fail(f"No profile named {name!r}")
 
 
+SECRET_NAME = re.compile(r"KEY|TOKEN|SECRET|PASSWORD|PASSWD|HEADERS|AUTH|CREDENTIAL", re.I)
+
+
+def is_secret(k):
+    return k in SECRET_KEYS or bool(SECRET_NAME.search(k))
+
+
 def profiles(c=None):
     c = c or config()
     res = []
@@ -231,6 +242,8 @@ def profiles(c=None):
             "keyVar": next((k for k in SECRET_KEYS if k in vals), None),
             "hasKey": key is not None and not PLACEHOLDER.match(key),
             "vars": sorted(k for k in vals if k not in SECRET_KEYS and k != "ANTHROPIC_BASE_URL"),
+            # Every variable in file order, for Manage profiles; secrets never leave this script.
+            "env": [{"k": k, "v": None if is_secret(k) else v, "secret": is_secret(k)} for k, v in vals.items()],
             "usage": (c["usage"].get(name) or {}).get("kind"),
         })
     return res
@@ -363,7 +376,14 @@ def path_state():
             break
         if d and os.access(os.path.join(d, "claude"), os.X_OK):
             break  # another claude comes first
-    return {"ok": ok, "claude": claude_path, "onPath": bin_dir in path.split(":")}
+    # An alias or shell function named claude (some Claude installers add
+    # `alias claude=~/.claude/local/claude`) wins over PATH: `command -v` prints it, not a path.
+    shadow = claude_path if claude_path and not claude_path.startswith("/") else None
+    if shadow:
+        ok = False
+    elif ok and os.path.isfile(CLAUDE) and claude_path != CLAUDE:
+        ok = False  # the wrapper exists, yet new terminals start another claude
+    return {"ok": ok, "claude": claude_path, "shadow": shadow, "onPath": bin_dir in path.split(":")}
 
 
 def cmd_doctor():
@@ -377,6 +397,8 @@ def cmd_doctor():
         shell=user_shell(), rc=rc_file(),
         cvm=os.path.isfile(CVM),
         path=path,
+        hc=shell_line("command -v hc"),
+        statusline=statusline_state(),
         claude={"ok": bool(versions) and bool((read(f"{CVM_DIR}/version") or "").strip()), "installed": versions},
         cvp=os.path.isfile(f"{CVP_DIR}/plugin.sh"),
         profiles=[{"name": p["name"], "label": p["label"], "gateway": p["gateway"], "hasKey": p["hasKey"]} for p in profs],
@@ -384,6 +406,63 @@ def cmd_doctor():
                 "nodeOk": bool(node_major and node_major >= 22), "git": shutil.which("git") is not None},
         setup=c["setup"],
     )
+
+
+def statusline_state():
+    """Claude's status line: ours (labels terminals for the agents list, then runs the one you
+    had), another that already labels them, or another that doesn't."""
+    cmd = ((read_json(SETTINGS) or {}).get("statusLine") or {}).get("command")
+    ours = bool(cmd) and os.path.expanduser(cmd.split()[0]) == STATUSLINE
+    script = os.path.expanduser(cmd.split()[0]) if cmd and not ours else None
+    labels = bool(script and os.path.isfile(script) and "claude.context" in (read(script) or ""))
+    if ours and os.path.isfile(STATUSLINE_SRC) and read(STATUSLINE) != read(STATUSLINE_SRC):
+        install_statusline_file()  # keep the copy in step with the mod
+    return {"ours": ours, "other": None if ours else cmd, "labels": ours or labels}
+
+
+def install_statusline_file():
+    src = read(STATUSLINE_SRC)
+    if src is None:
+        fail(f"Missing {STATUSLINE_SRC}")
+    os.makedirs(LOCAL, exist_ok=True)
+    with open(STATUSLINE + ".tmp", "w") as f:
+        f.write(src)
+    os.chmod(STATUSLINE + ".tmp", 0o755)
+    os.replace(STATUSLINE + ".tmp", STATUSLINE)
+
+
+def write_settings(s):
+    if os.path.isfile(SETTINGS) and not os.path.isfile(SETTINGS + ".herdr-backup"):
+        shutil.copy2(SETTINGS, SETTINGS + ".herdr-backup")
+    os.makedirs(os.path.dirname(SETTINGS), exist_ok=True)
+    with open(SETTINGS + ".tmp", "w") as f:
+        json.dump(s, f, indent=2)
+        f.write("\n")
+    os.replace(SETTINGS + ".tmp", SETTINGS)
+
+
+def setup_statusline(on):
+    s = read_json(SETTINGS)
+    s = s if isinstance(s, dict) else {}
+    st = statusline_state()
+    if on:
+        install_statusline_file()
+        if not st["ours"]:
+            if st["other"]:
+                with open(STATUSLINE_NEXT, "w") as f:
+                    f.write(st["other"] + "\n")
+            elif os.path.exists(STATUSLINE_NEXT):
+                os.remove(STATUSLINE_NEXT)
+            s["statusLine"] = {**(s.get("statusLine") or {}), "type": "command", "command": STATUSLINE}
+            write_settings(s)
+    elif st["ours"]:
+        prev = (read(STATUSLINE_NEXT) or "").strip()
+        if prev:
+            s["statusLine"] = {**(s.get("statusLine") or {}), "type": "command", "command": prev}
+        else:
+            s.pop("statusLine", None)
+        write_settings(s)
+    out(statusline=statusline_state())
 
 
 def merge_settings_env(values):
@@ -476,6 +555,8 @@ def cmd_setup(step):
         setup_cvp()
     if step == "router":
         setup_router()
+    if step in ("statusline", "statusline-off"):
+        setup_statusline(step == "statusline")
     if step in ("done", "reopen", "skip-router"):
         c = config()
         if step == "skip-router":
@@ -586,6 +667,40 @@ def cmd_set_key(name, src):
     text = re.sub(rf"^{var}=.*$", lambda _m: line, text, flags=re.M) if re.search(rf"^{var}=", text, re.M) \
         else text.rstrip("\n") + "\n" + line + "\n"
     write_private(path, text)
+    os.chmod(path, 0o600)
+    out()
+
+
+def cmd_profile_var(name, src):
+    """Set, rename or remove one variable of a profile, from a hand-off file (it may hold a
+    secret): {"name": "VAR", "value": "..." | null to remove, "old": "PREVIOUS_NAME"?}.
+    Other lines, comments and order stay as they are."""
+    need_profile(name)
+    try:
+        spec = json.loads(take_file(src) or "{}")
+    except ValueError:
+        fail("Bad request")
+    var, value, old = (spec.get("name") or "").strip(), spec.get("value"), (spec.get("old") or "").strip() or None
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", var):
+        fail("Variable names are letters, digits and _ (not starting with a digit)")
+    path = f"{PROFILES}/{name}.env"
+    lines = (read(path) or "").splitlines()
+    names = [l.split("=", 1)[0].strip() if "=" in l and not l.lstrip().startswith("#") else None for l in lines]
+    if old and old != var and var in names:
+        fail(f"{var} is already set in this profile")
+    target = old or var
+    if value is None:
+        lines = [l for l, n in zip(lines, names) if n != target]
+    else:
+        value = str(value).strip()
+        if var == "ANTHROPIC_BASE_URL" and not re.match(r"^https://|^http://(localhost|127\.0\.0\.1|\[::1\])", value):
+            fail("The gateway URL must be https:// (or http://localhost)")
+        line = env_line(var, value)
+        if target in names:
+            lines[names.index(target)] = line
+        else:
+            lines.append(line)
+    write_private(path, "\n".join(lines) + "\n")
     os.chmod(path, 0o600)
     out()
 
@@ -1014,6 +1129,7 @@ def main(argv):
         "pin-profile": (cmd_pin_profile, 2, 2), "pin-version": (cmd_pin_version, 2, 2),
         "install": (lambda v, u=None: cmd_install(v, u == "--use"), 1, 2), "use-version": (cmd_use_version, 1, 1),
         "uninstall": (cmd_uninstall, 1, 1), "update": (cmd_update, 1, 1), "set-key": (cmd_set_key, 2, 2),
+        "profile-var": (cmd_profile_var, 2, 2),
         "models": (cmd_models, 1, 1), "router": (cmd_router, 0, 0), "router-set": (cmd_router_set, 2, 2),
         "install-hook": (cmd_install_hook, 0, 0), "usage": (cmd_usage, 1, 1),
         "usage-detect": (cmd_usage_detect, 1, 1), "usage-setup": (cmd_usage_setup, 2, 2),

@@ -53,12 +53,16 @@ export function setupView(v, t) {
       text: d?.path?.ok
         ? `New terminals put ~/.cvm/bin first (checked in a fresh shell that loads ${rcName}).`
         : `Adds ~/.cvm/bin at the end of ${rcName} so new terminals start cvm's claude. ${d?.path?.claude ? `Right now: ${d.path.claude}` : "No claude found yet."}`,
+      warn: d?.path?.shadow ? `${rcName} (or a file it loads) defines claude as an alias or function, which wins over PATH: remove that line (${d.path.shadow}), then Check again.` : null,
+      warnBlocks: false,
       after: `Terminals already open keep their old PATH: run  source ${rcName}  in them, or open a new tab.`,
       action: [`Add to ${base(d?.rc) || "profile"}`, ["path"], "Saving…"] },
     { id: "claude", title: "Claude Code", done: d?.claude?.ok, needs: d?.cvm,
       text: "Installs the latest Claude Code with cvm. An existing install stays where it is; Claude's own auto-updater is turned off since cvm manages versions now.",
       action: ["Install latest", ["claude"], "Installing…"] },
     { id: "cvp", title: "Profiles (cvp)", done: d?.cvp, needs: d?.cvm,
+      warn: d && d.cvp && !d.hc ? "New terminals can't find herdr-core's hc, so Claude sessions won't get account badges. Put hc on PATH in your shell profile." : null,
+      warnBlocks: false,
       text: "A cvm plugin for named accounts: your claude.ai login and any gateways. It starts with a \"default\" profile that uses your claude.ai login.",
       action: ["Install cvp", ["cvp"], "Installing…"] },
   ];
@@ -68,6 +72,13 @@ export function setupView(v, t) {
     text: gateways.length ? `${gateways.map(p => p.label).join(", ")} set up. Add more any time from Account.` : "Add a profile for each Anthropic-compatible gateway you use: its URL, key and switches.",
     button: v.form?.type === "profile" ? null : v.button("setup-add-profile", "Add a profile", null, cx => openProfileForm(v, cx), t, { disabled: !d?.cvp }),
     form: v.form?.type === "profile" ? profileForm(v, t) : null });
+  const sl = d?.statusline;
+  optional.push({ id: "statusline", title: "Context and model in the agents list (optional)", done: sl?.labels, needs: d?.claude?.ok,
+    text: sl?.ours ? "Claude's status line labels each Herdr terminal with its context use and model, then runs the one you had."
+      : sl?.labels ? "Your status line already labels Herdr terminals (claude.context, claude.model)."
+      : `Sets Claude's status line to a small script that labels each Herdr terminal with its context use and model, for the bars in the agents list.${sl?.other ? " Your current status line keeps showing: the script runs it after." : ""}`,
+    action: ["Set up", ["statusline"], "Saving…"],
+    button: sl?.ours ? v.button("setup-statusline-off", "Undo", null, cx => step(v, cx, "statusline-off", ["statusline-off"], "…"), t, { busy: v.busy["setup-statusline-off"] }) : null });
   const r = d?.router;
   optional.push({ id: "router", title: "Agent router + keepalive (optional)", done: r?.installed, skipped: d?.setup?.routerSkipped, needs: d?.claude?.ok,
     text: `Claude Code plugins: a model and effort per subagent role from a gateway's catalog, and a prompt-cache bar that can keep the cache warm. Need Node 22+${r ? ` (found ${r.node ?? "none"})` : ""} and git.`,
@@ -85,9 +96,9 @@ export function setupView(v, t) {
       .when(Boolean(s.done && s.after), el => el.child(div().pl(26).text_size(11.5).text_color(t.ansi3).child(s.after)))
       .when(Boolean(s.warn), el => el.child(div().pl(26).text_size(11.5).text_color(t.ansi3).child(s.warn)))
       .when(Boolean(s.form), el => el.child(div().pl(26).child(s.form)))
-      .when(!s.done && (Boolean(s.action) || Boolean(s.button)), el => el.child(h_flex().pl(26).gap(8)
-        .when(Boolean(s.action), el => el.child(v.button(`do-${s.id}`, s.action[0], "primary", cx => step(v, cx, s.id, s.action[1], s.action[2]), t,
-          { busy, disabled: s.needs === false || Boolean(s.warn) })))
+      .when((!s.done && (Boolean(s.action) || Boolean(s.button))) || (s.done && s.id === "statusline" && Boolean(s.button)), el => el.child(h_flex().pl(26).gap(8)
+        .when(Boolean(s.action) && !s.done, el => el.child(v.button(`do-${s.id}`, s.action[0], "primary", cx => step(v, cx, s.id, s.action[1], s.action[2]), t,
+          { busy, disabled: s.needs === false || (Boolean(s.warn) && s.warnBlocks !== false) })))
         .when(Boolean(s.button), el => el.child(s.button))
         .when(Boolean(s.skip) && !s.skipped, el => el.child(v.button(`skip-${s.id}`, "Skip", null, cx => step(v, cx, `skip-${s.id}`, ["skip-router"], "…"), t)))))
       .children(v.errorOf(`setup-${s.id}`, t).map(e => e.pl(26)));

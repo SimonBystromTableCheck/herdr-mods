@@ -16,7 +16,7 @@ It is `"place": "none"`: to use it, point a layout block at it instead of the sh
 `agents` (clone the layout first: `herdr-app do layout.clone '{"name":"main","as":"my-main"}'`,
 then set the `agents` block's `content` to `{ "mod": "pond-agents" }`).
 
-**Version:** 1.1.0 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.1.1 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/pond-agents/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept (your figure sets in `pond-agents.json` and pictures in `pond-figures/`); edits you made inside the mod folder are not.
 
@@ -140,7 +140,8 @@ Clone of shipped `agents` (`cloned_from: {name: "agents", version: "0.1.14"}`). 
 - Sets are picked by space **name**: renaming a space loses its pick.
 - Herdr glitches on animated WebP frames that only carry what changed; write whole frames.
 
-- The context bar only appears if something sets the labels. Here that is a Claude Code
+- The context bar only appears if something sets the labels. pond-profiles' optional setup step
+  "Context and model in the agents list" installs one. Here that is a Claude Code
   status line script that runs, when `$HC_TERMINAL_ID` is set:
   `hc label "$HC_TERMINAL_ID" "claude.context=$pct" "claude.model=$model"` (pct from
   `.context_window.used_percentage`, model from `.model.display_name`), only on change and
@@ -166,6 +167,10 @@ Clone of shipped `agents` (`cloned_from: {name: "agents", version: "0.1.14"}`). 
   that space.
 
 ## Changes
+
+### 1.1.1 (2026-11-12)
+
+- The account badge shows on every Claude agent labelled by pond-profiles, even without the context labels (it needed a status line before).
 
 ### 1.1.0 (2026-11-12)
 

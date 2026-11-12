@@ -37,7 +37,7 @@ https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/pond-profiles". N
 4. Open the panel once: the setup wizard installs cvm, puts it on PATH, installs Claude and cvp,
    and offers gateway profiles and agent-router.
 
-**Version:** 1.0.1 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.1.0 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/pond-profiles/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder (`~/.cvm/herdr/`) and are kept.
 
@@ -60,7 +60,10 @@ a one-line dim description. `j`/`k` moves the selected card, outlined in `accent
 - **Account:** one tile per cvp profile: a colored dot (`ansi4` for a claude.ai account, `ansi5` for
   a gateway), the profile's display name, and the gateway host or "claude.ai login". The global
   account is filled. Below the tiles: "+ Add profile" and "Manage profiles". Manage lets you rename a
-  profile, replace its key and remove it, with a second click to confirm. The note says "New Claude
+  profile, replace its key and remove it, with a second click to confirm. Under each profile,
+  every variable in its `.env` (name in mono `muted`, value; secrets — key variables and names
+  with KEY, TOKEN, SECRET, PASSWORD, HEADERS, AUTH or CREDENTIAL — as `*****`). Click one to
+  edit name and value (Save, Remove, Cancel; a hidden value left empty is kept); "+ Add variable". The note says "New Claude
   sessions start on this account; running ones keep theirs."
 - **Usage:** per profile, either a "Set up usage" button (opt-in) or a usage card:
   - claude.ai plan: "Plan usage limits" (5-hour session) and "Weekly limits" bars with "Resets in …" and "% used".
@@ -81,7 +84,9 @@ a one-line dim description. `j`/`k` moves the selected card, outlined in `accent
   close, `?` all keys).
 
 Setup view (first run, or ⚙): steps with a status each: cvm, cvm on PATH, Claude (latest), cvp,
-then optional "Add a gateway profile" and "Agent router" (with Skip), then Finish.
+then optional "Add a gateway profile", "Context and model in the agents list" (with Undo once
+set) and "Agent router" (with Skip), then Finish. The PATH step warns about a `claude` alias or
+function; the cvp step warns when new terminals can't find `hc`.
 
 ## How it behaves
 
@@ -120,8 +125,11 @@ then optional "Add a gateway profile" and "Agent router" (with Skip), then Finis
 - `ctl.py`: the JSON backend; every command prints one `{"ok": …}` object. Commands: status,
   doctor, setup, remote, use, profile-add/remove/label, pin-profile, pin-version, install,
   use-version, uninstall, update, set-key, models, router, router-set, install-hook, usage,
-  usage-detect, usage-setup, usage-remove, gateway-login/poll/logout.
-- `herdr-label.sh`: the launch hook.
+  usage-detect, usage-setup, usage-remove, gateway-login/poll/logout, profile-var (one variable,
+  from a hand-off file: `{name, value|null, old?}`), `setup statusline|statusline-off`.
+- `herdr-label.sh`: the launch hook. `herdr-statusline.sh`: the optional status line, copied to
+  `~/.cvm/herdr/statusline.sh`; the previous status line command is kept in
+  `~/.cvm/herdr/statusline-next` and run after it (jq, else python3, parses Claude's input).
 - Herdr: `exec`, `writeTextFile`, `notify`, `run("layout.hide")`, `run("pane.focus")`,
   `run("pane.go")`, `nextCommand()` (`setup`, `add-profile`, `finish`, `switch`, `updates`, `key:<k>`,
   `go:<dir>`), `setShared`.
@@ -153,6 +161,12 @@ then optional "Add a gateway profile" and "Agent router" (with Skip), then Finis
 - An agent-router role's model and effort dropdowns save and show the new value after reload.
 
 ## Changes
+
+### 1.1.0 (2026-11-12)
+
+- Manage profiles lists every variable of each profile (secrets as `*****`) and edits them in place: click to edit, rename or remove, "+ Add variable".
+- Optional setup step "Context and model in the agents list": sets Claude's status line to `herdr-statusline.sh`, which labels Herdr terminals with `claude.context` / `claude.model` for pond-agents and then runs the status line you had (Undo restores it).
+- Setup warns when `claude` is an alias or shell function (it beats PATH) and when new terminals can't find `hc` (no account badges).
 
 ### 1.0.1 (2026-11-12)
 

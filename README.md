@@ -37,7 +37,7 @@ Which version you have: `"version"` in `~/.config/herdr-app/mods/<name>/mod.json
 
 | Layout | Version | |
 | --- | --- | --- |
-| [pond](pond/) | 1.1.1 | Herdr's main layout with my own tabs, agents and files panels, and git, skills, todos, servers, remote-checker and Claude profiles panels on the right |
+| [pond](pond/) | 1.2.0 | Herdr's main layout with my own tabs, agents and files panels, and git, skills, todos, servers, remote-checker and Claude profiles panels on the right |
 
 ## Mods
 
@@ -50,10 +50,10 @@ Which version you have: `"version"` in `~/.config/herdr-app/mods/<name>/mod.json
 | [servers](servers/) | 1.0.1 | local dev servers as labelled herdr-core terminals that survive restarts |
 | [remote-checker](remote-checker/) | 1.0.0 | the focused branch's GitHub pull request: CI checks, reviewers, comments, diff size and commits, refetched every 10s |
 | [skills](skills/) | 1.0.0 | Claude skills (personal and the repo's): run, edit, scaffold |
-| [pond-agents](pond-agents/) | 1.1.0 | Herdr's agents list with a pixel duck per agent that acts out its status, plus the Claude context bar and model; swap figures per space (emoji, your pictures) |
+| [pond-agents](pond-agents/) | 1.1.1 | Herdr's agents list with a pixel duck per agent that acts out its status, plus the Claude context bar and model; swap figures per space (emoji, your pictures) |
 | [pond-files](pond-files/) | 1.0.0 | Herdr's Files panel with focus, vim keys and a key bar |
 | [pond-tabs](pond-tabs/) | 1.1.0 | Herdr's tab bar with Git, Skills, Todos, Servers, PR and Claude account panel buttons (needs those mods) |
-| [pond-profiles](pond-profiles/) | 1.0.1 | Claude Code accounts (claude.ai or a gateway) and versions via cvm/cvp: switch, pin per folder, usage limits, updates, agent-router models; with a setup wizard |
+| [pond-profiles](pond-profiles/) | 1.1.0 | Claude Code accounts (claude.ai or a gateway) and versions via cvm/cvp: switch, pin per folder, usage limits, updates, agent-router models; with a setup wizard |
 
 Some panels integrate with [herdr-gitview](https://github.com/ChmaraX/herdr-gitview) when it's installed. It isn't part of this repo.
 
