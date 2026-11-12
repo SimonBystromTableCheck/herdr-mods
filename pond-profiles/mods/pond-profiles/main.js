@@ -4,7 +4,7 @@
 // Personal settings (names, usage, setup state) live in ~/.cvm/herdr/pond-profiles.json, not in this folder.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, ScrollHandle } from "gpui-base";
-import { exec, home, appHome, terminals, panes, spaces, focused, theme, run, notify, nextCommand, setShared, writeTextFile } from "herdr";
+import { exec, home, appHome, terminals, panes, spaces, focused, theme, run, notify, nextCommand, setShared, writeTextFile, readTextFile, openOverlay } from "herdr";
 import { keybar, keysCard } from "./keybar.js";
 import { setupView, loadDoctor, openProfileForm, profileForm, openLabelForm, labelForm, openUsageForm, usageForm } from "./setup.js";
 
@@ -89,6 +89,13 @@ export default class Claude extends View {
     this.sel = 0; this.scroll = ScrollHandle.new(); this.handle = cx.focus_handle();
     this.usage = {}; // profile -> {result, at}
     this.signin = null; // {profile, code, url, until, status}
+    this.panel = null; // this mod's mod.json: {version, source}
+    this.panelLatest = JSON.parse(localStorage.getItem("panelLatest") ?? "null"); // {version, at}
+    cx.spawn(async cx => {
+      try { this.panel = JSON.parse(await readTextFile(`${appHome()}/${ME}/mod.json`)); } catch { return; }
+      if (Date.now() - (this.panelLatest?.at ?? 0) > UPDATE_EVERY) this.checkPanel(cx);
+      cx.notify();
+    });
     this.refresh(cx);
     cx.timer.every(USAGE_EVERY, cx => this.loadUsage(cx));
     cx.timer.every(5000, cx => this.refresh(cx));
@@ -369,6 +376,56 @@ export default class Claude extends View {
       toast: `${u.label} updated`,
       then: (_r, cx) => { this.remote = { ...this.remote, at: 0 }; this.checkUpdates(cx); if (u.id === "agent-router" || u.id === "keepalive") this.loadRouter(cx); },
     });
+  }
+
+  // This panel's published version: versions.json in the repo its mod.json "source" names.
+  checkPanel(cx, manual = false) {
+    const m = /^https:\/\/github\.com\/([^/]+\/[^/]+?)(\.git)?\/?$/.exec(this.panel?.source?.repo ?? "");
+    if (!m || this.busy.panel) return;
+    this.busy.panel = "Checking…"; cx.notify();
+    cx.spawn(async cx => {
+      try {
+        const r = await fetch(`https://raw.githubusercontent.com/${m[1]}/main/versions.json`);
+        if (!r.ok) throw new Error(`GitHub answered ${r.status}`);
+        const version = (await r.json()).mods?.[this.panel.source.mod]?.version;
+        if (!version) throw new Error(`${this.panel.source.mod} isn't in versions.json`);
+        this.panelLatest = { version, at: Date.now() };
+        localStorage.setItem("panelLatest", JSON.stringify(this.panelLatest));
+        if (manual) {
+          if (this.panelUpdate()) this.updatePanel();
+          else notify({ title: "Claude panel is up to date", body: `Installed ${this.panel.version}, published ${version}.`, level: "success", timeout: 4000 });
+        }
+      } catch (e) {
+        if (manual) notify({ title: "Couldn't check for panel updates", body: String(e?.message ?? e), level: "error" });
+      }
+      delete this.busy.panel;
+      cx.notify();
+    });
+  }
+
+  // {have, latest} when the published panel is newer than this one.
+  panelUpdate() {
+    const have = this.panel?.version ?? "0.0.0", latest = this.panelLatest?.version;
+    return this.panel?.source && latest && newer(latest, have) ? { have, latest } : null;
+  }
+
+  // The panel updates itself through an agent: UPDATE.md (shipped in this folder) says how,
+  // including keeping the person's own edits. Asks first, then starts Claude in the Herdr home.
+  updatePanel() {
+    const u = this.panelUpdate();
+    if (!u) return;
+    const src = this.panel?.source ?? {};
+    const task = [
+      `Update the Herdr mod installed at mods/${MOD} (published as "${src.mod}" in ${src.repo}) from ${u.have} to ${u.latest}.`,
+      `Follow mods/${MOD}/UPDATE.md, but only for this one mod: skip finding other installed mods and layouts.`,
+      `I already confirmed this update, so don't ask again whether to update it; show me the new "## Changes" entries,`,
+      `and still stop and ask before replacing any of my own edits or keys.`,
+    ].join(" ");
+    openOverlay({ mod: "confirm", kind: "dialog", width: 420, props: {
+      title: `Update the Claude panel to ${u.latest}?`,
+      detail: `Installed: ${u.have}. A new Claude tab will follow the mod's UPDATE.md: back up this folder, check for your own edits, install ${u.latest} and check it.`,
+      command: { name: "tab.new", args: { name: "Update Claude panel", folder: appHome(), argv: ["claude"], task } },
+    } });
   }
 
   gatewayProfile() {
@@ -731,7 +788,7 @@ export default class Claude extends View {
       .child(div().w(96).flex_none().truncate().child(u.label))
       .child(div().flex_1().min_w(0).truncate().font_family("JetBrains Mono").text_size(11.5).text_color(u.available ? t.foreground : t.dim)
         .child(u.have ? (u.available ? `${u.have} → ${u.latest}` : `${u.have}${u.latest ? "" : " · ?"}`) : "not installed"))
-      .when(u.available, el => el.child(this.button(`upd-${u.id}`, "Update", "primary", cx => this.update(u), t, { busy: this.busy[`up-${u.id}`] })))
+      .when(u.available, el => el.child(this.button(`upd-${u.id}`, "Update", "primary", cx => this.update(u, cx), t, { busy: this.busy[`up-${u.id}`] })))
       .when(!u.available && Boolean(u.have && u.latest), el => el.child(div().text_size(11).text_color(t.ansi2).child("up to date"))));
     const errs = this.updates().flatMap(u => this.errorOf(`up-${u.id}`, t));
     const remoteErrs = Object.keys(this.remote?.errors ?? {});
@@ -824,6 +881,17 @@ export default class Claude extends View {
         .child(div().flex_none().font_family("JetBrains Mono").text_size(10.5).text_color(t.dim).child(m.id))));
   }
 
+  // Header pill: "Check for updates", or "Update to x.y.z" once a newer panel is published.
+  panelCta(t) {
+    const u = this.panelUpdate(), busy = this.busy.panel;
+    return h_flex().id("panel-update").h(24).px(9).mr(2).flex_none().items_center().rounded(12).cursor_pointer().text_size(11.5)
+      .when(Boolean(u), el => el.bg(t.accent).text_color(t.accent_foreground).hover(s => s.opacity(0.88)))
+      .when(!u, el => el.border_1().border_color(t.border).text_color(t.muted).hover(s => s.bg(t.hover).text_color(t.foreground)))
+      .tooltip(u ? `Claude panel ${u.have} → ${u.latest}` : `Claude panel ${this.panel?.version ?? ""}: check GitHub for a newer one`)
+      .on_click((e, cx) => { cx.stop_propagation(); if (busy) return; if (u) this.updatePanel(); else this.checkPanel(cx, true); })
+      .child(busy ?? (u ? `Update to ${u.latest}` : "Check for updates"));
+  }
+
   render(cx) {
     const t = theme();
     this.hadKeys = this.handle.is_focused();
@@ -843,6 +911,7 @@ export default class Claude extends View {
         .child(svg(`${ME}/claude.svg`).size(15).text_color(t.accent))
         .child(div().pl(4).font_semibold().child("Claude"))
         .child(div().pl(4).flex_1().min_w(0).truncate().text_size(12).text_color(t.dim).child(headerNote))
+        .when(Boolean(this.panel?.source), el => el.child(this.panelCta(t)))
         .when(Boolean(st) && !this.setupShown, el => el.child(iconButton("setup-open", `${CHROME}/settings.svg`, "Setup", cx => this.openSetup(cx))))
         .child(iconButton("refresh", "mods/servers/restart.svg", "Refresh (r)", cx => {
           this.refresh(cx);

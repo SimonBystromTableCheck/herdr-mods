@@ -37,14 +37,14 @@ https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/pond-profiles". N
 4. Open the panel once: the setup wizard installs cvm, puts it on PATH, installs Claude and cvp,
    and offers gateway profiles and agent-router.
 
-**Version:** 1.2.0 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.3.0 (see Changes at the end; also `"version"` in `mod.json`).
 
-**Update:** tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/pond-profiles/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder (`~/.cvm/herdr/`) and are kept.
+**Update:** from 1.3.0, the panel's header shows "Update to x.y.z" when a newer version is published; click it, confirm, and a new Claude tab updates just this mod. Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/pond-profiles/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder (`~/.cvm/herdr/`) and are kept.
 
 **Reaches the network and runs programs:** it runs `python3 ctl.py`, which runs `cvm`, `claude`
 (plugin commands), your login shell (to check PATH) and `security` (macOS Keychain, to read your
 claude.ai token for plan usage, never refreshed or written). It fetches from GitHub (cvm, cvp and
-agent-router versions, cvm's installer), `api.anthropic.com/api/oauth/usage` (plan usage) and the
+agent-router versions, cvm's installer, this repo's `versions.json`), `api.anthropic.com/api/oauth/usage` (plan usage) and the
 gateways you add (their `/v1/models`, `openapi.json`, usage API and device sign-in). It writes
 `~/.cvm/` (profiles, `herdr/`, `env.d/zz-herdr.sh`), your shell rc (setup's PATH step, once) and
 `~/.claude/settings.json` (setup sets `DISABLE_AUTOUPDATER`; agent-router setup sets
@@ -54,7 +54,8 @@ gateways you add (their `/v1/models`, `openapi.json`, usage API and device sign-
 
 A rounded panel (radius 10, 1px `border`, `accent` while it has the keyboard) with a 42px header:
 a Claude glyph in `accent`, "Claude", the account in effect for the focused pane's folder (dim),
-then a ⚙ button (reopens setup) and a refresh button. Below, cards scroll, each a titled section with
+then a pill for this panel's own updates ("Check for updates", outlined; "Update to x.y.z" in
+`accent` once a newer version is published), a ⚙ button (reopens setup) and a refresh button. Below, cards scroll, each a titled section with
 a one-line dim description. `j`/`k` moves the selected card, outlined in `accent`.
 
 - **Account:** one tile per cvp profile: a colored dot (`ansi4` for a claude.ai account, `ansi5` for
@@ -90,6 +91,14 @@ function; the cvp step warns when new terminals can't find `hc`.
 
 ## How it behaves
 
+- **Updating the panel itself:** the panel reads its `mod.json` (`version`, and `source` stamped by
+  this repo) and fetches `raw.githubusercontent.com/<owner>/<repo>/main/versions.json` on load and
+  every 6 hours (cached in localStorage). The header pill checks on click (toast if up to date or the
+  check fails). When the published `mods[source.mod].version` is newer, the pill turns into
+  "Update to x.y.z"; clicking it opens Herdr's `confirm` dialog, and Yes runs `tab.new` with
+  `argv: ["claude"]` in the Herdr home and a task: follow `UPDATE.md` for this mod only, the update
+  already confirmed, still asking before replacing the person's own edits. No `source` (a copy not
+  installed from this repo): no pill.
 - **Switching** (tile click or `p` to cycle) runs `cvm profile use <name>` with
   `CVP_NO_SETTINGS_SYNC=1`. New Claude sessions get the profile at launch through cvm's
   `env.d`; running sessions are untouched. On each status read the panel strips what cvp copied
@@ -138,6 +147,9 @@ function; the cvp step warns when new terminals can't find `hc`.
 
 ## Watch out
 
+- The panel's update check needs a public GitHub repo on branch `main`; raw.githubusercontent.com
+  caches for about 5 minutes after a publish. Versions before 1.3.0 have no pill: they update once
+  through "update my herdr mods".
 - cvm's `claude` must come first on PATH (setup adds `~/.cvm/bin` to your shell rc). A `claude`
   earlier on PATH bypasses profiles. Terminals open before setup keep their old PATH (Herdr keeps shells alive):
   run `source ~/.zshrc` in them or open a new tab. The PATH check reads `$PATH` order in a fresh
@@ -161,6 +173,11 @@ function; the cvp step warns when new terminals can't find `hc`.
 - An agent-router role's model and effort dropdowns save and show the new value after reload.
 
 ## Changes
+
+### 1.3.0 (2026-11-12)
+
+- Header pill "Check for updates" / "Update to x.y.z": checks this repo's `versions.json` for a newer panel and, after a confirm, starts a Claude tab that updates just this mod (following `UPDATE.md`).
+- The Updates card's Update buttons (Claude, cvm, cvp, plugins) work again: they were called without `cx`.
 
 ### 1.2.0 (2026-11-12)
 
