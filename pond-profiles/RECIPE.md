@@ -10,34 +10,32 @@ time it opens, a setup wizard installs whatever is missing. Nothing personal is 
 accounts, names, usage settings and sign-in tokens stay in `~/.cvm` on your machine.
 
 **Install:** tell your Herdr agent "Install the Herdr mod at
-https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/pond-profiles". Needs macOS or Linux,
-`python3`, `curl`/`bash` for the cvm install, and a Claude login (claude.ai) for the default account.
+https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/pond-profiles". You get a **Claude** button in the tab bar that opens it in the right-hand panel,
+next to Herdr's Files and Changes. You don't need the `pond` layout. Needs macOS or Linux, `python3`, `curl`/`bash` for the cvm install, and a Claude login (claude.ai) for the default account. What the agent does:
 
-1. Copy `mods/pond-profiles/` into `~/.config/herdr-app/mods/`, then
-   `herdr-app check ~/.config/herdr-app/mods/pond-profiles`.
-2. Add it to your layout. The mod is `"place": "none"`, so it shows only where a layout puts it.
-   - **On the `pond` layout** (this repo): nothing to do. Its right `panel-body` stack already has
-     the child `{ "id": "profiles", "type": "block", "content": { "mod": "pond-profiles" } }`, opened
-     from pond-tabs' account button or `ctrl-a C` (leader).
-   - **On Herdr's own `main` layout**, or any shipped one: clone it first, since shipped layouts are
-     read-only. Run `herdr-app do layout.clone '{"name":"main","as":"my-main"}'`, which also switches
-     to the clone.
-   - **In your own layout (or the clone):** add a column as the last child of the `root` row (on
-     `main`, after `work`):
-     ```json
-     { "id": "profiles-panel", "type": "column", "size": { "px": 380 }, "min": 300, "max": 700,
-       "children": [ { "id": "profiles", "type": "block", "content": { "mod": "pond-profiles" } } ] }
-     ```
-     If the layout already has a right-hand panel stack (like pond's `panel-body`), add just the
-     `profiles` block as one more child of it instead.
-   - Check `layouts/<name>.error` doesn't appear after saving.
-3. Show or hide the column with `herdr-app do layout.toggle --id profiles-panel`. For a stack child,
-   pick it with `herdr-app do layout.select --stack <stack id> --child profiles`. Bind a key in
-   `keys.json` if you want one, e.g. `"global": { "ctrl-shift-u": "layout.toggle:profiles-panel" }`.
-4. Open the panel once: the setup wizard installs cvm, puts it on PATH, installs Claude and cvp,
+1. Copy `mods/pond-profiles/` into `~/.config/herdr-app/mods/` and run `herdr-app check ~/.config/herdr-app/mods/pond-profiles`.
+2. The button comes from this repo's tab bar, `pond-tabs`, which draws a button for every panel in
+   the right-hand column. If `~/.config/herdr-app/mods/pond-tabs/` is missing, copy `mods/pond-tabs/`
+   from https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/pond-tabs and check it too.
+3. The shown layout (`herdr-app status` names it) must be a personal one whose `tabs` block shows
+   `pond-tabs`. Herdr's own layouts are read-only:
+   - On Herdr's `main`: `herdr-app do layout.clone '{"name":"main","as":"my-main"}'` (it switches
+     to the copy, which looks and works the same), then in `layouts/my-main.json` set the block
+     with `"id": "tabs"` to `"content": { "mod": "pond-tabs" }`. Tell the person a clone doesn't get
+     Herdr's later changes to `main`.
+   - On a personal layout: set its `tabs` block's `content` to `{ "mod": "pond-tabs" }` if it isn't.
+   - On `pond` (this repo): nothing to do.
+4. Within a few seconds the tab bar adds `{ "id": "pond-profiles", "type": "block", "content": { "mod": "pond-profiles" } }`
+   to the layout's `panel-body` stack (the right-hand `panel` column Herdr's `main` and its copies
+   have) and shows the button. Check with `herdr-app status` and tell the person where it is.
+5. Open the panel once: the setup wizard installs cvm, puts it on PATH, installs Claude and cvp,
    and offers gateway profiles and agent-router.
+6. Optional: with this repo's `leader` installed, `ctrl-a` then its key opens it too.
 
-**Version:** 1.3.3 (see Changes at the end; also `"version"` in `mod.json`).
+Without changing the tab bar, it also opens beside a terminal:
+`herdr-app do pane.split --direction right --mod pond-profiles` (`q` closes that pane).
+
+**Version:** 1.4.0 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** from 1.3.0, the panel's header shows "Update to x.y.z" when a newer version is published; click it, confirm, and a new Claude tab updates just this mod. Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/pond-profiles/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder (`~/.cvm/herdr/`) and are kept.
 
@@ -128,6 +126,8 @@ function; the cvp step warns when new terminals can't find `hc`.
 
 ## Built from
 
+- `mod.json` `panel`: `{ "title": "Claude", "icon": "claude.svg", "leader": "C" }`, read by `pond-tabs` (its button, labelled with the active account) and the `leader` (key).
+- `panel.js`: where the panel is and showing or closing it there (the same file in every panel mod from this repo; `tools/stamp.py` refuses copies that differ). `q` closes it wherever it is: a popup closes, a focused pane closes, and a layout block hides the node holding its stack (the `panel` column in Herdr's `main` and its copies). No layout ids are assumed.
 - `main.js`: the panel (cards, keys, the agent-router dropdowns, usage rendering).
 - `setup.js`: the wizard, the add-profile, rename and usage forms, and the hand-off writer.
 - `keybar.js`: the key bar. `claude.svg`: the glyph.
@@ -139,7 +139,7 @@ function; the cvp step warns when new terminals can't find `hc`.
 - `herdr-label.sh`: the launch hook. `herdr-statusline.sh`: the optional status line, copied to
   `~/.cvm/herdr/statusline.sh`; the previous status line command is kept in
   `~/.cvm/herdr/statusline-next` and run after it (jq, else python3, parses Claude's input).
-- Herdr: `exec`, `writeTextFile`, `notify`, `run("layout.hide")`, `run("pane.focus")`,
+- Herdr: `exec`, `writeTextFile`, `notify`, `run("pane.focus")` (closing through `panel.js`),
   `run("pane.go")`, `nextCommand()` (`setup`, `add-profile`, `finish`, `switch`, `updates`, `key:<k>`,
   `go:<dir>`), `setShared`.
 - Local state: `~/.cvm/herdr/pond-profiles.json` (display names, usage setups, setup flags,
@@ -173,6 +173,12 @@ function; the cvp step warns when new terminals can't find `hc`.
 - An agent-router role's model and effort dropdowns save and show the new value after reload.
 
 ## Changes
+
+### 1.4.0 (2026-11-13)
+
+- Works without the `pond` layout: installing it adds a button to the tab bar that opens it in the right-hand panel, next to Herdr's Files and Changes (the setup wizard runs on first open; needs `pond-tabs` as the layout's tab bar; see Install).
+- `q` closes it wherever it is (the right-hand column, a pane or a popup) through the shared `panel.js`, instead of assuming `pond`'s ids.
+- `mod.json` declares `"panel"` (leader `C`); the refresh icon is its own (it no longer needs `servers` installed).
 
 ### 1.3.3 (2026-11-12)
 

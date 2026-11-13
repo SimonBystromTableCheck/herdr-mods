@@ -7,6 +7,7 @@ import { spaces, panes, focused, agents, knownAgents, exec, hc, run, theme, sett
 import * as G from "./git.js";
 import { graphCell } from "./graph.js";
 import { SelfUpdate } from "./update.js";
+import { closePanel, hidePanel, revealPanel } from "./panel.js";
 
 const commitDraft = root => (shared("git.commitDrafts") ?? {})[root] ?? "";
 function setCommitDraft(root, msg) {
@@ -816,7 +817,7 @@ export default class Git extends View {
     if (!this.ctx) return;
     const space = spaces().find(s => s.active), origin = focused()?.tab, rec = shared("git.tab");
     if (!space) return;
-    run("layout.hide", { id: "panel" });
+    hidePanel("git");
     if (rec?.space === space.id && space.tabs.some(t => t.id === rec.tab)) {
       setShared("git.tab", { ...rec, origin });
       run("tab.select", { id: rec.tab });
@@ -836,8 +837,7 @@ export default class Git extends View {
 
   collapse() {
     const rec = shared("git.tab"), space = spaces().find(s => s.active), tab = rec?.tab ?? focused()?.tab;
-    run("layout.select", { stack: "panel-body", child: "git" });
-    run("layout.show", { id: "panel" });
+    revealPanel("git");
     if (rec?.origin && space?.tabs.some(t => t.id === rec.origin)) run("tab.select", { id: rec.origin });
     if (tab) run("tab.close", { id: tab, confirmed: true });
     setShared("git.tab", null);
@@ -920,8 +920,7 @@ export default class Git extends View {
       case "q":
         // Like quitting lazygit: put the panel away and give the keyboard back to the terminal.
         if (this.fixed) return false;
-        run("layout.hide", { id: "panel" });
-        if (focused()?.pane) run("pane.focus", { pane: focused().pane });
+        closePanel("git");
         return true;
       case "x": this.openMenu(`${SECTIONS[idx].title} actions`, this.actions().map(a => ({ ...a, hint: a.custom ? "custom" : a.key })), cx); return true;
     }

@@ -5,6 +5,7 @@ import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { exec, hc, home, appHome, readTextFile, writeTextFile, terminals, theme, settings, run, nextCommand, focused, setShared, pickFolder } from "herdr";
 import { keybar, keysCard } from "./keybar.js";
 import { SelfUpdate } from "./update.js";
+import { closePanel } from "./panel.js";
 
 const ICON = "mods/servers", CHROME = "mods/workspace-chrome";
 const LABEL = "herdr.server";
@@ -167,8 +168,7 @@ export default class Servers extends View {
       case "d": if (s && !busy && !live) { this.remove(s, cx); this.sel = Math.max(0, this.sel - 1); } return true;
       case "r": this.poll(cx); return true;
       case "q":
-        run("layout.hide", { id: "panel" });
-        if (focused()?.pane) run("pane.focus", { pane: focused().pane });
+        closePanel("servers");
         return true;
     }
     return false;

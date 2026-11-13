@@ -8,6 +8,7 @@ import { exec, home, appHome, terminals, panes, spaces, focused, theme, run, not
 import { keybar, keysCard } from "./keybar.js";
 import { SelfUpdate } from "./update.js";
 import { setupView, loadDoctor, openProfileForm, profileForm, openLabelForm, labelForm, openUsageForm, usageForm } from "./setup.js";
+import { closePanel } from "./panel.js";
 
 const MOD = "pond-profiles", ME = `mods/${MOD}`, CHROME = "mods/workspace-chrome";
 const CTL = () => `${appHome()}/${ME}/ctl.py`;
@@ -424,7 +425,7 @@ export default class Claude extends View {
     }
     if (this.setupShown) {
       if (k === "escape" && focused()?.pane) { run("pane.focus", { pane: focused().pane }); return true; }
-      if (k === "q") { run("layout.hide", { id: "panel" }); return true; }
+      if (k === "q") { closePanel(MOD); return true; }
       return false;
     }
     const moveTo = i => { this.sel = Math.max(0, Math.min(SECTIONS.length - 1, i)); this.scroll.scroll_to_item(this.sel); cx.notify(); };
@@ -442,8 +443,7 @@ export default class Claude extends View {
       case "u": this.checkUpdates(cx); return true;
       case "r": this.refresh(cx); this.loadRouter(cx); this.loadUsage(cx); return true;
       case "q":
-        run("layout.hide", { id: "panel" });
-        if (focused()?.pane) run("pane.focus", { pane: focused().pane });
+        closePanel(MOD);
         return true;
     }
     return false;
@@ -847,7 +847,7 @@ export default class Claude extends View {
         .child(div().pl(4).flex_1().min_w(0).truncate().text_size(12).text_color(t.dim).child(headerNote))
         .when(Boolean(this.selfUpdate.available()), el => el.child(div().mr(2).child(this.selfUpdate.pill(t))))
         .when(Boolean(st) && !this.setupShown, el => el.child(iconButton("setup-open", `${CHROME}/settings.svg`, "Setup", cx => this.openSetup(cx))))
-        .child(iconButton("refresh", "mods/servers/restart.svg", "Refresh (r)", cx => {
+        .child(iconButton("refresh", `${ME}/restart.svg`, "Refresh (r)", cx => {
           this.refresh(cx);
           if (this.setupShown) loadDoctor(this, cx); else { this.loadRouter(cx); this.loadUsage(cx); }
         }))

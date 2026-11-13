@@ -5,6 +5,7 @@ import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { keybar, keysCard } from "./keybar.js";
 import { exec, run, theme, settings, appHome, home, readTextFile, writeTextFile, watchFolder, nextCommand, setShared, focused } from "herdr";
 import { SelfUpdate } from "./update.js";
+import { closePanel } from "./panel.js";
 
 const ICON = "mods/todos";
 const ROW = 30, PAGE_ROW = 46;
@@ -449,11 +450,7 @@ export default class Todos extends View {
       cx.notify(); return true;
     }
     if (k === "?") { this.keysOpen = true; cx.notify(); return true; }
-    if (k === "q") {
-      run("layout.hide", { id: "panel" });
-      if (focused()?.pane) run("pane.focus", { pane: focused().pane });
-      return true;
-    }
+    if (k === "q") { closePanel("todos"); return true; }
     const handled = this.page ? this.pageKey(k, cx) : this.pagesKey(k, cx);
     if (handled) cx.notify();
     return handled;

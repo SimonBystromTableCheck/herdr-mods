@@ -3,9 +3,31 @@
 A panel of your local dev servers. Each card shows whether the server is running, the branch its folder is on, the localhost URL it printed, and the command it runs; start, stop, restart and its logs are one click or key away. Servers run as labeled herdr-core terminals, so they keep running when Herdr closes and are found again when it reopens. Adding one is a two-step picker: choose a folder under your projects root (`~/code` by default, changeable), then pick a detected start command (package.json scripts, Procfile, Rails, Docker Compose, Django, Cargo, Go) or type one.
 
 
-**Install:** Point your Herdr agent at this folder: copy `mods/servers/` into `~/.config/herdr-app/mods/`, then `herdr-app check ~/.config/herdr-app/mods/servers`.
+**Install:** tell your Herdr agent "Install the Herdr mod at
+https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/servers". You get a **Servers** button in the tab bar that opens it in the right-hand panel,
+next to Herdr's Files and Changes. You don't need the `pond` layout. What the agent does:
 
-**Version:** 1.1.2 (see Changes at the end; also `"version"` in `mod.json`).
+1. Copy `mods/servers/` into `~/.config/herdr-app/mods/` and run `herdr-app check ~/.config/herdr-app/mods/servers`.
+2. The button comes from this repo's tab bar, `pond-tabs`, which draws a button for every panel in
+   the right-hand column. If `~/.config/herdr-app/mods/pond-tabs/` is missing, copy `mods/pond-tabs/`
+   from https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/pond-tabs and check it too.
+3. The shown layout (`herdr-app status` names it) must be a personal one whose `tabs` block shows
+   `pond-tabs`. Herdr's own layouts are read-only:
+   - On Herdr's `main`: `herdr-app do layout.clone '{"name":"main","as":"my-main"}'` (it switches
+     to the copy, which looks and works the same), then in `layouts/my-main.json` set the block
+     with `"id": "tabs"` to `"content": { "mod": "pond-tabs" }`. Tell the person a clone doesn't get
+     Herdr's later changes to `main`.
+   - On a personal layout: set its `tabs` block's `content` to `{ "mod": "pond-tabs" }` if it isn't.
+   - On `pond` (this repo): nothing to do.
+4. Within a few seconds the tab bar adds `{ "id": "servers", "type": "block", "content": { "mod": "servers" } }`
+   to the layout's `panel-body` stack (the right-hand `panel` column Herdr's `main` and its copies
+   have) and shows the button. Check with `herdr-app status` and tell the person where it is.
+5. Optional: with this repo's `leader` installed, `ctrl-a` then its key opens it too.
+
+Without changing the tab bar, it also opens beside a terminal:
+`herdr-app do pane.split --direction right --mod servers` (`q` closes that pane).
+
+**Version:** 1.2.0 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** from 1.1.0, its header has a "Check for updates" pill that turns into "Update to x.y.z" when this repo publishes a newer version; click it, confirm, and a new Claude tab updates just this mod (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/servers/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept (your servers in `servers.json`); edits you made inside the mod folder are not.
 
@@ -34,9 +56,10 @@ Panel: theme `background`, text 13px, rounded 10 with a 1px border (`accent` whi
 
 ## Built from
 
-- `update.js`: the self-update pill (the same file in every mod from this repo; `tools/stamp.py` refuses copies that differ). It reads `mod.json` `version` and `source`, fetches the repo's `versions.json` (shared between mods as `herdr-mods.versions`, every 6 hours or on click) and on confirm runs `tab.new` with `claude` in the Herdr home. No `source`: no pill.
+- `update.js`: the self-update pill (the same file in every mod from this repo; `tools/stamp.py` refuses copies that differ). It reads `mod.json` `version` and `source`, fetches the repo's `versions.json` (shared between mods as `herdr-mods.versions`, on start and whenever the panel comes back on screen) and on confirm runs `tab.new` with `claude` in the Herdr home. No `source`: no pill.
 - `main.js` (all logic and rendering), `keybar.js` (footer keycaps and keys card, same file as the git and skills mods), icons `play.svg stop.svg restart.svg trash.svg external.svg`.
-- `mod.json`: `{"place": "none", "title": "Servers", "focusable": true}`. No `props`.
+- `mod.json`: `{ "place": "none", "title": "Servers", "focusable": true, "panel": { "title": "Servers", "icon": "server.svg", "leader": "r" } }`. No `props`. `panel` is what `pond-tabs` (button label and icon; it adds a green count of running servers) and the `leader` (key) read. `server.svg` is a copy of Herdr's `workspace-chrome` icon.
+- `panel.js`: where the panel is and showing or closing it there (the same file in every panel mod from this repo; `tools/stamp.py` refuses copies that differ). `q` closes it wherever it is: a popup closes, a focused pane closes, and a layout block hides the node holding its stack (the `panel` column in Herdr's `main` and its copies). No layout ids are assumed.
 - herdr: `exec hc home appHome readTextFile writeTextFile terminals theme settings run nextCommand focused setShared`. Commands: `terminal.peek`, `layout.hide`, `pane.focus`, `pane.go`.
 - `nextCommand()`: `focus`, `go:<direction>` (left: `pane.focus` back to the focused pane, since `pane.go` doesn't reliably move the keyboard out of a panel; other directions `pane.go`; `cmd-alt-arrows` are caught in the key handler and do the same; leaving cancels a pending 150ms focus retry, which also skips once focus has landed), `key:<k>` (e.g. `"servers.key:s"` in keys.json). Shared: `servers.hasKeys` (keyboard ownership, polled every 300ms).
 - Config: `~/.config/herdr-app/servers.json`, `{ "servers": [{ "id", "name", "cwd", "command", "added" }] }`; `id` is the name slug (max 20) plus 4 random characters. Saved with `writeTextFile(path, text, expected)`, retrying against the current file on conflict.
@@ -46,7 +69,7 @@ Panel: theme `background`, text 13px, rounded 10 with a 1px border (`accent` whi
 
 ## Watch out
 
-- `place: "none"`: nothing shows it by default. Show it with a layout block `{ "content": { "mod": "servers" } }` (it was built for the hidden right-hand `panel` column of the `pond` layout) or as a pane: `herdr-app do pane.split '{"direction":"right","mod":"servers"}'`. `mod.open` does not apply (no overlay in `mod.json`). `q` hides the layout node `panel`, which only exists in such a layout.
+- `place: "none"`: `pond-tabs` adds it to the right-hand panel (see Install); or open it as a pane: `herdr-app do pane.split '{"direction":"right","mod":"servers"}'`. `mod.open` does not apply (no overlay in `mod.json`).
 - The projects root is `servers.json` `"root"` (a path, `~` allowed), set by Change…; without it, `~/code` if that folder exists, else home. Saving keeps `root` next to `servers`. Existing servers keep their absolute `cwd`, so changing the root never moves them. The tree only browses with the mouse.
 - Writes `~/.config/herdr-app/servers.json` (outside its folder, not in this repo). Local machine only: no `on`, so remote spaces' servers aren't supported.
 - Server terminals carry no `herdr.space`/`herdr.tab` labels on purpose, so they never appear as tabs; don't add those labels.
@@ -66,6 +89,12 @@ Panel: theme `background`, text 13px, rounded 10 with a 1px border (`accent` whi
 - `d` on a stopped server removes it from the panel and from `servers.json`.
 
 ## Changes
+
+### 1.2.0 (2026-11-13)
+
+- Works without the `pond` layout: installing it adds a button to the tab bar that opens it in the right-hand panel, next to Herdr's Files and Changes (needs `pond-tabs` as the layout's tab bar; see Install).
+- `q` closes it wherever it is (the right-hand column, a pane or a popup) through the shared `panel.js`, instead of assuming `pond`'s ids.
+- `mod.json` declares `"panel"` (leader `r`); its tab-bar icon is now in the mod folder.
 
 ### 1.1.2 (2026-11-12)
 

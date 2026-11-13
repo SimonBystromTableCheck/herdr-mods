@@ -1,6 +1,7 @@
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { spaces, panes, run, openOverlay, theme, window, shared, layout, settings, terminals, readTextFile, home } from "herdr";
+import { spaces, panes, run, openOverlay, theme, window, shared, setShared, layout, settings, terminals, readTextFile, home, appHome } from "herdr";
+import * as fs from "fs/promises";
 import { SelfUpdate } from "./update.js";
 
 function find(node, id) {
@@ -11,6 +12,21 @@ function find(node, id) {
   }
   return null;
 }
+
+// Any block showing `mod`, anywhere in the tree.
+function shows(node, mod) {
+  if (!node) return false;
+  if (node.content?.mod === mod) return true;
+  return [...(node.children ?? []), ...(node.floating ?? [])].some(c => shows(c, mod));
+}
+
+// Buttons for the right-hand `panel-body` stack's children. A panel mod names itself in its mod.json
+// ("panel": {"title", "icon"}); these are Herdr's own Files and Changes (by child id), which don't.
+const BY_ID = {
+  files: { title: "Files", icon: "mods/files/file.svg" },
+  changes: { title: "Changes", icon: "mods/changes/changes.svg" },
+};
+const ADDED = "pond-tabs.added"; // {<layout>: [mods this tab bar added to it]}: never re-added once removed
 
 export default class Tabs extends View {
   init(_props, cx) {
@@ -29,6 +45,52 @@ export default class Tabs extends View {
     account(cx);
     cx.timer.every(3000, account);
     this.panels = JSON.parse(localStorage.getItem("panels") ?? "{}");
+    this.declared = {}; // mod -> {title, icon}: installed mods whose mod.json declares "panel"
+    this.tried = new Set();
+    this.scan(cx);
+    cx.timer.every(15000, cx => this.scan(cx));
+  }
+
+  // Finds installed panel mods, then adds any missing from this layout's panel stack.
+  scan(cx) {
+    cx.spawn(async cx => {
+      const declared = {};
+      let names = [];
+      try { names = await fs.readdir(`${appHome()}/mods`); } catch { return; }
+      for (const name of names) {
+        try {
+          const panel = JSON.parse(await readTextFile(`${appHome()}/mods/${name}/mod.json`)).panel;
+          if (panel?.title) declared[name] = { title: panel.title, icon: panel.icon ? `mods/${name}/${panel.icon}` : "mods/workspace-chrome/square.svg" };
+        } catch { /* not a mod, or no mod.json */ }
+      }
+      if (JSON.stringify(declared) !== JSON.stringify(this.declared)) { this.declared = declared; cx.notify(); }
+      await this.register();
+    });
+  }
+
+  // Installing a panel mod is enough: it gets a block in this layout's `panel-body` stack (so a button
+  // here) the first time it's seen. One the person removes stays removed. Herdr's own layouts refuse
+  // structure changes (layout.set), so this works on a personal layout (pond, a clone of main).
+  async register() {
+    const name = shared("layout"), root = layout();
+    if (!name || !root) return;
+    const added = shared(ADDED) ?? {}, mine = added[name] ?? [];
+    const present = Object.keys(this.declared).filter(m => shows(root, m) && !mine.includes(m));
+    if (present.length) setShared(ADDED, { ...added, [name]: [...mine, ...present] }); // in place by any route
+    const missing = Object.keys(this.declared).filter(m => !shows(root, m) && !mine.includes(m) && !present.includes(m) && !this.tried.has(`${name}/${m}`));
+    if (!missing.length) return;
+    let tree;
+    try { tree = JSON.parse(await readTextFile(`${appHome()}/layouts/${name}.json`)); } catch { return; }
+    const body = (function find(n) { if (n?.id === "panel-body") return n; for (const c of n?.children ?? []) { const f = find(c); if (f) return f; } return null; })(tree);
+    if (!body || body.type !== "stack") return;
+    const ids = new Set(JSON.stringify(tree).match(/"id":\s*"[^"]+"/g)?.map(x => x.split('"')[3]) ?? []);
+    for (const m of missing) {
+      this.tried.add(`${name}/${m}`);
+      const id = ids.has(m) ? `${m}-panel` : m;
+      ids.add(id);
+      body.children = [...(body.children ?? []), { id, type: "block", content: { mod: m } }];
+    }
+    run("layout.set", { layout: tree });
   }
 
   // The side panel is remembered per space: switching shows that space's choice
@@ -91,7 +153,13 @@ export default class Tabs extends View {
       ? Math.max(10, (root.traffic_lights[0] + 64) / settings().zoom - (sidebar?.hidden ? 0 : sidebar?.size?.px ?? 0))
       : 10;
     const panel = find(root, "panel"), body = find(root, "panel-body");
-    const enabled = [...(shared("workspace.panels") ?? ["files", "changes"]), "git", "skills", "todos", "servers", "remote", "profiles"];
+    const shipped = shared("workspace.panels") ?? ["files", "changes"];
+    // One button per child of the panel stack, in layout order (Herdr's Files/Changes as the welcome chose).
+    const buttons = (body?.children ?? []).filter(c => !(c.id in BY_ID) || shipped.includes(c.id)).map(c => {
+      const mod = c.content?.mod, meta = BY_ID[c.id] ?? this.declared[mod];
+      return meta ? { id: c.id, mod, ...meta } : null;
+    }).filter(Boolean);
+    const enabled = buttons.map(b => b.id);
     this.syncPanel(space, panel, body, enabled);
     const panelButton = (id, label, icon, badge, dot) => {
       const on = panel && !panel.hidden && body?.active === id;
@@ -112,15 +180,11 @@ export default class Tabs extends View {
       .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(3).overflow_x_scrollbar().children(shown.map(item)))
       .children([this.layoutUpdate.pill(t, { compact: true }), this.selfUpdate.pill(t, { compact: true })].filter(Boolean).map(p => p.mr(3)))
       .child(button("tab-new", "+", () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 })))
-      .when(enabled.includes("files"), el => el.child(panelButton("files", "Files", "mods/files/file.svg")))
-      .when(enabled.includes("changes"), el => el.child(panelButton("changes", "Changes", "mods/changes/changes.svg")))
-      .child(panelButton("git", "Git", "mods/workspace-chrome/git-branch.svg"))
-      .child(panelButton("skills", "Skills", "mods/skills/skills.svg"))
-      .child(panelButton("todos", "Todos", "mods/todos/todos.svg"))
-      .child(panelButton("servers", "Servers", "mods/workspace-chrome/server.svg", terminals().filter(x => x.state === "live" && x.labels?.["herdr.server"]).length))
-      .child(panelButton("remote", "PR", "mods/remote-checker/pr.svg"))
-      .child(panelButton("profiles", this.accountInfo?.label ?? (this.account ? this.account[0].toUpperCase() + this.account.slice(1) : "Claude"),
-        "mods/pond-profiles/claude.svg", 0, this.account ? (this.accountInfo?.gateway ? t.ansi5 : t.ansi4) : null))
+      .children(buttons.map(b =>
+        b.mod === "servers" ? panelButton(b.id, b.title, b.icon, terminals().filter(x => x.state === "live" && x.labels?.["herdr.server"]).length)
+        : b.mod === "pond-profiles" ? panelButton(b.id, this.accountInfo?.label ?? (this.account ? this.account[0].toUpperCase() + this.account.slice(1) : b.title),
+          b.icon, 0, this.account ? (this.accountInfo?.gateway ? t.ansi5 : t.ansi4) : null)
+        : panelButton(b.id, b.title, b.icon)))
       .when(w?.buttons, el => el.child(button("minimize", w.platform === "windows" ? svg("mods/pond-tabs/win-min.svg").size(16) : "−", () => run("window.minimize")))
         .child(button("maximize", w.platform === "windows" ? svg(`mods/pond-tabs/${w.maximized ? "win-restore" : "win-max"}.svg`).size(16) : "□", () => run("window.maximize")))
         .child(button("close-window", w.platform === "windows" ? svg("mods/pond-tabs/win-close.svg").size(16) : svg("mods/pane/close.svg").size(13), () => run("window.close"))));

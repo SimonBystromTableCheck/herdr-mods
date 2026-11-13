@@ -1,1 +1,1 @@
-{ "place": "none", "title": "Todos", "version": "1.1.2", "source": {"repo": "https://github.com/SimonBystromTableCheck/herdr-mods", "item": "todos", "mod": "todos"}, "focusable": true }
+{ "place": "none", "title": "Todos", "version": "1.2.0", "source": {"repo": "https://github.com/SimonBystromTableCheck/herdr-mods", "item": "todos", "mod": "todos"}, "focusable": true, "panel": {"title": "Todos", "icon": "todos.svg", "leader": "T"} }

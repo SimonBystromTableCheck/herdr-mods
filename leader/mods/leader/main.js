@@ -1,8 +1,13 @@
 // A tmux-style prefix: ctrl-a opens this popup, the next key runs a binding from bindings.js.
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { props, closeOverlay, theme, run, focused, hc, layout, settings, nextCommand, shared, setShared, spaces, panes, notify, exec } from "herdr";
-import BINDINGS from "./bindings.js";
+import { props, closeOverlay, theme, run, focused, hc, layout, settings, nextCommand, shared, setShared, spaces, panes, notify, exec, readTextFile, appHome } from "herdr";
+import * as fs from "fs/promises";
+import BINDINGS, { BUILTIN_PANELS } from "./bindings.js";
+import { panelOnScreen, revealPanel, hidePanel } from "./panel.js";
+
+// Installed panel mods (mod.json "panel" with a "leader" key), cached for every opening of the popup.
+const PANELS = "leader.panels"; // {at, list: [{mod, key, label, expand?}]}
 
 const MODIFIERS = new Set(["shift", "control", "alt", "platform", "function", "capslock", "cmd", "ctrl"]);
 
@@ -19,10 +24,20 @@ function find(node, id) {
   return null;
 }
 
+// Every mod a layout block shows.
+function modsIn(node, out = new Set()) {
+  if (node?.content?.mod) out.add(node.content.mod);
+  for (const c of [...(node?.children ?? []), ...(node?.floating ?? [])]) modsIn(c, out);
+  return out;
+}
+
 export default class Leader extends View {
   init(_props, cx) {
+    this.panels = shared(PANELS)?.list ?? [];
+    if (Date.now() - (shared(PANELS)?.at ?? 0) > 20000) this.scan(cx);
     // Read before this popup's own focus makes the panel report it lost the keyboard.
-    this.fromPanel = ["git", "skills", "todos", "gitview", "pond-files", "servers", "remote-checker", "pond-profiles"].find(m => shared(`${m}.hasKeys`) === true) ?? null;
+    const candidates = new Set([...modsIn(layout()), ...this.panels.map(p => p.mod), ...panes().map(p => p.mod).filter(Boolean)]);
+    this.fromPanel = [...candidates].find(m => shared(`${m}.hasKeys`) === true) ?? null;
     this.fromGitTab = shared("git.tabHasKeys") === true;
     this.fromGitview = shared("gitview.hasKeys") === true;
     this.handle = cx.focus_handle();
@@ -35,6 +50,33 @@ export default class Leader extends View {
 
   close() { closeOverlay(props().overlay); }
 
+  scan(cx) {
+    cx.spawn(async cx => {
+      const list = [];
+      let names = [];
+      try { names = await fs.readdir(`${appHome()}/mods`); } catch { return; }
+      for (const mod of names.sort()) {
+        try {
+          const panel = JSON.parse(await readTextFile(`${appHome()}/mods/${mod}/mod.json`)).panel;
+          if (panel?.leader) list.push({ mod, key: panel.leader, label: panel.title ?? mod, expand: panel.expand });
+        } catch { /* not a mod */ }
+      }
+      setShared(PANELS, { at: Date.now(), list });
+      this.panels = list;
+      cx.notify();
+    });
+  }
+
+  // The key list: this file's bindings, Herdr's own panels where the layout has them, then the
+  // installed panel mods. A key already taken keeps its first owner.
+  bindings() {
+    const root = layout(), taken = new Set(BINDINGS.map(b => b.key)), out = [...BINDINGS];
+    const add = b => { if (taken.has(b.key)) return; taken.add(b.key); out.push({ group: "Panels", ...b }); };
+    for (const b of BUILTIN_PANELS) { const mod = find(root, b.child)?.content?.mod; if (mod) add({ key: b.key, label: b.label, mod }); }
+    for (const p of this.panels) add({ key: p.key, label: p.label, mod: p.mod });
+    return out;
+  }
+
   press(k, cx) {
     if (k === "escape" || k === "q") return this.close();
     if (k === "ctrl-a") {
@@ -43,7 +85,7 @@ export default class Leader extends View {
       if (term) hc(["keys", term, "ctrl+a"]);
       return;
     }
-    const b = BINDINGS.find(x => x.key === k);
+    const b = this.bindings().find(x => x.key === k);
     if (!b) { this.miss = k; cx.notify(); return; }
     if (b.action === "expand") return this.expand(cx);
     // gitview (Changes): move for it while this popup is still open, then close it. Closed first,
@@ -56,26 +98,34 @@ export default class Leader extends View {
       else run("pane.go", b.args);
       return this.close();
     }
-    if (!(b.panel && b.focus)) this.close();
-    if (b.panel) {
-      const panel = find(layout(), "panel"), body = find(layout(), "panel-body"), mod = b.mod ?? b.panel;
-      // Shown but the keyboard is elsewhere (a terminal): focus it rather than hide it.
-      if (b.toggle && panel && !panel.hidden && body?.active === b.panel && (!b.focus || this.fromPanel === mod)) {
-        this.close();
-        run("layout.hide", { id: "panel" });
-        // The panel may have had the keyboard; hand it back to the terminal.
-        if (focused()?.pane) run("pane.focus", { pane: focused().pane });
-        return;
-      }
-      run("layout.select", { stack: "panel-body", child: b.panel });
-      run("layout.show", { id: "panel" });
-      if (b.focus) this.enterPanel(cx);
-      return;
-    }
+    if (b.mod) return this.panel(b.mod, cx);
+    this.close();
     // pane.go would start from the last focused terminal, not the panel this popup took the keyboard
     // from, so that panel makes the move itself once it has the keyboard back.
     if (b.run === "pane.go" && this.fromPanel) return run(`${this.fromPanel}.go:${b.args.direction}`);
     run(b.run, b.args ?? {});
+  }
+
+  // A panel: shown and holding the keyboard, hide it; shown with the keyboard elsewhere (a terminal),
+  // give it the keyboard; hidden, show it and give it the keyboard. A mod no layout block shows
+  // opens as a pane on the right of the tab (or gets focused there if it already is).
+  panel(mod, cx) {
+    const on = panelOnScreen(mod);
+    if (on && this.fromPanel === mod) {
+      this.close();
+      hidePanel(mod);
+      if (focused()?.pane) run("pane.focus", { pane: focused().pane });
+      return;
+    }
+    if (on === null) {
+      const pane = panes().find(p => p.mod === mod && p.tab === focused()?.tab);
+      this.close();
+      if (pane) run("pane.focus", { pane: pane.pane });
+      else run("pane.split", { direction: "right", mod });
+      return;
+    }
+    revealPanel(mod);
+    this.enterPanel(cx);
   }
 
   // Enter the right-hand panel the way the app's own navigation does (pane.go), not by
@@ -110,11 +160,12 @@ export default class Leader extends View {
     };
     const fromGitTab = this.fromGitTab, ownTab = f?.tab && (shared("gitview.own") ?? {})[space?.id] === f.tab;
     // A list that closed while it had the keys can leave the flag set, so it counts only while Changes shows.
-    const changesShown = !find(layout(), "panel")?.hidden && find(layout(), "panel-body")?.active === "changes";
-    if (ownTab || (this.fromGitview && changesShown && !fromGitTab && this.fromPanel !== "git")) return gitview();
+    const changesMod = find(layout(), "changes")?.content?.mod, changesShown = Boolean(changesMod && panelOnScreen(changesMod));
+    if (ownTab || (this.fromGitview && changesShown && !fromGitTab && !this.panels.some(p => p.mod === this.fromPanel && p.expand))) return gitview();
     this.close();
     if (this.fromGitTab) return run("git.collapse");
-    if (this.fromPanel === "git") return run("git.expand");
+    const own = this.panels.find(p => p.mod === this.fromPanel);
+    if (own?.expand) return run(`${own.mod}.${own.expand}`);
     if (this.fromPanel) {
       notify({ title: `${this.fromPanel[0].toUpperCase()}${this.fromPanel.slice(1)} has no expanded view`, level: "info", timeout: 2500 });
       return;
@@ -122,19 +173,19 @@ export default class Leader extends View {
     const sidebar = find(layout(), "sidebar"), panel = find(layout(), "panel");
     if (sidebar?.hidden && panel?.hidden) {
       const was = shared("leader.zen") ?? { sidebar: true, panel: true };
-      if (was.sidebar) run("layout.show", { id: "sidebar" });
-      if (was.panel) run("layout.show", { id: "panel" });
+      if (was.sidebar && sidebar) run("layout.show", { id: "sidebar" });
+      if (was.panel && panel) run("layout.show", { id: "panel" });
       setShared("leader.zen", null);
       return;
     }
     setShared("leader.zen", { sidebar: !sidebar?.hidden, panel: !panel?.hidden });
-    run("layout.hide", { id: "sidebar" });
-    run("layout.hide", { id: "panel" });
+    if (sidebar) run("layout.hide", { id: "sidebar" });
+    if (panel) run("layout.hide", { id: "panel" });
   }
 
   render() {
     const t = theme(), mono = settings().font_family ?? "JetBrains Mono";
-    const groups = [...new Set(BINDINGS.map(b => b.group))];
+    const all = this.bindings(), groups = [...new Set(all.map(b => b.group))];
     return v_flex().id("leader").size_full().p(14).gap(10).bg(t.popover).text_color(t.foreground).text_size(12.5)
       .track_focus(this.handle)
       .on_key_down((e, cx) => { if (MODIFIERS.has(e.key)) return; cx.stop_propagation(); this.press(keyOf(e), cx); })
@@ -144,7 +195,7 @@ export default class Leader extends View {
         .child(div().text_size(11).text_color(t.dim).child("esc cancel · ctrl-a send ctrl-a")))
       .child(h_flex().flex_1().gap(18).items_start().children(groups.map(g => v_flex().flex_1().gap(3)
         .child(div().pb(2).text_size(11).font_semibold().text_color(t.muted).child(g))
-        .children(BINDINGS.filter(b => b.group === g && !b.hidden).map(b => h_flex().gap(8).items_center()
+        .children(all.filter(b => b.group === g && !b.hidden).map(b => h_flex().gap(8).items_center()
           .child(div().w(30).flex_none().font_family(mono).text_color(t.accent).child(b.key === "1" && g === "Tabs" ? "1-9" : b.key))
           .child(div().flex_1().min_w(0).truncate().child(b.label)))))));
   }

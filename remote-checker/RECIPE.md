@@ -2,9 +2,31 @@
 
 A panel showing the GitHub pull request for the branch checked out in the focused terminal: its CI checks, reviewers, review threads and comments, diff size, commit count and when it was published. A GitHub-style summary card gives the headline ("All checks have passed", "Some checks haven't completed yet", "Some checks were not successful") with three bars for Checks, Comments and Approvals. It follows you between spaces and repos, refetches every 10s while it's showing, and has a refresh button.
 
-**Install:** Point your Herdr agent at this folder: copy `mods/remote-checker/` into `~/.config/herdr-app/mods/`, then `herdr-app check ~/.config/herdr-app/mods/remote-checker`. Needs `gh` installed and logged in (`gh auth login`).
+**Install:** tell your Herdr agent "Install the Herdr mod at
+https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/remote-checker". You get a **PR** button in the tab bar that opens it in the right-hand panel,
+next to Herdr's Files and Changes. You don't need the `pond` layout. Needs `gh` installed and logged in (`gh auth login`). What the agent does:
 
-**Version:** 1.1.2 (see Changes at the end; also `"version"` in `mod.json`).
+1. Copy `mods/remote-checker/` into `~/.config/herdr-app/mods/` and run `herdr-app check ~/.config/herdr-app/mods/remote-checker`.
+2. The button comes from this repo's tab bar, `pond-tabs`, which draws a button for every panel in
+   the right-hand column. If `~/.config/herdr-app/mods/pond-tabs/` is missing, copy `mods/pond-tabs/`
+   from https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/pond-tabs and check it too.
+3. The shown layout (`herdr-app status` names it) must be a personal one whose `tabs` block shows
+   `pond-tabs`. Herdr's own layouts are read-only:
+   - On Herdr's `main`: `herdr-app do layout.clone '{"name":"main","as":"my-main"}'` (it switches
+     to the copy, which looks and works the same), then in `layouts/my-main.json` set the block
+     with `"id": "tabs"` to `"content": { "mod": "pond-tabs" }`. Tell the person a clone doesn't get
+     Herdr's later changes to `main`.
+   - On a personal layout: set its `tabs` block's `content` to `{ "mod": "pond-tabs" }` if it isn't.
+   - On `pond` (this repo): nothing to do.
+4. Within a few seconds the tab bar adds `{ "id": "remote-checker", "type": "block", "content": { "mod": "remote-checker" } }`
+   to the layout's `panel-body` stack (the right-hand `panel` column Herdr's `main` and its copies
+   have) and shows the button. Check with `herdr-app status` and tell the person where it is.
+5. Optional: with this repo's `leader` installed, `ctrl-a` then its key opens it too.
+
+Without changing the tab bar, it also opens beside a terminal:
+`herdr-app do pane.split --direction right --mod remote-checker` (`q` closes that pane).
+
+**Version:** 1.2.0 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** from 1.1.0, its header has a "Check for updates" pill that turns into "Update to x.y.z" when this repo publishes a newer version; click it, confirm, and a new Claude tab updates just this mod (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/remote-checker/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept; edits you made inside the mod folder are not.
 
@@ -31,7 +53,7 @@ Panel: theme `background`, text 13px, rounded 10 with a 1px border (`accent` whi
 ## How it behaves
 
 - Which PR: the active space's focused terminal folder (`focused()` pane's `cwd`, else the space's folder) and its branch's upstream (`@{u}`). `gh pr view` finds the PR for that branch (re-looked-up at most once a minute, or on `r`); a branch without an upstream says it isn't pushed.
-- A 400ms timer watches the focused folder/branch and whether the panel shows (`panel` not hidden and `panel-body` on `remote`, or anywhere else it's placed): a change, or the panel coming into view, fetches at once. While showing it refetches every 10s; while hidden it doesn't fetch. A result for another folder is never shown for this one ("Looking…" until it loads).
+- A 400ms timer watches the focused folder/branch and whether the panel shows (`panel.js` `panelOnScreen`: nothing hidden on the way to its layout block and each stack on it; as a pane it counts as always showing): a change, or the panel coming into view, fetches at once. While showing it refetches every 10s; while hidden it doesn't fetch. A result for another folder is never shown for this one ("Looking…" until it loads).
 - A failed refetch keeps the last good PR on screen, marked stale.
 - Keys: `j`/`k` (or arrows) move between selectable rows (the PR card, the summary card, checks, reviewers, comments), `gg`/`G` top/bottom (also `<`/`>`, home/end), `ctrl-d`/`ctrl-u` six rows, `]`/`[` next / previous section, `enter`/`o`/`l` open the selected row in the browser (a check's details, a review, a comment, the PR, the PR's checks tab), `O` open the PR, `y` copy the selected row's link (a flash in the footer), `r` refetch, `h`/`←` or `escape` give the keyboard back to the terminal, `q` hide the panel and give the keyboard back, `?` the keys card (`escape`, `?` or `q` closes it). Double-click opens a row; click selects.
 - Leaving: `cmd-alt-left` (a `pane.go:left` key) and the leader's `h` (`remote-checker.go:left`) go straight back to the focused pane with `pane.focus` rather than `pane.go`; other directions use `pane.go`.
@@ -39,18 +61,19 @@ Panel: theme `background`, text 13px, rounded 10 with a 1px border (`accent` whi
 
 ## Built from
 
-- `update.js`: the self-update pill (the same file in every mod from this repo; `tools/stamp.py` refuses copies that differ). It reads `mod.json` `version` and `source`, fetches the repo's `versions.json` (shared between mods as `herdr-mods.versions`, every 6 hours or on click) and on confirm runs `tab.new` with `claude` in the Herdr home. No `source`: no pill.
+- `update.js`: the self-update pill (the same file in every mod from this repo; `tools/stamp.py` refuses copies that differ). It reads `mod.json` `version` and `source`, fetches the repo's `versions.json` (shared between mods as `herdr-mods.versions`, on start and whenever the panel comes back on screen) and on confirm runs `tab.new` with `claude` in the Herdr home. No `source`: no pill.
 - `main.js` (all logic and rendering), `keybar.js` (footer keycaps and keys card, the same file as the servers, todos and skills mods), icons `pr.svg comment.svg dot.svg ring.svg minus.svg check.svg x.svg external.svg`.
-- `mod.json`: `{ "place": "none", "title": "Remote Checker", "focusable": true }`. No `props`.
-- herdr: `exec theme settings run nextCommand focused panes spaces layout setShared home`. Commands: `layout.hide`, `pane.focus`, `pane.go`.
+- `mod.json`: `{ "place": "none", "title": "Remote Checker", "focusable": true, "panel": { "title": "PR", "icon": "pr.svg", "leader": "P" } }`. No `props`. `panel` is what `pond-tabs` (button label and icon) and the `leader` (key) read.
+- `panel.js`: where the panel is and showing or closing it there (the same file in every panel mod from this repo; `tools/stamp.py` refuses copies that differ). `q` closes it wherever it is: a popup closes, a focused pane closes, and a layout block hides the node holding its stack (the `panel` column in Herdr's `main` and its copies). No layout ids are assumed.
+- herdr: `exec theme settings run nextCommand focused panes spaces setShared home` (`layout`, `closeOverlay`, `props` through `panel.js`). Commands: `layout.hide`, `pane.close`, `pane.focus`, `pane.go`.
 - `nextCommand()`: `focus`, `go:<direction>`, `key:<k>` (e.g. `"remote-checker.key:r"` in keys.json), `refresh`. Shared: `remote-checker.hasKeys` (keyboard ownership, polled every 300ms, read by the `leader` mod).
 - Programs (with `on: space.machine`, so a remote space asks its own machine): one `sh -c` running `git branch --show-current`, `git rev-parse HEAD`, `git rev-parse --abbrev-ref --symbolic-full-name @{u}`, `git rev-list --left-right --count HEAD...@{u}`, `git remote get-url <branch remote>`; `gh pr view --json number,url`; `gh api graphql` with one query: the PR's title, state, draft, dates (`publishedAt`), author, base/head, additions/deletions/changedFiles, `reviewDecision`, `mergeable`, `mergeStateStatus`, `commits(last:1)` with `statusCheckRollup.contexts(first:100)` (CheckRun name/status/conclusion/detailsUrl/workflow, StatusContext context/state/targetUrl, both `isRequired(pullRequestNumber:)`), `reviewRequests`, `latestReviews`, `comments(last:20)`, `reviewThreads(first:100)` with their first comment. `open` for links, `pbcopy` for copy.
 - Rows are drawn by hand, each with a fixed height, in an `overflow_hidden` box shifted up by the scroll offset; the wheel and the selection move that offset.
-- Art: Lucide-style 24px stroke icons; Herdr's shipped `mods/workspace-chrome/spinner.svg` and `git-branch.svg`; the refresh icon is `mods/servers/restart.svg` (from this repo's `servers`).
+- Art: Lucide-style 24px stroke icons; Herdr's shipped `mods/workspace-chrome/spinner.svg` and `git-branch.svg`; the refresh icon is its own `restart.svg`.
 
 ## Watch out
 
-- `place: "none"`: nothing shows it by default. It was built as the `remote` child of the `pond` layout's right-hand `panel-body` stack: `{ "id": "remote", "type": "block", "content": { "mod": "remote-checker" } }`. Its "only fetch while showing" check uses those ids (`panel`, `panel-body`, child `remote`); placed anywhere else (a pane, another layout) it counts as always showing. `q` hides the layout node `panel`.
+- `place: "none"`: `pond-tabs` adds it to the right-hand panel (see Install; in `pond` its child id is `remote`, elsewhere `remote-checker`). Its "only fetch while showing" check finds its block by mod, not by id; as a pane it counts as always showing.
 - Never start a fetch from `render()`: it calls `cx.notify()`, which throws during render and left the fetch flag stuck ("fetching…" forever) in the first build. Fetches start from timers and handlers only.
 - `panes()` entries are keyed `pane`, not `id`.
 - A `v_virtual_list` here drew nothing at all (it sizes itself from its first row), so the list scrolls by hand. `Background.pattern_slash` can't go to `.bg()` (canvas paint only), so empty bars aren't hatched like GitHub's.
@@ -71,6 +94,12 @@ Panel: theme `background`, text 13px, rounded 10 with a 1px border (`accent` whi
 - A local commit not yet pushed shows `↑1 unpushed` on the PR card.
 
 ## Changes
+
+### 1.2.0 (2026-11-13)
+
+- Works without the `pond` layout: installing it adds a button to the tab bar that opens it in the right-hand panel, next to Herdr's Files and Changes (needs `pond-tabs` as the layout's tab bar; see Install).
+- `q` closes it wherever it is (the right-hand column, a pane or a popup) through the shared `panel.js`, instead of assuming `pond`'s ids. "Only fetch while showing" finds its block by mod, so it works under any child id.
+- `mod.json` declares `"panel"` (leader `P`); the refresh icon is its own (it no longer needs `servers` installed).
 
 ### 1.1.2 (2026-11-12)
 

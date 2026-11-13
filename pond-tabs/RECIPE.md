@@ -1,20 +1,29 @@
 # Pond Tabs
 
-Herdr's tab bar with more panel buttons. The active space's tabs are pills
-along the top of the work area (program icon, name, agent status, a close `x`
-on the active one), then `+`, then toggle buttons for the right-side panel:
-Files, Changes, Git, Skills, Todos, Servers and PR, where Servers carries a green
-count of running dev servers. The chosen panel is remembered per space.
+Herdr's tab bar with a button for every panel in the right-hand column. The active space's tabs are
+pills along the top of the work area (program icon, name, agent status, a close `x` on the active
+one), then `+`, then one toggle button per panel: Herdr's Files and Changes, and any panel mod you
+install (Git, Skills, Todos, Servers, PR, Claude from this repo, or another that declares itself).
+Installing a panel mod is enough: the tab bar adds it to the right-hand column and shows its
+button. Servers carries a green count of running dev servers. The chosen panel is remembered per space.
 
 
-**Install:** point your Herdr agent at this folder: copy `mods/pond-tabs/` into
-`~/.config/herdr-app/mods/`, then `herdr-app check ~/.config/herdr-app/mods/pond-tabs`.
-It is `"place": "none"` and replaces the layout's `tabs` block: clone a layout
-(`herdr-app do layout.clone '{"name":"main","as":"my-layout"}'`) and set the
-`tabs` block's `content` to `{ "mod": "pond-tabs" }`. This repo's `pond`
-layout already does, at 42px tall.
+**Install:** tell your Herdr agent "Install the Herdr mod at
+https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/pond-tabs". What the agent does:
 
-**Version:** 1.3.1 (see Changes at the end; also `"version"` in `mod.json`).
+1. Copy `mods/pond-tabs/` into `~/.config/herdr-app/mods/` and run
+   `herdr-app check ~/.config/herdr-app/mods/pond-tabs`.
+2. Make it the shown layout's tab bar. Herdr's own layouts are read-only:
+   - On Herdr's `main`: `herdr-app do layout.clone '{"name":"main","as":"my-main"}'` (it switches
+     to the copy, which looks and works the same), then in `layouts/my-main.json` set the block
+     with `"id": "tabs"` to `"content": { "mod": "pond-tabs" }`. Tell the person a clone doesn't get
+     Herdr's later changes to `main`.
+   - On a personal layout: set its `tabs` block's `content` to `{ "mod": "pond-tabs" }`.
+   - On `pond` (this repo): it already is (42px tall).
+
+Panel mods from this repo point here for their button; their install does steps 1–2 if needed.
+
+**Version:** 1.4.0 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** from 1.2.0, a small "Tabs ↑ x.y.z" pill appears before + when this repo publishes a newer version (and "Pond ↑ x.y.z" for the shown layout, which updates the layout and offers its mods); click it, confirm, and a new Claude tab updates just this mod (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/pond-tabs/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept; edits you made inside the mod folder are not.
 
@@ -31,9 +40,9 @@ padding, 3px gaps), left to right:
   zoomed), a 12px `working` spinner while an agent works, a 6px `blocked` or
   `done` dot, and on the active tab a 12px close `x` in `dim`.
 - **`+`**, 26px square button, `dim`.
-- **Panel buttons**, 26px tall, radius 6, 12px text, 14px icon + label: Files,
-  Changes (only if enabled in shared `workspace.panels`, default both), then
-  always Git, Skills, Todos, Servers, PR. The open one is `selected`/`foreground`;
+- **Panel buttons**, 26px tall, radius 6, 12px text, 14px icon + label: one per child of the
+  layout's `panel-body` stack, in its order. Files and Changes show only if enabled in shared
+  `workspace.panels` (default both). The open one is `selected`/`foreground`;
   others `chrome`/`muted`. Servers adds a 16px round badge (`ansi2` green,
   `background` text, 10.5px semibold) with the number of live terminals
   labeled `herdr.server`, hidden at 0.
@@ -49,6 +58,13 @@ padding, 3px gaps), left to right:
 - `+` opens the shipped `new-menu` popup (250×512): new terminal or agent.
 - A panel button shows that child of the `panel-body` stack and the `panel`
   column; clicking the open one hides the panel.
+- **New panels add themselves.** Every 15 s (and on start) it reads `mods/*/mod.json`. A mod with
+  `"panel": { "title", "icon" }` that the shown layout doesn't show anywhere gets a block
+  `{ "id": <mod>, "type": "block", "content": { "mod": <mod> } }` appended to the `panel-body` stack
+  (`layout.set` with the layout file's tree; the id gets `-panel` if taken), so installing the mod
+  is enough. Each layout remembers what it added (shared `pond-tabs.added`): a block the person
+  removes isn't added back. Herdr's own layouts refuse structure changes, so this needs a personal
+  layout.
 - Per space: the open panel (or none) is saved when it changes and restored on
   switching spaces; a space never seen keeps whatever is showing.
 - Agent status per tab: working = spinning ring, blocked / done = colored dot,
@@ -56,38 +72,39 @@ padding, 3px gaps), left to right:
 
 ## Built from
 
-- `update.js`: the self-update pill (the same file in every mod from this repo; `tools/stamp.py` refuses copies that differ). It reads `mod.json` `version` and `source`, fetches the repo's `versions.json` (shared between mods as `herdr-mods.versions`, every 6 hours or on click) and on confirm runs `tab.new` with `claude` in the Herdr home. No `source`: no pill.
+- `update.js`: the self-update pill (the same file in every mod from this repo; `tools/stamp.py` refuses copies that differ). It reads `mod.json` `version` and `source`, fetches the repo's `versions.json` (shared between mods as `herdr-mods.versions`, on start and whenever a panel comes back on screen) and on confirm runs `tab.new` with `claude` in the Herdr home. No `source`: no pill.
 - A clone of Herdr's shipped `tabs` mod (`mod.json` has
   `cloned_from: { name: "tabs", version: "0.1.13" }`). Differences from the
   shipped one, all in `main.js`:
-  - `enabled` panels = `workspace.panels` plus `"git", "skills", "todos", "servers", "remote", "profiles"`,
-    so per-space restore accepts those too.
-  - Five extra `panelButton`s after Changes: Git
-    (`mods/workspace-chrome/git-branch.svg`), Skills (`mods/skills/skills.svg`),
-    Todos (`mods/todos/todos.svg`), Servers (`mods/workspace-chrome/server.svg`),
-    PR (child `remote`, `mods/remote-checker/pr.svg`), then the Claude account
-    (child `profiles`, `mods/pond-profiles/claude.svg`, labelled with the active cvp profile).
-  - `panelButton` takes a `badge` count; Servers passes
-    `terminals().filter(x => x.state === "live" && x.labels?.["herdr.server"]).length`
-    (imports `terminals`).
+  - Panel buttons come from the `panel-body` stack's children. Label and icon: `BY_ID` for Herdr's
+    `files` and `changes` (by child id), else the child's mod's `mod.json` `panel` (`icon` is a file
+    in the mod folder; none: `mods/workspace-chrome/square.svg`), else `BY_MOD`, a fallback for this
+    repo's panels that don't declare one yet (`git`, `skills`, `servers`, `remote-checker` as PR,
+    `pond-profiles`). A child with none of these gets no button. Per-space restore accepts every
+    child with a button.
+  - Two specials by mod: `servers` gets a `badge` count
+    (`terminals().filter(x => x.state === "live" && x.labels?.["herdr.server"]).length`), and
+    `pond-profiles` is labelled with the active cvp profile and a dot (`ansi4` claude.ai, `ansi5` gateway).
+  - `scan()` / `register()`: the self-adding panels above (`fs/promises` `readdir` of `mods/`,
+    `readTextFile`, `layout.set`).
   - Window-button icons point at `mods/pond-tabs/win-*.svg` instead of `mods/tabs/`.
 - Files: `main.js`, `mod.json`, `win-min.svg`, `win-max.svg`, `win-restore.svg`,
   `win-close.svg` (16px, 1px stroke; same as shipped).
 - `herdr`: `spaces`, `panes` (program per tab), `terminals`, `run`,
-  `openOverlay`, `theme`, `window`, `shared`, `layout`, `settings` (zoom).
+  `openOverlay`, `theme`, `window`, `shared`, `setShared`, `layout`, `settings` (zoom),
+  `readTextFile`, `appHome`; `fs/promises` `readdir`.
 - Commands: `tab.select`, `tab.move`, `tab.rename`, `tab.close`, `tab.prev`,
   `tab.next`, `layout.select {stack: "panel-body", child}`,
-  `layout.show/hide {id: "panel"}`, `window.minimize/maximize/close`.
+  `layout.show/hide {id: "panel"}`, `layout.set {layout}`, `window.minimize/maximize/close`.
 - Shipped mods used: `menu`, `new-menu`, and icons from `pane`, `files`,
   `changes`, `workspace-chrome`.
 
 ## Watch out
 
-- The Git, Skills, Todos, Servers and PR buttons always show. They need the layout's
-  `panel-body` stack to have children with those ids (blocks for the `git`,
-  `skills`, `todos`, `servers` mods from this repo, and `remote` for `remote-checker`, as in `pond`); on the
-  shipped `main` layout they select a child that doesn't exist. The Skills, Todos and
-  PR icons come from those mods' folders and are blank without them.
+- It needs the layout's right-hand `panel` column with a `panel-body` stack (Herdr's `main` and its
+  copies have one). A layout without them shows no panel buttons and adds nothing.
+- Self-adding only appends to the stack; it never removes. Uninstalling a mod leaves its block in the
+  layout (its button goes, unless it's one of the `BY_MOD` fallbacks): remove the block from the layout file.
 - In `pond` the `changes` child runs the third-party `gitview` mod
   (github.com/ChmaraX/herdr-gitview, not in this repo); pond-tabs only selects
   the child id, so it works with shipped `changes` too.
@@ -110,6 +127,11 @@ padding, 3px gaps), left to right:
 - An agent working in a tab shows the spinning ring on its pill.
 
 ## Changes
+
+### 1.4.0 (2026-11-13)
+
+- Panel buttons come from the layout's `panel-body` stack, labelled and iconned by each mod's `mod.json` `panel`, instead of a fixed list: any subset of panels works.
+- Installing a panel mod adds it to the right-hand panel stack of a personal layout (`layout.set`, once per layout; one you remove stays removed). Use it as the tab bar of a copy of Herdr's `main` to get buttons for single mods from this repo.
 
 ### 1.3.1 (2026-11-12)
 

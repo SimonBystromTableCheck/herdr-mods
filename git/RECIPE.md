@@ -3,9 +3,31 @@
 A lazygit-style git panel for the repo of the focused terminal. Numbered sections (Branches, Commits, Stash) sit beside a preview of the selected item (a branch's log with a drawn commit graph, a commit's or stash's full diff, or a command's output). Vim-ish keys drive it: check out, merge, rebase, squash, fixup, reword, drop, reorder, cherry-pick, push, pull. Writes run in background herdr-core terminals whose output stays in a copyable log, and a merge or rebase conflict or a failed command (a pre-commit hook, say) can be handed to a coding agent with one key. When a merge or rebase stops on conflicts, `v` opens a Conflicts pane beside the tab: the conflicted files, a lazygit-style chunk picker (ours / theirs / both, undo), Ask AI, and continue / abort with a failure box you can hand to an agent.
 
 
-**Install:** Point your Herdr agent at this folder: copy `mods/git/` and `mods/git-conflicts/` into `~/.config/herdr-app/mods/`, then `herdr-app check` each of them.
+**Install:** tell your Herdr agent "Install the Herdr mod at
+https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/git". You get a **Git** button in the tab bar that opens it in the right-hand panel,
+next to Herdr's Files and Changes. You don't need the `pond` layout. Needs `git`, `perl` and `nvim` (see Watch out). What the agent does:
 
-**Version:** 1.1.2 (see Changes at the end; also `"version"` in `mod.json`).
+1. Copy `mods/git/` and `mods/git-conflicts/` into `~/.config/herdr-app/mods/` and run `herdr-app check ~/.config/herdr-app/mods/git` and `herdr-app check ~/.config/herdr-app/mods/git-conflicts`.
+2. The button comes from this repo's tab bar, `pond-tabs`, which draws a button for every panel in
+   the right-hand column. If `~/.config/herdr-app/mods/pond-tabs/` is missing, copy `mods/pond-tabs/`
+   from https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/pond-tabs and check it too.
+3. The shown layout (`herdr-app status` names it) must be a personal one whose `tabs` block shows
+   `pond-tabs`. Herdr's own layouts are read-only:
+   - On Herdr's `main`: `herdr-app do layout.clone '{"name":"main","as":"my-main"}'` (it switches
+     to the copy, which looks and works the same), then in `layouts/my-main.json` set the block
+     with `"id": "tabs"` to `"content": { "mod": "pond-tabs" }`. Tell the person a clone doesn't get
+     Herdr's later changes to `main`.
+   - On a personal layout: set its `tabs` block's `content` to `{ "mod": "pond-tabs" }` if it isn't.
+   - On `pond` (this repo): nothing to do.
+4. Within a few seconds the tab bar adds `{ "id": "git", "type": "block", "content": { "mod": "git" } }`
+   to the layout's `panel-body` stack (the right-hand `panel` column Herdr's `main` and its copies
+   have) and shows the button. Check with `herdr-app status` and tell the person where it is.
+5. Optional: with this repo's `leader` installed, `ctrl-a` then its key opens it too.
+
+Without changing the tab bar, it also opens beside a terminal:
+`herdr-app do pane.split --direction right --mod git` (`q` closes that pane).
+
+**Version:** 1.2.0 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** from 1.1.0, an "Update to x.y.z" pill appears in the Git (and Conflicts) header when this repo publishes a newer version; click it, confirm, and a new Claude tab updates just this mod (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/git/` and `mods/git-conflicts/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept (commit-message drafts and panel state); edits you made inside the mod folder are not.
 
@@ -51,9 +73,10 @@ Panel: theme `background`, text 12.5px, rounded 10 with a 1px border (`accent` w
 
 ## Built from
 
-- `update.js`: the self-update pill (the same file in every mod from this repo; `tools/stamp.py` refuses copies that differ). It reads `mod.json` `version` and `source`, fetches the repo's `versions.json` (shared between mods as `herdr-mods.versions`, every 6 hours or on click) and on confirm runs `tab.new` with `claude` in the Herdr home. No `source`: no pill.
+- `update.js`: the self-update pill (the same file in every mod from this repo; `tools/stamp.py` refuses copies that differ). It reads `mod.json` `version` and `source`, fetches the repo's `versions.json` (shared between mods as `herdr-mods.versions`, on start and whenever the panel comes back on screen) and on confirm runs `tab.new` with `claude` in the Herdr home. No `source`: no pill.
 - `main.js` (view, keys, actions, rendering), `git.js` (reads and writes), `graph.js` (lane layout and graph cell), `keybar.js` (footer and keys card, shared design with the servers/skills mods), `seq-edit.pl` (a `GIT_SEQUENCE_EDITOR`: `replace` / `swap` / `move` modes driven by `HERDR_MODE`, `HERDR_A`, `HERDR_B`, `HERDR_OP`), `config.json`, icons `fetch.svg pull.svg push.svg popout.svg copy.svg ai.svg`.
-- `mod.json`: `{ "place": "none", "title": "Git", "focusable": true }`.
+- `mod.json`: `{ "place": "none", "title": "Git", "focusable": true, "panel": { "title": "Git", "icon": "git-branch.svg", "leader": "g", "expand": "expand" } }`. `panel` is what tab bars like `pond-tabs` and the `leader` read: button label and icon (in the mod folder), leader key, and the command (`git.expand`) leader `e` sends.
+- `panel.js`: where the panel is and showing or closing it there (the same file in every panel mod from this repo; `tools/stamp.py` refuses copies that differ). `q` closes it wherever it is: a popup closes, a focused pane closes, and a layout block hides the node holding its stack (the `panel` column in Herdr's `main` and its copies). No layout ids are assumed.
 - `props`: none in a layout block; `{ cwd, on }` pins it to one repo (the expanded tab).
 - herdr: `spaces panes focused agents knownAgents exec hc run theme settings props appHome watchFolder nextCommand readTextFile setShared shared`. Commands: `tab.new`, `tab.select`, `tab.close`, `terminal.open`, `terminal.peek`, `agent.focus`, `pane.go`, `pane.focus`, `layout.hide`, `layout.show`, `layout.select`, `git.focus`.
 - `nextCommand()`: `focus`, `expand`, `collapse`, `go:<direction>` (left, in the panel: `pane.focus` back to the focused pane, since `pane.go` doesn't reliably move the keyboard out of a panel; in its own tab and other directions `pane.go`; `cmd-alt-arrows` are caught in the key handler and do the same; leaving cancels a pending 150ms focus retry, which also skips once focus has landed), `key:<k>` (bind e.g. `"git.key:P"` in keys.json).
@@ -63,12 +86,12 @@ Panel: theme `background`, text 12.5px, rounded 10 with a 1px border (`accent` w
 - `config.json`: `editor` (for conflicted files; default `$VISUAL`/`$EDITOR`/`vi`) and lazygit-style `customCommands` (`key` like `<c-p>`, `context` global/localBranches/remoteBranches/commits/stash, `command` with `{{.SelectedLocalBranch.Name}}`-style fields, `output: "terminal"` for a new tab, else the log). It ships one: `ctrl-p` prunes branches whose remote is gone.
 - `git-conflicts/`: `main.js` (the pane), `logic.mjs` (pure: `parse` conflict markers incl. diff3 and CRLF, `resolve`, `rows`, `unmerged` from `status --porcelain=v2 -z`, `KINDS`; tested by `test_logic.mjs`), `mod.json` `{ "place": "none", "title": "Conflicts", "focusable": true }`. Props `{ tab, root, gitDir, on }`. herdr: `agents exec hc knownAgents nextCommand panes props readTextFile run settings spaces theme writeTextFile`; commands `pane.close`, `pane.go`, `tab.new`, `terminal.open`.
 - The panel opens the pane with gitview's `herdr-gitview json sidebar --tab <tab> --mod git-conflicts --props <json>` (full height at the tab's right edge, as gitview's diff pane), read from `mods/gitview/config.json`; without gitview, `pane.split {direction: "right", mod: "git-conflicts"}`.
-- Art: Lucide-style 24px stroke icons; uses Herdr's shipped `mods/workspace-chrome/git-branch.svg`, `spinner.svg`, `terminal.svg`.
+- Art: Lucide-style 24px stroke icons; `git-branch.svg` (its tab-bar icon, a copy of Herdr's) in the mod folder; Herdr's shipped `mods/workspace-chrome/git-branch.svg`, `spinner.svg`, `terminal.svg`.
 
 ## Watch out
 
-- `place: "none"`: nothing shows it by default. Show it with a layout block `{ "content": { "mod": "git" } }` (it was built for a hidden right-hand `panel` column with a `panel-body` stack, as in the `pond` layout), or as a pane: `herdr-app do pane.split '{"direction":"right","mod":"git"}'`. `mod.open` does not apply (no overlay in `mod.json`).
-- `q`, pop-out and collapse assume layout ids `panel` and stack `panel-body` with a child `git`. Elsewhere `q` and collapse's panel steps do nothing useful; pop-out still opens the tab.
+- `place: "none"`: `pond-tabs` adds it to the right-hand panel (see Install); or open it as a pane: `herdr-app do pane.split '{"direction":"right","mod":"git"}'`. `mod.open` does not apply (no overlay in `mod.json`).
+- Pop-out hides the panel's column and collapse shows it again wherever the layout has the `git` block (`panel.js`); as a pane, pop-out still opens the tab and collapse just closes it.
 - The folder name `git` is hardcoded: icons `mods/git/*.svg`, `${appHome()}/mods/git/config.json`, `${appHome()}/mods/git/seq-edit.pl`, and `tab.new {mod: "git"}`. Rename the folder and these break.
 - `gitview` (github.com/ChmaraX/herdr-gitview, not in this repo) is optional: with it, the Conflicts pane opens full height at the tab's right edge like gitview's diff pane; without it, it splits right of the focused pane. The footer copies its look. The `leader` mod in this repo reads `git.hasKeys` and runs `git.expand`/`git.collapse`, but Git works without it.
 - Needs `git`, `perl` (commit rewrites), `sh`; `gh` is optional (PR badges, cleanup by PR state). `o` and PR links use macOS `open`. The editor tab runs `nvim` per the shipped config.
@@ -96,6 +119,12 @@ Panel: theme `background`, text 12.5px, rounded 10 with a 1px border (`accent` w
 - With every file decided, `c` continues; a continue blocked by a failing hook shows the red failure box with the hook's error, and `f` offers to send it to an agent.
 
 ## Changes
+
+### 1.2.0 (2026-11-13)
+
+- Works without the `pond` layout: installing it adds a button to the tab bar that opens it in the right-hand panel, next to Herdr's Files and Changes (needs `pond-tabs` as the layout's tab bar; see Install).
+- `q` closes it wherever it is (the right-hand column, a pane or a popup) through the shared `panel.js`, instead of assuming `pond`'s ids. Pop-out and collapse find the Git block by mod too.
+- `mod.json` declares `"panel"` (leader `g`, and `expand` for leader `e`); its tab-bar icon is now in the mod folder.
 
 ### 1.1.2 (2026-11-12)
 

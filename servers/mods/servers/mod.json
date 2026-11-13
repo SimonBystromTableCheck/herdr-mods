@@ -1,1 +1,1 @@
-{ "place": "none", "title": "Servers", "version": "1.1.2", "source": {"repo": "https://github.com/SimonBystromTableCheck/herdr-mods", "item": "servers", "mod": "servers"}, "focusable": true }
+{ "place": "none", "title": "Servers", "version": "1.2.0", "source": {"repo": "https://github.com/SimonBystromTableCheck/herdr-mods", "item": "servers", "mod": "servers"}, "focusable": true, "panel": {"title": "Servers", "icon": "server.svg", "leader": "r"} }

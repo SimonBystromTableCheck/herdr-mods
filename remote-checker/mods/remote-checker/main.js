@@ -3,13 +3,13 @@
 // while the panel shows, and on `r` / the refresh button.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { exec, theme, settings, run, nextCommand, focused, panes, spaces, layout, setShared, home } from "herdr";
+import { exec, theme, settings, run, nextCommand, focused, panes, spaces, setShared, home } from "herdr";
 import { keybar, keysCard } from "./keybar.js";
 import { SelfUpdate } from "./update.js";
+import { closePanel, panelOnScreen } from "./panel.js";
 
 const ICON = "mods/remote-checker", CHROME = "mods/workspace-chrome";
 const POLL_MS = 10_000, LOOKUP_MS = 60_000;
-const PANEL_CHILD = "remote";
 
 const QUERY = `query($owner:String!,$repo:String!,$n:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$n){
   number title url state isDraft createdAt publishedAt updatedAt mergedAt closedAt
@@ -46,12 +46,6 @@ function keyOf(e) {
   if (m.control || m.platform || m.alt) return e.keystroke;
   if (["enter", "escape", "tab", "space", "up", "down", "left", "right", "backspace"].includes(e.key)) return e.key;
   return e.key_char ?? e.key;
-}
-
-function find(node, id) {
-  if (node?.id === id) return node;
-  for (const child of node?.children ?? []) { const f = find(child, id); if (f) return f; }
-  return null;
 }
 
 function ago(iso) {
@@ -191,9 +185,7 @@ export default class RemoteChecker extends View {
 
   // Shown in the right panel (or anywhere else it's placed, e.g. as a pane).
   visible() {
-    const root = layout(), body = find(root, "panel-body");
-    if (!body || !body.children?.some((c) => c.id === PANEL_CHILD)) return true;
-    return !find(root, "panel")?.hidden && body.active === PANEL_CHILD;
+    return panelOnScreen("remote-checker") ?? true;
   }
 
   // The active space's focused terminal folder (else the space's own folder).
@@ -378,8 +370,7 @@ export default class RemoteChecker extends View {
       case "escape": this.leave(); if (focused()?.pane) run("pane.focus", { pane: focused().pane }); return true;
       case "q":
         this.leave();
-        run("layout.hide", { id: "panel" });
-        if (focused()?.pane) run("pane.focus", { pane: focused().pane });
+        closePanel("remote-checker");
         return true;
     }
     return false;
@@ -633,7 +624,7 @@ export default class RemoteChecker extends View {
         .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).child(stamp))
         .children([this.selfUpdate.pill(t)].filter(Boolean))
         .when(Boolean(d?.pr), (el) => el.child(this.iconButton("rc-open", `${ICON}/external.svg`, "Open on GitHub (O)", () => exec("open", [d.pr.url]), t)))
-        .child(this.iconButton("rc-refresh", "mods/servers/restart.svg", "Refetch (r)", (cx) => this.refresh(cx, true), t, { spin: this.fetching })))
+        .child(this.iconButton("rc-refresh", "mods/remote-checker/restart.svg", "Refetch (r)", (cx) => this.refresh(cx, true), t, { spin: this.fetching })))
       .when(Boolean(branch), (el) => el.child(h_flex().h(28).flex_none().px(14).gap(6).items_center().border_b(1).border_color(t.border).text_size(11.5)
         .child(svg(`${CHROME}/git-branch.svg`).size(12).flex_none().text_color(t.accent))
         .child(div().flex_none().max_w(200).truncate().text_color(t.foreground).child(branch))

@@ -5,6 +5,7 @@ import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { keybar, keysCard } from "./keybar.js";
 import { spaces, panes, focused, agents, knownAgents, exec, hc, run, theme, settings, home, readTextFile, writeTextFile, watchFolder, nextCommand, setShared } from "herdr";
 import { SelfUpdate } from "./update.js";
+import { closePanel } from "./panel.js";
 
 const ICON = "mods/skills";
 const CARD = 90, GROUP = 26, GAP = 6;
@@ -283,8 +284,7 @@ export default class Skills extends View {
       case "escape": if (this.filter) { this.filter = ""; cx.notify(); return true; } return false;
       case "?": this.keysOpen = true; cx.notify(); return true;
       case "q":
-        run("layout.hide", { id: "panel" });
-        if (focused()?.pane) run("pane.focus", { pane: focused().pane });
+        closePanel("skills");
         return true;
     }
     return false;

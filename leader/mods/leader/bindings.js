@@ -1,6 +1,14 @@
-// Leader (ctrl-a) bindings. `run`: an app command (herdr-app commands lists them) with `args`;
-// `panel`: show that right-side panel (a `panel-body` child id), `mod` the mod in it when named differently,
-// `focus` also gives it the keyboard, `toggle` hides it when it already has the keyboard.
+// Leader (ctrl-a) bindings. `run`: an app command (herdr-app commands lists them) with `args`.
+//
+// Panels aren't listed here: the leader finds them. A panel mod declares its key in its mod.json
+// ("panel": {"title", "leader": "T"}), and Herdr's own right-hand panels are bound below by their
+// child id in the layout's panel stack (whatever mod shows there: files or pond-files, changes or
+// gitview). A panel binding shows it and gives it the keyboard; pressed again from the panel, it hides it.
+export const BUILTIN_PANELS = [
+  { key: "f", label: "Files", child: "files" },
+  { key: "d", label: "Changes (diff)", child: "changes" },
+];
+
 export default [
   { group: "Tabs", key: "t", label: "New tab", run: "tab.new" },
   { group: "Tabs", key: "c", label: "New tab", run: "tab.new", hidden: true },
@@ -21,15 +29,7 @@ export default [
   { group: "Panes", key: "z", label: "Zoom pane", run: "pane.zoom" },
   { group: "Panes", key: "x", label: "Close pane", run: "pane.close" },
 
-  { group: "Panels", key: "g", label: "Git", panel: "git", focus: true, toggle: true },
-  { group: "Panels", key: "a", label: "AI skills", panel: "skills", focus: true, toggle: true },
-  { group: "Panels", key: "T", label: "Todos", panel: "todos", focus: true, toggle: true },
   { group: "Panels", key: "e", label: "Expand / collapse", action: "expand" },
-  { group: "Panels", key: "f", label: "Files", panel: "files", mod: "pond-files", focus: true, toggle: true },
-  { group: "Panels", key: "d", label: "Changes (diff)", panel: "changes", mod: "gitview", focus: true, toggle: true },
-  { group: "Panels", key: "r", label: "Servers", panel: "servers", focus: true, toggle: true },
-  { group: "Panels", key: "P", label: "Remote Checker (PR)", panel: "remote", mod: "remote-checker", focus: true, toggle: true },
-  { group: "Panels", key: "C", label: "Claude profiles (account, versions)", panel: "profiles", mod: "pond-profiles", focus: true, toggle: true },
   { group: "Panels", key: "b", label: "Toggle sidebar", run: "layout.toggle", args: { id: "sidebar" } },
 
   { group: "Spaces", key: "s", label: "Find space / tab", run: "mod.open", args: { name: "picker" } },

@@ -3,9 +3,31 @@
 A panel of your Claude Code skills: the personal ones in `~/.claude/skills` and the ones in the focused repo's `.claude/skills`, as cards with their slash name, a one-sentence description and argument hint. Run one and it goes as `/name args` to an agent already open in this space, or to a new agent tab in the repo; edit opens it in nvim; New scaffolds a `SKILL.md`. A bar on top says which repo and branch the skills will run against.
 
 
-**Install:** Point your Herdr agent at this folder: copy `mods/skills/` into `~/.config/herdr-app/mods/`, then `herdr-app check ~/.config/herdr-app/mods/skills`.
+**Install:** tell your Herdr agent "Install the Herdr mod at
+https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/skills". You get a **Skills** button in the tab bar that opens it in the right-hand panel,
+next to Herdr's Files and Changes. You don't need the `pond` layout. Needs `nvim` and `git`. What the agent does:
 
-**Version:** 1.1.2 (see Changes at the end; also `"version"` in `mod.json`).
+1. Copy `mods/skills/` into `~/.config/herdr-app/mods/` and run `herdr-app check ~/.config/herdr-app/mods/skills`.
+2. The button comes from this repo's tab bar, `pond-tabs`, which draws a button for every panel in
+   the right-hand column. If `~/.config/herdr-app/mods/pond-tabs/` is missing, copy `mods/pond-tabs/`
+   from https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/pond-tabs and check it too.
+3. The shown layout (`herdr-app status` names it) must be a personal one whose `tabs` block shows
+   `pond-tabs`. Herdr's own layouts are read-only:
+   - On Herdr's `main`: `herdr-app do layout.clone '{"name":"main","as":"my-main"}'` (it switches
+     to the copy, which looks and works the same), then in `layouts/my-main.json` set the block
+     with `"id": "tabs"` to `"content": { "mod": "pond-tabs" }`. Tell the person a clone doesn't get
+     Herdr's later changes to `main`.
+   - On a personal layout: set its `tabs` block's `content` to `{ "mod": "pond-tabs" }` if it isn't.
+   - On `pond` (this repo): nothing to do.
+4. Within a few seconds the tab bar adds `{ "id": "skills", "type": "block", "content": { "mod": "skills" } }`
+   to the layout's `panel-body` stack (the right-hand `panel` column Herdr's `main` and its copies
+   have) and shows the button. Check with `herdr-app status` and tell the person where it is.
+5. Optional: with this repo's `leader` installed, `ctrl-a` then its key opens it too.
+
+Without changing the tab bar, it also opens beside a terminal:
+`herdr-app do pane.split --direction right --mod skills` (`q` closes that pane).
+
+**Version:** 1.2.0 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** from 1.1.0, its header has a "Check for updates" pill that turns into "Update to x.y.z" when this repo publishes a newer version; click it, confirm, and a new Claude tab updates just this mod (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/skills/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept; edits you made inside the mod folder are not.
 
@@ -33,9 +55,10 @@ Panel: theme `background`, text 12.5px, rounded 10 with a 1px border (`accent` w
 
 ## Built from
 
-- `update.js`: the self-update pill (the same file in every mod from this repo; `tools/stamp.py` refuses copies that differ). It reads `mod.json` `version` and `source`, fetches the repo's `versions.json` (shared between mods as `herdr-mods.versions`, every 6 hours or on click) and on confirm runs `tab.new` with `claude` in the Herdr home. No `source`: no pill.
+- `update.js`: the self-update pill (the same file in every mod from this repo; `tools/stamp.py` refuses copies that differ). It reads `mod.json` `version` and `source`, fetches the repo's `versions.json` (shared between mods as `herdr-mods.versions`, on start and whenever the panel comes back on screen) and on confirm runs `tab.new` with `claude` in the Herdr home. No `source`: no pill.
 - `main.js` (scan, actions, rendering), `keybar.js` (footer keycaps and keys card, same file as the git and servers mods), icons `run.svg edit.svg plus.svg` (and `skills.svg`, which the code doesn't use).
-- `mod.json`: `{ "place": "none", "title": "Skills", "focusable": true }`. No `props`.
+- `mod.json`: `{ "place": "none", "title": "Skills", "focusable": true, "panel": { "title": "Skills", "icon": "skills.svg", "leader": "a" } }`. No `props`. `panel` is what `pond-tabs` (button label and icon) and the `leader` (key) read.
+- `panel.js`: where the panel is and showing or closing it there (the same file in every panel mod from this repo; `tools/stamp.py` refuses copies that differ). `q` closes it wherever it is: a popup closes, a focused pane closes, and a layout block hides the node holding its stack (the `panel` column in Herdr's `main` and its copies). No layout ids are assumed.
 - herdr: `spaces panes focused agents knownAgents exec hc run theme settings home readTextFile writeTextFile watchFolder nextCommand setShared`. Commands: `tab.new`, `terminal.open` (`place: "tab"`), `layout.hide`, `pane.focus`, `pane.go`.
 - `nextCommand()`: `focus`, `go:<direction>` (left: `pane.focus` back to the focused pane, since `pane.go` doesn't reliably move the keyboard out of a panel; other directions `pane.go`; `cmd-alt-arrows` are caught in the key handler and do the same; leaving cancels a pending 150ms focus retry, which also skips once focus has landed), `key:<k>` (e.g. `"skills.key:n"` in keys.json). Shared: `skills.hasKeys` (keyboard ownership, polled every 300ms).
 - Programs: `sh` (list `SKILL.md` and `*.md`; `printf $SHELL`), `git rev-parse --show-toplevel`, `mkdir -p`, `hc send <agent> "/name args"`, `nvim` through `$SHELL -lic`.
@@ -44,7 +67,7 @@ Panel: theme `background`, text 12.5px, rounded 10 with a 1px border (`accent` w
 
 ## Watch out
 
-- `place: "none"`: nothing shows it by default. Show it with a layout block `{ "content": { "mod": "skills" } }` (it was built for the hidden right-hand `panel` column of the `pond` layout) or as a pane: `herdr-app do pane.split '{"direction":"right","mod":"skills"}'`. `mod.open` does not apply (no overlay in `mod.json`). `q` hides the layout node `panel`, which only exists in such a layout.
+- `place: "none"`: `pond-tabs` adds it to the right-hand panel (see Install); or open it as a pane: `herdr-app do pane.split '{"direction":"right","mod":"skills"}'`. `mod.open` does not apply (no overlay in `mod.json`).
 - Reads `~/.claude/skills` and `<repo>/.claude/skills`, and New writes `SKILL.md` files there: outside its own folder.
 - Needs `nvim` for Edit and New (hardcoded, not `$EDITOR`), `git`, and an installed agent (`knownAgents()`) for the New tab option. Send works with any agent; it is written for Claude Code's `/skill` syntax.
 - Local machine only: on a remote space the folder is checked with local `git`, so its repo skills don't show.
@@ -62,6 +85,12 @@ Panel: theme `background`, text 12.5px, rounded 10 with a 1px border (`accent` w
 - `/` filters cards; `escape` clears it; `cd` into another repo switches the Repo group within a second.
 
 ## Changes
+
+### 1.2.0 (2026-11-13)
+
+- Works without the `pond` layout: installing it adds a button to the tab bar that opens it in the right-hand panel, next to Herdr's Files and Changes (needs `pond-tabs` as the layout's tab bar; see Install).
+- `q` closes it wherever it is (the right-hand column, a pane or a popup) through the shared `panel.js`, instead of assuming `pond`'s ids.
+- `mod.json` declares `"panel"` (leader `a`).
 
 ### 1.1.2 (2026-11-12)
 
