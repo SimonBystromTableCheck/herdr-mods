@@ -845,7 +845,7 @@ export default class Claude extends View {
         .child(svg(`${ME}/claude.svg`).size(15).text_color(t.accent))
         .child(div().pl(4).font_semibold().child("Claude"))
         .child(div().pl(4).flex_1().min_w(0).truncate().text_size(12).text_color(t.dim).child(headerNote))
-        .when(this.selfUpdate.shown, el => el.child(div().mr(2).child(this.selfUpdate.pill(t))))
+        .when(Boolean(this.selfUpdate.available()), el => el.child(div().mr(2).child(this.selfUpdate.pill(t))))
         .when(Boolean(st) && !this.setupShown, el => el.child(iconButton("setup-open", `${CHROME}/settings.svg`, "Setup", cx => this.openSetup(cx))))
         .child(iconButton("refresh", "mods/servers/restart.svg", "Refresh (r)", cx => {
           this.refresh(cx);

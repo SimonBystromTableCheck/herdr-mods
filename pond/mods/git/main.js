@@ -985,7 +985,7 @@ export default class Git extends View {
       .when(Boolean(running), el => el.child(h_flex().id("git-running").gap(5).min_w(0).items_center().text_size(11.5).text_color(t.working).cursor_pointer()
         .on_click(() => running.addr && run("terminal.peek", { terminal: running.addr }))
         .child(svg(`${CHROME}/spinner.svg`).size(11).flex_none().spin(900)).child(div().truncate().max_w(180).child(running.title))))
-      .children([this.selfUpdate.pill(t, { quiet: true })].filter(Boolean))
+      .children([this.selfUpdate.pill(t)].filter(Boolean))
       .when(Boolean(this.ctx) && !running, el => el
         .child(this.iconButton("git-fetch", "mods/git/fetch.svg", cx => this.cmd("git fetch --all --prune", "git fetch --all --prune", cx, { after: () => { this.prsAt = 0; } }), t, roomy && "Fetch"))
         .child(this.iconButton("git-pull", "mods/git/pull.svg", cx => this.cmd("git pull", "git pull", cx), t, roomy && "Pull"))

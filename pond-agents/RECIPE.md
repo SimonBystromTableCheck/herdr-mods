@@ -16,7 +16,7 @@ It is `"place": "none"`: to use it, point a layout block at it instead of the sh
 `agents` (clone the layout first: `herdr-app do layout.clone '{"name":"main","as":"my-main"}'`,
 then set the `agents` block's `content` to `{ "mod": "pond-agents" }`).
 
-**Version:** 1.2.1 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.2.2 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** from 1.2.0, a small "↑ x.y.z" pill appears beside the figures and sort icons when this repo publishes a newer version; click it, confirm, and a new Claude tab updates just this mod (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/pond-agents/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept (your figure sets in `pond-agents.json` and pictures in `pond-figures/`); edits you made inside the mod folder are not.
 
@@ -168,6 +168,10 @@ Clone of shipped `agents` (`cloned_from: {name: "agents", version: "0.1.14"}`). 
   that space.
 
 ## Changes
+
+### 1.2.2 (2026-11-12)
+
+- The update pill only shows when a newer version is published, and reads "Update available" (the version is in its tooltip); no more "Check for updates" pill while up to date. Each panel checks GitHub when it starts and every time it comes back on screen (shared `update.js`).
 
 ### 1.2.1 (2026-11-12)
 

@@ -17,7 +17,7 @@ layout (in a cloned layout, as a child of the right `panel-body` stack, or as a
 column of its own), or open it beside a terminal with
 `herdr-app do pane.split --direction right --mod todos`.
 
-**Version:** 1.1.1 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.1.2 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** from 1.1.0, its header has a "Check for updates" pill that turns into "Update to x.y.z" when this repo publishes a newer version; click it, confirm, and a new Claude tab updates just this mod (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/todos/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept (your pages in `~/.config/herdr-app/todos/`); edits you made inside the mod folder are not.
 
@@ -127,6 +127,10 @@ One rounded card (radius 10, `background`, 1px `border`; the border turns
 - `q` hides the panel and the terminal gets the keyboard back.
 
 ## Changes
+
+### 1.1.2 (2026-11-12)
+
+- The update pill only shows when a newer version is published, and reads "Update available" (the version is in its tooltip); no more "Check for updates" pill while up to date. Each panel checks GitHub when it starts and every time it comes back on screen (shared `update.js`).
 
 ### 1.1.1 (2026-11-12)
 
