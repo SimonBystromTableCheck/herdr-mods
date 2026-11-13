@@ -112,7 +112,11 @@ def main():
         if now == seen.get(p):
             continue  # untouched since the last sync
         live = files.get(p)
-        if live and normal(os.path.join(repo, p)) == normal(live):
+        if not live:
+            continue  # the sync doesn't write this path any more (an item retired from items.conf)
+        if now is None and not os.path.exists(live):
+            continue  # gone on both sides: nothing to undo
+        if normal(os.path.join(repo, p)) == normal(live):
             continue  # already in the live config
         what = "added in the repo" if p not in seen else "deleted in the repo" if now is None else "changed in the repo"
         here = live if live and os.path.exists(live) else "not in your live config"

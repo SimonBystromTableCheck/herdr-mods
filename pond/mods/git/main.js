@@ -1,8 +1,8 @@
 // A lazygit-style git panel: numbered sections, vim-ish keys, writes run in core
 // terminals whose output stays in a copyable log, and conflicts/failures hand off to an agent.
 import { View, div, svg } from "gpui-kit";
-import { v_flex, h_flex, InputState, Input, Editor, EditorState, Scrollbar, ScrollHandle, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
-import { keybar, keysCard } from "./keybar.js";
+import { v_flex, h_flex, InputState, Input, TextareaState, Textarea, Editor, EditorState, Scrollbar, ScrollHandle, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
+import { keybar, keysCard, keycap } from "./keybar.js";
 import { spaces, panes, focused, agents, knownAgents, exec, hc, run, theme, settings, props, appHome, watchFolder, nextCommand, readTextFile, setShared, shared, layout } from "herdr";
 import * as G from "./git.js";
 import { graphCell } from "./graph.js";
@@ -73,6 +73,8 @@ export default class Git extends View {
   init(_props, cx) {
     this.selfUpdate = new SelfUpdate("git", "Git panel"); this.selfUpdate.start(cx);
     this.handle = cx.focus_handle();
+    // A reload runs init on the same copy: drop overlays the old code opened (their handlers are gone).
+    this.prompt = null; this.menu = null; this.commitBox = null; this.typing = false; this.keysOpen = false;
     // Props read later can belong to another copy, so read them once.
     const p = props();
     this.fixed = p?.cwd ? { cwd: p.cwd, on: p.on ?? null } : null;
@@ -101,6 +103,7 @@ export default class Git extends View {
     cx.spawn(async cx => {
       for (;;) {
         const c = await nextCommand();
+        try {
         if (c === "focus") {
           // One retry in case the first focus didn't land; focus that landed and then moved
           // (leaving quickly, a click, the leader popup) is the person's choice, so no retry then.
@@ -111,8 +114,11 @@ export default class Git extends View {
         }
         else if (c === "expand" && !this.fixed) this.expand(cx);
         else if (c === "collapse" && this.fixed) this.collapse();
+        // One key for both (cmd-g): the side panel expands, the expanded tab collapses.
+        else if (c === "toggle") { if (this.fixed) this.collapse(); else this.expand(cx); }
         else if (c.startsWith("go:")) this.go(c.slice(3));
         else if (c.startsWith("key:")) { const k = c.slice(4); this.menu ? this.menuKey(k, cx) : this.handleKey(k, cx); }
+        } catch (e) { this.flash(`git.${c}: ${e?.message ?? e}`, 6000); } // a failing command must not end the loop
         cx.notify();
       }
     });
@@ -1157,21 +1163,22 @@ export default class Git extends View {
   }
 
   commit(cx) {
+    if (!this.ctx) { this.flash("Not a git repository"); cx.notify(); return; }
     const files = this.status?.files ?? [];
     if (this.conflicts().length) { this.flash("Resolve conflicts first"); cx.notify(); return; }
     // The message is kept per repo (shared "git.commitDrafts", by root) until a commit lands:
     // esc and a failed commit keep it for next time; a commit that moved HEAD clears it.
     const ctx = this.ctx, root = ctx.root;
     const head = () => G.git(ctx, ["rev-parse", "-q", "--verify", "HEAD"]).then(r => r.stdout.trim(), () => "");
-    const go = (cx, stageAll) => this.ask("Commit message", commitDraft(root), (msg, cx) => {
-      if (!msg) return;
+    const go = (cx, stageAll) => this.openCommit(cx, stageAll, (summary, body, cx) => {
+      const msg = body ? `${summary}\n\n${body}` : summary;
       setCommitDraft(root, msg);
       cx.spawn(async cx => {
         const before = await head();
         const settle = async () => { if ((await head()) !== before) setCommitDraft(root, null); };
-        this.cmd(`git commit -m "${msg}"`, `${stageAll ? "git add -A && " : ""}git commit -m ${q(msg)}`, cx, { after: settle, onFail: settle });
+        this.cmd(`git commit -m "${summary}"${body ? " -m …" : ""}`, `${stageAll ? "git add -A && " : ""}git commit -m ${q(summary)}${body ? ` -m ${q(body)}` : ""}`, cx, { after: settle, onFail: settle });
       });
-    }, cx, { hint: "Summary line", select: false, onClose: text => setCommitDraft(root, text.trim()) });
+    });
     const amend = (cx, stageAll) => {
       const head = (this.commits ?? []).find(c => c.refs.some(r => r.startsWith("HEAD")));
       const run = cx => this.cmd("git commit --amend --no-edit", `${stageAll ? "git add -A && " : ""}git commit --amend --no-edit`, cx);
@@ -1186,6 +1193,57 @@ export default class Git extends View {
       changed > 0 && { key: "m", label: "Stage all and amend last commit", hint: "keeps message", run: cx => amend(cx, true) },
       { key: "e", label: "Commit in editor (new tab)", run: () => run("terminal.open", { argv: [this.shell ?? "/bin/zsh", "-lic", "git commit"], folder: this.ctx.root, place: "tab" }) },
     ], cx);
+  }
+
+  // The commit dialog, as lazygit's: a one-line summary (with its length) over a multi-line
+  // description. tab switches between them, enter in the summary or cmd-enter commits, esc cancels.
+  // The draft (summary, blank line, description) is kept per repo until a commit lands.
+  openCommit(cx, stageAll, onCommit) {
+    const root = this.ctx.root, draft = commitDraft(root);
+    const [first = "", ...rest] = draft.split("\n");
+    const summary = InputState.new({ value: first, placeholder: "Summary line" });
+    const body = TextareaState.new({ value: rest.join("\n").replace(/^\n+/, ""), placeholder: "Description (optional): why, and what it affects", rows: 7 });
+    body.set_soft_wrap(true);
+    summary.set_selected_range({ start: first.length, end: first.length });
+    summary.on("submit", (_e, cx) => this.submitCommit(cx));
+    // The description takes enter as a new line; cmd-enter (the input's "secondary" submit) commits.
+    body.on("submit", (e, cx) => { if (e?.secondary) this.submitCommit(cx); });
+    summary.on("change", (_e, cx) => cx.notify());
+    for (const [field, st] of [["summary", summary], ["body", body]]) {
+      st.on("focus", (_e, cx) => { if (this.commitBox) { this.commitBox.field = field; this.typing = true; } cx.notify(); });
+    }
+    this.commitBox = { root, stageAll, summary, body, field: "summary", onCommit };
+    this.typing = true;
+    summary.focus();
+    cx.notify();
+  }
+  commitText() {
+    const c = this.commitBox, s = c.summary.value().trim(), b = c.body.value().replace(/\s+$/, "");
+    return b ? `${s}\n\n${b}` : s;
+  }
+  closeCommit(cx, keep = true) {
+    const c = this.commitBox;
+    if (!c) return;
+    if (keep) setCommitDraft(c.root, this.commitText().trim());
+    this.commitBox = null; this.typing = false;
+    c.summary.release(); c.body.release();
+    this.handle.focus();
+    cx.notify();
+  }
+  submitCommit(cx) {
+    const c = this.commitBox;
+    if (!c) return;
+    const summary = c.summary.value().trim(), body = c.body.value().replace(/\s+$/, "");
+    if (!summary) { this.flash("Write a summary first"); c.summary.focus(); cx.notify(); return; }
+    this.closeCommit(cx, false);
+    c.onCommit(summary, body, cx);
+  }
+  // tab / shift-tab: the other box. A tab the description typed is taken back out.
+  switchCommitField(cx) {
+    const c = this.commitBox;
+    if (c.field === "body") { const v = c.body.value(); if (v.includes("\t")) c.body.set_value(v.replace(/\t/g, "")); c.summary.focus(); }
+    else c.body.focus();
+    cx.notify();
   }
 
   logMenu(cx) {
@@ -1295,6 +1353,16 @@ export default class Git extends View {
   }
 
   key(e, cx) {
+    if (this.commitBox) {
+      const k = e.keystroke;
+      if (e.key === "escape") this.closeCommit(cx);
+      else if (k === "tab" || k === "shift-tab") this.switchCommitField(cx);
+      // lazygit's confirm keys in the description: ctrl-s (and alt-enter); cmd-enter as on macOS.
+      else if (["ctrl-s", "cmd-s", "alt-enter", "cmd-enter", "ctrl-enter"].includes(k)) this.submitCommit(cx);
+      else return;
+      cx.stop_propagation();
+      return;
+    }
     if (!this.editorFocused && !this.prompt && this.navKey(e, cx)) return;
     if (this.editorFocused) { if (e.key === "escape") { this.handle.focus(); cx.stop_propagation(); } return; }
     if (this.prompt) { if (e.key === "escape") { this.cancelPrompt(cx); cx.stop_propagation(); } return; }
@@ -1381,7 +1449,7 @@ export default class Git extends View {
     return v_flex().id("git").relative().size_full().min_h(0).rounded(pane ? 0 : 10).overflow_hidden().bg(t.background).when(!pane, el => el.border_1().border_color(hasKeys ? t.accent : t.border))
       .text_color(t.foreground).text_size(12.5)
       .track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx))
-      .on_mouse_down("left", () => { if (!this.prompt) this.handle.focus(); })
+      .on_mouse_down("left", () => { if (!this.prompt && !this.commitBox) this.handle.focus(); })
       .on_size_change((size, cx) => { this.size = size; cx.notify(); })
       .child(this.header(t, pane))
       .when(Boolean(this.op), el => el.child(this.opBanner(t)))
@@ -1391,6 +1459,7 @@ export default class Git extends View {
       .child(this.footer(t))
       .when(Boolean(this.menu), el => el.child(this.menuView(t)))
       .when(Boolean(this.prompt), el => el.child(this.promptView(t)))
+      .when(Boolean(this.commitBox), el => el.child(this.commitView(t)))
       .when(Boolean(this.keysOpen), el => el.child(keysCard(t, { id: "git", title: "Git: all keys", groups: this.keysGroups(), onClose: cx => { this.keysOpen = false; cx.notify(); } })));
   }
 
@@ -1485,6 +1554,7 @@ export default class Git extends View {
 
   // The footer's keycaps for what's on screen now.
   chips() {
+    if (this.commitBox) return this.commitChips();
     if (this.prompt) return [{ caps: ["enter"], label: "confirm" }, { caps: ["escape"], label: "cancel" }];
     if (this.menu) return [{ caps: ["j", "k"], label: "move" }, { caps: ["enter"], label: "pick" }, { caps: ["escape"], label: "close" }];
     if (this.editorFocused) return [{ caps: ["cmd-c"], label: "copy" }, { caps: ["escape"], label: "back" }];
@@ -1855,6 +1925,41 @@ export default class Git extends View {
           .child(div().w(46).flex_none().text_size(11).font_family(settings().font_family ?? "JetBrains Mono").text_color(t.accent).child(it.key ?? ""))
           .child(div().flex_1().min_w(0).truncate().text_color(it.disabled ? t.dim : it.danger ? t.ansi1 : t.foreground).child(it.label))
           .when(Boolean(it.hint) && it.hint !== it.key, e => e.child(div().flex_none().text_size(11).text_color(t.dim).child(it.hint)))))));
+  }
+
+  // What the commit dialog's keys do in the box that has the keyboard.
+  commitChips() {
+    const body = this.commitBox?.field === "body";
+    return body
+      ? [{ caps: ["ctrl-s"], label: "commit" }, { caps: ["cmd", "enter"], label: "commit" }, { caps: ["enter"], label: "new line" }, { caps: ["tab"], label: "summary" }, { caps: ["escape"], label: "cancel" }]
+      : [{ caps: ["enter"], label: "commit" }, { caps: ["ctrl-s"], label: "commit" }, { caps: ["tab"], label: "description" }, { caps: ["escape"], label: "cancel" }];
+  }
+
+  commitView(t) {
+    const c = this.commitBox, n = c.summary.value().trim().length, onSummary = c.field === "summary";
+    const files = this.status?.files ?? [], staged = files.filter(f => f.staged).length, all = files.length;
+    const head = (text, on, right) => h_flex().items_center().gap(8).text_size(11.5)
+      .child(div().font_semibold().text_color(on ? t.accent : t.muted).child(text)).child(div().flex_1()).child(right);
+    return div().id("commit-scrim").absolute().inset_0().bg("#00000055").flex().items_start().justify_center().pt(56)
+      .child(v_flex().id("commit").w(Math.max(320, Math.min(640, (this.size?.width ?? 640) - 24))).p(14).gap(6).rounded(10)
+        .border_1().border_color(t.border).bg(t.popover).shadow_lg()
+        .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+        .child(div().text_size(11).text_color(t.dim).child(c.stageAll ? `Stage all and commit · ${all} file${all === 1 ? "" : "s"}` : `Commit ${staged} staged file${staged === 1 ? "" : "s"}`))
+        .child(head("Commit summary", onSummary, div().font_family(settings().font_family ?? "JetBrains Mono").text_size(11)
+          .text_color(n > 72 ? t.ansi1 : n > 50 ? t.ansi3 : t.dim).child(String(n))))
+        .child(Input.new(c.summary).h(32).px(10).rounded(7).border_1().border_color(onSummary ? t.accent : t.border).bg(t.background).text_size(12.5).text_color(t.foreground))
+        .child(head("Commit description", !onSummary, div().text_size(10.5).text_color(t.dim).child("tab to switch")).mt(6))
+        .child(Textarea.new(c.body).h(150).px(10).py(8).rounded(7).border_1().border_color(!onSummary ? t.accent : t.border).bg(t.background).text_size(12.5).text_color(t.foreground))
+        // Footer: the keys for the box in use (as the panels' key bars), then the buttons.
+        .child(h_flex().mt(4).pt(8).gap(10).items_center().border_t(1).border_color(t.border).text_size(11).text_color(t.dim)
+          .child(h_flex().flex_1().min_w(0).gap(12).items_center().overflow_hidden()
+            .children(this.commitChips().map(c => h_flex().flex_none().gap(4).items_center()
+              .child(h_flex().flex_none().gap(2).children(c.caps.map(k => keycap(t, k === "cmd" ? "⌘" : k))))
+              .child(div().flex_none().text_color(t.dim).child(c.label)))))
+          .child(div().id("commit-cancel").px(9).h(24).flex().items_center().rounded(6).cursor_pointer().text_color(t.muted).hover(s => s.bg(t.hover))
+            .on_click((_e, cx) => this.closeCommit(cx)).child("Cancel"))
+          .child(div().id("commit-go").px(11).h(24).flex().items_center().rounded(6).cursor_pointer().bg(t.solid ?? t.accent).text_color(t.solid_foreground ?? t.accent_foreground)
+            .hover(s => s.opacity(0.88)).on_click((_e, cx) => this.submitCommit(cx)).child("Commit"))));
   }
 
   promptView(t) {

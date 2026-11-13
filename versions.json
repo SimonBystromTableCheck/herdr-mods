@@ -3,7 +3,7 @@
   "update": "tools/UPDATE.md",
   "mods": {
     "git": {
-      "version": "1.3.0",
+      "version": "1.4.0",
       "item": "git",
       "path": "git/mods/git"
     },
@@ -16,11 +16,6 @@
       "version": "2.0.1",
       "item": "leader",
       "path": "leader/mods/leader"
-    },
-    "changes-expand": {
-      "version": "1.0.0",
-      "item": "changes-expand",
-      "path": "changes-expand/mods/changes-expand"
     },
     "todos": {
       "version": "1.2.0",
@@ -65,7 +60,7 @@
   },
   "layouts": {
     "pond": {
-      "version": "1.9.0",
+      "version": "1.10.0",
       "item": "pond",
       "path": "pond/layouts/pond.json",
       "mods": [
@@ -98,14 +93,6 @@
         "leader"
       ],
       "keys": "leader/keys.json"
-    },
-    "changes-expand": {
-      "kind": "mod",
-      "recipe": "changes-expand/RECIPE.md",
-      "mods": [
-        "changes-expand"
-      ],
-      "keys": "changes-expand/keys.json"
     },
     "todos": {
       "kind": "mod",

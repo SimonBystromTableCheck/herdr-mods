@@ -2,21 +2,21 @@
 
 Herdr's own `main` window, with a fuller right-hand panel and a few personal swaps. The left
 sidebar keeps the spaces list, but its agents list shows animated ducks and Claude's context
-use. The tab bar gains Git, Skills, Todos, Servers and PR buttons next to Files and Changes, each
+use. The tab bar gains Git, Skills, Todos, Servers and GH buttons next to Files, each
 opening its own panel on the right: a lazygit-style git panel, Claude skills, Markdown todo
-pages, a dev-server runner and the focused branch's GitHub pull request. Files is keyboard-driven (vim keys), and Changes is the
-third-party gitview instead of Herdr's stock panel.
+pages, a dev-server runner and the focused branch's GitHub pull request. Files is keyboard-driven (vim keys). There is no Changes
+button: the Git panel's Files section reviews and stages changes.
 
 
 **Install:** Point your Herdr agent at this folder: copy `layouts/pond.json` to
 `~/.config/herdr-app/layouts/` and every folder in `mods/` (`pond-agents`, `pond-files`, `pond-tabs`,
 `git`, `git-conflicts`, `skills`, `todos`, `servers`, `remote-checker`, `pond-profiles`) to `~/.config/herdr-app/mods/`, renaming any that clash
 (and the `mod` names in the layout), run `herdr-app check ~/.config/herdr-app/mods/<name>` on
-each, install and patch gitview (below), then `herdr-app do layout.switch --name pond`.
+each, then `herdr-app do layout.switch --name pond`.
 
-**Version:** 1.9.0 (see Changes at the end; also `"version"` in `layouts/pond.json`, and each mod's own in its `mod.json`).
+**Version:** 1.10.0 (see Changes at the end; also `"version"` in `layouts/pond.json`, and each mod's own in its `mod.json`).
 
-**Update:** from 1.6.0, a "Pond ↑ x.y.z" pill appears in the tab bar when a newer layout is published; click it, confirm, and a new Claude tab updates the layout and offers its mods (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `layouts/pond.json` and each folder in `mods/` with this folder's copies (asking an agent to *install* again adds second copies instead). Sizes and panels you clicked are kept (Herdr keeps them in `layouts/.state/`), and so are the mods' settings and data; edits you made inside `pond.json` or the mod folders are not. Reapply the gitview patch if gitview updated too.
+**Update:** from 1.6.0, a "Pond ↑ x.y.z" pill appears in the tab bar when a newer layout is published; click it, confirm, and a new Claude tab updates the layout and offers its mods (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `layouts/pond.json` and each folder in `mods/` with this folder's copies (asking an agent to *install* again adds second copies instead). Sizes and panels you clicked are kept (Herdr keeps them in `layouts/.state/`), and so are the mods' settings and data; edits you made inside `pond.json` or the mod folders are not. From 1.10.0 the layout has no `changes` slot; a gitview you installed for it can be removed (its `gitview*` mod folders).
 
 ## What you see
 
@@ -31,13 +31,13 @@ everything; 1px `border` dividers; terminals padded 14x12.
   - footer, 69px (`workspace-chrome` with `footer: true`).
 - **Work column**, the rest:
   - tab bar, 42px (`pond-tabs`), drags the window: tab pills, `+` menu, then panel buttons
-    Files, Changes, Git, Skills, Todos, Servers, GH (26px, 12px text; `selected` when open).
+    Files, Git, Skills, Todos, Servers, GH (26px, 12px text; `selected` when open).
     Servers shows a green (`ansi2`) count of running servers;
   - body row with 8px padding and 8px gap:
     - the active tab's panes as cards: `background`, 1px `border` (`accent` when focused),
       radius 10, 8px apart, framed even when alone, each with the shipped `pane` header (30px, top);
     - the panel, 368px (280–900), hidden until a panel button opens it: a stack showing one of
-      `files` (`pond-files`), `changes` (`gitview`), `git`, `skills`, `todos`, `servers`,
+      `files` (`pond-files`), `git`, `skills`, `todos`, `servers`,
       `remote` (`remote-checker`), `profiles` (`pond-profiles`);
   - status bar, 28px (shipped `workspace-status`).
 
@@ -49,7 +49,7 @@ everything; 1px `border` dividers; terminals padded 14x12.
   spinner while working and a 6px `blocked`/`done` dot.
 - A panel button runs `layout.select {stack: "panel-body", child}` + `layout.show {id: "panel"}`;
   clicking the open one runs `layout.hide`. The open panel is remembered per space.
-- Files, Git, Skills, Todos, Servers, Remote Checker and gitview are `focusable`: `pane.go` moves the keyboard
+- Files, Git, Skills, Todos, Servers and Remote Checker are `focusable`: `pane.go` moves the keyboard
   into them, the border turns accent, a keycap footer lists their keys and `?` shows them all.
 - Git: lazygit-style sections and vim keys; writes run in core terminals with a log; conflicts
   and failures can be handed to an agent, and `v` opens a Conflicts pane (`git-conflicts`) beside the
@@ -71,51 +71,22 @@ keys are reordered but the tree, ids, sizes and look are the shipped ones except
 | `agents` block | `agents` | `pond-agents` (ducks, context bar) |
 | `tabs` block | `tabs` | `pond-tabs` (5 extra panel buttons, Servers badge) |
 | `files` (stack child) | `files` | `pond-files` (vim keys, keybar, plain-text preview) |
-| `changes` (stack child) | `changes` | `gitview`, props `{ "replaces": { "mod": "changes" } }` |
-| `panel-body` stack | 2 children | + `git`, `skills`, `todos`, `servers`, `remote` (`remote-checker`), `profiles` (`pond-profiles`) blocks |
+| `changes` (stack child) | `changes` | removed (Git's Files section replaces it) |
+| `panel-body` stack | 2 children | `files` only, + `git`, `skills`, `todos`, `servers`, `remote` (`remote-checker`), `profiles` (`pond-profiles`) blocks |
 
 Tree: `root` row → `sidebar` column [`brand`, `sidebar-lists` column [`spaces`, `agents`],
 `sidebar-footer`] + `work` column [`tabs`, `work-body` row [`main` (`tab: active` with the
 pane frame), `panel` column [`panel-body` stack, `active: files`]], `status`].
 
 Mods: shipped `workspace-chrome`, `spaces`, `pane`, `workspace-status` (and the `new-menu`,
-`files`/`changes` icons `pond-tabs` borrows); this repo's ten in `mods/` (`git-conflicts` belongs with `git`); `gitview` from
-outside. `pond-agents` and `pond-files` have their own recipes in this repo; `pond-tabs` differs from
+`files`/`changes` icons `pond-tabs` borrows); this repo's ten in `mods/` (`git-conflicts` belongs with `git`). `pond-agents` and `pond-files` have their own recipes in this repo; `pond-tabs` differs from
 shipped `tabs` only by the five buttons (`enabled` always adds `git`, `skills`, `todos`,
 `servers`, `remote` to shared `workspace.panels`) and its own `mods/pond-tabs/win-*.svg` paths.
 Programs the panels run: `git`, `sh`, `hc`, `nvim` (git and skills), `mv` (todos), `gh` (remote-checker), `python3`, `cvm`, `claude` (pond-profiles; see its recipe).
 
-**gitview** (github.com/ChmaraX/herdr-gitview, not in this repo): install it with that repo's
-instructions. It brings several `gitview*` mod folders plus a `herdr-gitview` engine binary
-the panel runs for git. The `replaces` prop is a marker for its installer; gitview doesn't
-read it. Without gitview the Changes button still opens the `changes` slot, but the block names
-a mod that doesn't exist and stays empty (see `herdr-app status`). To use Herdr's stock panel
-instead, set that block's `content` to `{ "mod": "changes" }`.
-
-**Patch gitview** after installing it (gitview's own files; reapply after every gitview update).
-Stock gitview never says when its file list has the keyboard, and the `leader` mod needs that.
-In `mods/gitview/main.js`, `init()` already has a `cx.timer.every(300, …)` (it handles `reviveAt` and
-`stale()`). At the top of that callback, add:
-
-```js
-// LOCAL PATCH (not upstream): tell the leader mod when the list has the keys.
-const keys = this.handle.is_focused() || Boolean(this.typing);
-if (keys !== this.sharedKeys) { this.sharedKeys = keys; setShared("gitview.hasKeys", keys); }
-```
-
-Also add `setShared` to that file's `herdr` import if it isn't there. If upstream has renamed `this.handle` (the list's focus handle) or `this.typing` (set while
-a prompt or commit message takes typing), use what replaced them. Without the patch, the
-leader can't tell that Changes holds the keyboard:
-- leader `h` from Changes falls back to the generic move. The keyboard then goes to the terminal and is lost again, because the popup's
-  close sends `focus` back to gitview and gitview's focus loop grabs it.
-- leader `e` treats Changes as a terminal, so it doesn't open `gitview-tab`.
-
-Everything else (entering Changes with `pane.go`, moving before closing the popup) lives in `leader`;
-gitview needs no other change.
-
 ## Watch out
 
-- Keep the node ids `sidebar`, `panel`, `panel-body` and the child ids `files`, `changes`,
+- Keep the node ids `sidebar`, `panel`, `panel-body` and the child ids `files`,
   `git`, `skills`, `todos`, `servers`: `pond-tabs` selects stack children by id, the agents rail
   measures `sidebar`, and Files' `q` hides `panel`.
 - Renaming mods on a clash: `git` reads `mods/git/config.json` and `mods/git/seq-edit.pl`
@@ -138,16 +109,17 @@ gitview needs no other change.
 
 - Every mod in `mods/` passes `herdr-app check`; `layout.switch --name pond` shows a 268px
   sidebar (brand, spaces, duck agents list, footer), a 42px tab bar and a 28px status bar.
-- The tab bar shows Files, Changes, Git, Skills, Todos, Servers; each opens a 368px panel on the
+- The tab bar shows Files, Git, Skills, Todos, Servers, GH; each opens a 368px panel on the
   right with that mod, and clicking it again hides the panel.
 - A working agent's duck jabs a knife; a blocked one shows "Needs you".
-- With gitview installed, Changes shows gitview's file list for the space's repo.
-- With the gitview patch: while Changes has the keyboard, `shared.json` has `"gitview.hasKeys": true`,
-  and after leader `h` from Changes the terminal has the keyboard and keeps it.
 - Starting a server from Servers raises the green count on its button.
 - `layout.switch` (`ctrl-shift-l` by default) cycles back to the previous layout.
 
 ## Changes
+
+### 1.10.0 (2026-11-13)
+
+- No Changes button: the `changes` slot (gitview) is gone from the panel stack, and nothing in `pond` needs gitview any more; Git's Files section reviews and stages changes. git 1.4.0: lazygit's commit dialog (summary + description) and `git.toggle`. Other mods unchanged: git-conflicts 1.1.2, todos 1.2.0, servers 1.2.0, remote-checker 1.4.1, skills 1.2.0, pond-files 1.1.2, pond-tabs 1.4.0, pond-agents 1.2.2, pond-profiles 1.4.0; leader 2.0.1.
 
 ### 1.9.0 (2026-11-13)
 
