@@ -59,12 +59,18 @@ Which version you have: `"version"` in `~/.config/herdr-app/mods/<name>/mod.json
 
 Some panels integrate with [herdr-gitview](https://github.com/ChmaraX/herdr-gitview) when it's installed. It isn't part of this repo.
 
+## Contributing
+
+Pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) for how the repo is laid out,
+versions, recipes and what to keep out. Bugs and ideas: open an issue.
+
 ## For me: keeping this in sync
 
 The live copies are in `~/.config/herdr-app` (Herdr hot-reloads from there, and not through symlinks).
 This repo is a snapshot of them:
 
 - `./sync.sh`: copies the mods and layouts listed in `items.conf` from the config into their item folders, and `keys.json` / `settings.json` into `machine/`. Then `tools/stamp.py` adds `"source"` to each published `mod.json` and layout, copies `tools/UPDATE.md` into every mod folder and writes `versions.json`; none of that touches the live config.
+- `sync.sh` never undoes a merged pull request: `tools/guard.py` remembers what each sync wrote (`.git/herdr-sync-manifest.json`, local) and stops when a file changed in the repo since then and differs from the live config. Install the change into `~/.config/herdr-app` and sync again, or `./sync.sh --overwrite` to replace it on purpose.
 - `./install.sh [--machine]`: copies everything back into `~/.config/herdr-app` on a new machine; `--machine` also installs `machine/*.json` (old ones kept as `*.bak-<time>`).
 - New mod to publish: add a line to `items.conf`, run `./sync.sh`, write its `RECIPE.md`.
 - Changed an item: bump `"version"` in its live `mod.json` (or layout root) — patch for fixes, minor for new behaviour, major when it needs the person to redo something (keys, layout, settings) — add a `### x.y.z (date)` entry to its recipe's Changes, and update the version here.

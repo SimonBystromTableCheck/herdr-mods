@@ -4,6 +4,12 @@
 set -euo pipefail
 HOME_DIR="${HERDR_APP_HOME:-$HOME/.config/herdr-app}"
 REPO="$(cd "$(dirname "$0")" && pwd)"
+
+# Never undo work that reached the repo another way (a merged pull request): stop when a file
+# changed here since the last sync and differs from the live config. --overwrite: replace anyway.
+if [[ "${1:-}" != "--overwrite" ]]; then
+  python3 "$REPO/tools/guard.py" check "$REPO" "$HOME_DIR" || exit 1
+fi
 EXCLUDES=(--exclude gpui-kit.d.ts --exclude jsconfig.json --exclude .DS_Store --exclude '*.error' --exclude node_modules --exclude '.handoff-*' --exclude __pycache__)
 
 while read -r item kind rest; do
@@ -34,4 +40,5 @@ done
 
 # Where each mod came from, UPDATE.md in every mod, and versions.json (for updating).
 python3 "$REPO/tools/stamp.py" "$REPO"
+python3 "$REPO/tools/guard.py" record "$REPO" "$HOME_DIR"
 echo "synced from $HOME_DIR"
