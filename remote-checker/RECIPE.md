@@ -2,7 +2,7 @@
 
 A panel showing the GitHub pull request for the branch checked out in the focused terminal: its CI checks, reviewers, review threads and comments, diff size, commit count and when it was published. A GitHub-style summary card gives the headline ("All checks have passed", "Some checks haven't completed yet", "Some checks were not successful") with three bars for Checks, Comments and Approvals. It follows you between spaces and repos, refetches every 10s while it's showing, and has a refresh button.
 
-Four tabs, remembered per space: **Active** (that context-aware view), and gh-dash style lists in the space's base repo: **Mine** (your open PRs), **Review** (open PRs waiting for your review) and **Search** (any PR, GitHub search syntax). The base repo is the focused terminal's GitHub repo unless you pick another for the space. Enter on a list row opens the same detailed view; escape goes back to the list.
+Four tabs, remembered per space: **Active** (that context-aware view), and gh-dash style lists in the space's base repo: **Mine** (your open PRs), **Review** (open PRs waiting for your review) and **Search** (any PR, GitHub search syntax). The base repo is the focused terminal's GitHub repo unless you pick another for the space. Enter on a list row opens the same detailed view (`O` opens the PR on GitHub instead); escape goes back to the list. `]`/`[` (or `1`–`4`, `tab`) switch tabs.
 
 An avatar in the header switches the GitHub account per space (only for this panel: `gh` and `git` in your terminals keep `gh`'s active account) and signs in more accounts. Without `gh`, or signed out, the panel shows a setup screen that installs the GitHub CLI (Homebrew, or the official release into `~/.local/bin` when there's no Homebrew) and signs you in.
 
@@ -30,7 +30,7 @@ next to Herdr's Files and Changes. You don't need the `pond` layout. Uses the Gi
 Without changing the tab bar, it also opens beside a terminal:
 `herdr-app do pane.split --direction right --mod remote-checker` (`q` closes that pane).
 
-**Version:** 1.3.0 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.4.0 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** from 1.1.0, its header has a "Check for updates" pill that turns into "Update to x.y.z" when this repo publishes a newer version; click it, confirm, and a new Claude tab updates just this mod (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/remote-checker/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept; edits you made inside the mod folder are not.
 
@@ -59,7 +59,7 @@ Panel: theme `background`, text 13px, rounded 10 with a 1px border (`accent` whi
     - Reviewer (30px): icon + login (teams as `team: name`) + state: "approved · 2h ago" (`ansi2`), "changes requested" (`ansi1`), "commented" (`muted`), "awaiting review" / "re-requested" (`ansi3`), "dismissed" (`dim`). The PR author is left out.
     - Comment (50px): author (semibold), `dir/file.ts` or "conversation", `· 2 replies`, a tag "unresolved" (`ansi3`) / "outdated" (`dim`) / "resolved" (`ansi2`), age; under it the first readable line of the comment (HTML, markdown headings, links and badges stripped). Unresolved review threads first, then the conversation, then resolved threads, each newest first.
 - **Messages** instead of the list (centred, PR icon): "Checking the GitHub CLI…" (first start), "No terminal focused", "Looking for the pull request…", "Not a git repository", "Detached HEAD", "<branch> isn't pushed", "No pull request for this branch", "Couldn't reach GitHub" (with gh's error).
-- **Footer, 28px**: keycap chips (open, refetch, move, PR, copy, section) and a `?` keycap for the all-keys card.
+- **Footer, 28px**: keycap chips (open, refetch, move, PR, copy, tabs, section; in a list: open, GitHub, move, 1–4 tabs, next / prev, repo) and a `?` keycap for the all-keys card.
 
 ## How it behaves
 
@@ -73,7 +73,7 @@ Panel: theme `background`, text 13px, rounded 10 with a 1px border (`accent` whi
 - GitHub account: on start and every 60s while showing, `gh --version` (else `~/.local/bin/gh`) and `gh auth status --hostname github.com --json hosts` (older `gh`: its text) list the accounts. A space's pick (`account` in `remote-checker.json`) applies while `gh` still has it signed in; picking `gh`'s active account clears the pick, so the space follows `gh`. With a pick, every `gh` call runs as `sh -c 'GH_TOKEN=$(gh auth token --user <login>) … exec gh …'`: the token goes through the environment, never argv, and `gh`'s active account isn't touched. Switching drops what was fetched as the old account and refetches; list results are cached per account. Remote spaces' `gh pr view` runs on their machine with its own login (the pick is for this computer).
 - Names for initials: `gh api user` once per account, kept in `remote-checker.json` (`names`).
 - Setup shows while `gh` is missing or has no github.com account; nothing is fetched meanwhile. Install runs in the background (up to 10 minutes): `brew install gh` when `brew` is there, else `install-gh.sh`: the latest release (tag from the `releases/latest` redirect, no API rate limit) for `uname -s`/`-m` (macOS or Linux, arm64 or amd64), checked against the release's `gh_<v>_checksums.txt` (SHA-256), installed to `~/.local/bin/gh`. Sign in opens a tab (`tab.new`) running `gh auth login --hostname github.com --web` (it needs enter and the browser). While an install or sign-in is pending the panel rechecks every 3s for up to 10 minutes. `gh auth login` makes the new account `gh`'s active one: the panel switches it back (`gh auth switch`) to the one that was active, and an account added from the menu becomes that space's pick.
-- Keys: `j`/`k` (or arrows) move between selectable rows (the PR card, the summary card, checks, reviewers, comments), `gg`/`G` top/bottom (also `<`/`>`, home/end), `ctrl-d`/`ctrl-u` six rows, `]`/`[` next / previous section, `enter`/`o`/`l` open the selected row in the browser (a check's details, a review, a comment, the PR, the PR's checks tab), `O` open the PR, `y` copy the selected row's link (a flash in the footer), `r` refetch, `a` the account menu, `h`/`←` or `escape` give the keyboard back to the terminal, `q` hide the panel and give the keyboard back, `?` the keys card (`escape`, `?` or `q` closes it). Double-click opens a row; click selects.
+- Keys: `j`/`k` (or arrows) move between selectable rows (the PR card, the summary card, checks, reviewers, comments), `gg`/`G` top/bottom (also `<`/`>`, home/end), `ctrl-d`/`ctrl-u` six rows, `}`/`{` next / previous section, `]`/`[` next / previous tab (wrapping), `enter`/`o`/`l` open the selected row in the browser (a check's details, a review, a comment, the PR, the PR's checks tab), `O` open the PR on GitHub (in a list: the selected row's PR), `y` copy the selected row's link (a flash in the footer), `r` refetch, `a` the account menu, `h`/`←` or `escape` give the keyboard back to the terminal, `q` hide the panel and give the keyboard back, `?` the keys card (`escape`, `?` or `q` closes it). Double-click opens a row; click selects.
 - Leaving: `cmd-alt-left` (a `pane.go:left` key) and the leader's `h` (`remote-checker.go:left`) go straight back to the focused pane with `pane.focus` rather than `pane.go`; other directions use `pane.go`.
 - Selection keeps its row in view; the section header above a section's first item stays visible too.
 
@@ -114,11 +114,17 @@ Panel: theme `background`, text 13px, rounded 10 with a 1px border (`accent` whi
 - In a space whose terminal is on a pushed branch with an open PR, the panel shows its number, title, `+/−`, files and commits, the right headline and bars, and every check, reviewer and review thread GitHub shows.
 - Switching to a space in another repo shows "Looking for the pull request…", then that repo's PR (or the right message) within a couple of seconds; a non-repo folder says "Not a git repository".
 - "checked …" stays under ~10s while the panel shows; the refresh button and `r` spin the ring and refetch.
-- `j`/`k`, `gg`/`G`, `]`/`[` move the selection and keep it in view; `enter` opens the selected check's CI page; `y` copies a link.
+- `j`/`k`, `gg`/`G`, `}`/`{` move the selection and keep it in view; `enter` opens the selected check's CI page; `y` copies a link.
 - `h`, `escape`, `cmd-alt-left` and leader `h` give the keyboard back to the terminal and it stays there; `q` hides the panel.
 - A local commit not yet pushed shows `↑1 unpushed` on the PR card.
 
 ## Changes
+
+### 1.4.0 (2026-11-13)
+
+- `O` on a Mine / Review / Search row opens that PR on GitHub (enter still opens the detail view).
+- `]` / `[` switch to the next / previous tab (wrapping), as in the lazygit panel; the list footer shows `1`–`4` tabs and `]` / `[` next / prev.
+- Jumping between sections of the detail view moved from `]` / `[` to `}` / `{`.
 
 ### 1.3.0 (2026-11-13)
 

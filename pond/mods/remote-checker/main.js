@@ -61,25 +61,25 @@ function shapeItem(n) {
 const KEYS = {
   moving: [
     { caps: ["j", "k"], label: "move" }, { caps: ["g", "G"], label: "top / bottom" },
-    { caps: ["ctrl-d", "ctrl-u"], label: "half page" }, { caps: ["]", "["], label: "next / prev section" },
+    { caps: ["ctrl-d", "ctrl-u"], label: "half page" }, { caps: ["}", "{"], label: "next / prev section" },
   ],
   acting: [
     { caps: ["enter"], label: "open in browser" }, { caps: ["O"], label: "open the pull request" },
     { caps: ["y"], label: "copy link" }, { caps: ["r"], label: "refetch now" }, { caps: ["h"], label: "back to the terminal" }, { caps: ["escape"], label: "back to the terminal" }, { caps: ["q"], label: "close the panel" },
   ],
   tabs: [
-    { caps: ["1", "4"], label: "Active / Mine / Review / Search" }, { caps: ["tab"], label: "next tab" },
+    { caps: ["1", "4"], label: "Active / Mine / Review / Search" }, { caps: ["]", "["], label: "next / prev tab" }, { caps: ["tab"], label: "next tab" },
     { caps: ["b"], label: "base repo for this space" }, { caps: ["a"], label: "GitHub account for this space" }, { caps: ["/"], label: "search the base repo" },
-    { caps: ["enter"], label: "open a pull request from a list" }, { caps: ["escape"], label: "back to the list" },
+    { caps: ["enter"], label: "open a pull request from a list" }, { caps: ["O"], label: "open it on GitHub" }, { caps: ["escape"], label: "back to the list" },
   ],
 };
 const LIST_FOOTER = [
-  { caps: ["enter"], label: "open" }, { caps: ["j", "k"], label: "move" }, { caps: ["1", "4"], label: "tabs" },
+  { caps: ["enter"], label: "open" }, { caps: ["O"], label: "GitHub" }, { caps: ["j", "k"], label: "move" }, { caps: ["1", "4"], label: "tabs" }, { caps: ["]", "["], label: "next / prev" },
   { caps: ["b"], label: "repo" }, { caps: ["/"], label: "search" }, { caps: ["r"], label: "refetch" },
 ];
 const FOOTER = [
   { caps: ["enter"], label: "open" }, { caps: ["r"], label: "refetch" }, { caps: ["j", "k"], label: "move" },
-  { caps: ["O"], label: "PR" }, { caps: ["y"], label: "copy" }, { caps: ["]", "["], label: "section" },
+  { caps: ["O"], label: "PR" }, { caps: ["y"], label: "copy" }, { caps: ["]", "["], label: "tabs" }, { caps: ["}", "{"], label: "section" },
 ];
 
 function keyOf(e) {
@@ -670,7 +670,8 @@ export default class RemoteChecker extends View {
     };
     const tabKey = TABS.find((x) => x.key === k);
     if (tabKey) { this.setTab(tabKey.id, cx); return true; }
-    if (k === "tab") { const i = TABS.findIndex((x) => x.id === this.tab()); this.setTab(TABS[(i + 1) % TABS.length].id, cx); return true; }
+    const step = k === "tab" || k === "]" ? 1 : k === "[" ? -1 : 0;
+    if (step) { const i = TABS.findIndex((x) => x.id === this.tab()); this.setTab(TABS[(i + step + TABS.length) % TABS.length].id, cx); return true; }
     if (k === "b") { this.openPicker(cx); return true; }
     if (k === "a") { this.openAccountMenu(cx); return true; }
     if (k === "/") { this.setTab("search", cx); this.editSearch(cx); return true; }
@@ -685,11 +686,11 @@ export default class RemoteChecker extends View {
       case "G": case ">": case "end": move(n - 1); return true;
       case "ctrl-d": case "pagedown": move(this.sel + 6); return true;
       case "ctrl-u": case "pageup": move(this.sel - 6); return true;
-      case "]": sectionJump(1); return true;
-      case "[": sectionJump(-1); return true;
+      case "}": sectionJump(1); return true;
+      case "{": sectionJump(-1); return true;
       case "h": case "left": this.go("left"); return true;
       case "enter": case "o": case "l": { const r = this.selectedRow(rows); if (r?.url) exec("open", [r.url]); return true; }
-      case "O": { const pr = this.view()?.pr; if (pr) exec("open", [pr.url]); return true; }
+      case "O": { const url = this.listMode() ? this.selectedRow(rows)?.url : this.view()?.pr?.url; if (url) exec("open", [url]); return true; }
       case "y": {
         const r = this.selectedRow(rows), url = r?.url ?? this.view()?.pr?.url;
         if (url) { exec("sh", ["-c", 'printf %s "$1" | pbcopy', "copy", url]); this.flash("Copied " + url.replace(/^https:\/\/github\.com\//, ""), cx); }
