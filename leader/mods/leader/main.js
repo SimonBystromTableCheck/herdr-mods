@@ -38,7 +38,8 @@ export default class Leader extends View {
     // Read before this popup's own focus makes the panel report it lost the keyboard.
     const candidates = new Set([...modsIn(layout()), ...this.panels.map(p => p.mod), ...panes().map(p => p.mod).filter(Boolean)]);
     this.fromPanel = [...candidates].find(m => shared(`${m}.hasKeys`) === true) ?? null;
-    this.fromGitTab = shared("git.tabHasKeys") === true;
+    // Only while the focused tab really is an expanded Git tab: the flag can outlive a tab closed with the keys.
+    this.fromGitTab = shared("git.tabHasKeys") === true && panes().some(p => p.tab === focused()?.tab && p.mod === "git");
     this.fromGitview = shared("gitview.hasKeys") === true;
     this.handle = cx.focus_handle();
     this.handle.focus();

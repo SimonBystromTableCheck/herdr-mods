@@ -3,7 +3,7 @@
   "update": "tools/UPDATE.md",
   "mods": {
     "git": {
-      "version": "1.2.0",
+      "version": "1.3.0",
       "item": "git",
       "path": "git/mods/git"
     },
@@ -13,7 +13,7 @@
       "path": "git/mods/git-conflicts"
     },
     "leader": {
-      "version": "2.0.0",
+      "version": "2.0.1",
       "item": "leader",
       "path": "leader/mods/leader"
     },
@@ -33,7 +33,7 @@
       "path": "servers/mods/servers"
     },
     "remote-checker": {
-      "version": "1.4.0",
+      "version": "1.4.1",
       "item": "remote-checker",
       "path": "remote-checker/mods/remote-checker"
     },
@@ -65,7 +65,7 @@
   },
   "layouts": {
     "pond": {
-      "version": "1.8.1",
+      "version": "1.9.0",
       "item": "pond",
       "path": "pond/layouts/pond.json",
       "mods": [

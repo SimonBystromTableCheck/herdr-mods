@@ -1,1 +1,1 @@
-{ "place": "none", "title": "Remote Checker", "version": "1.4.0", "source": {"repo": "https://github.com/SimonBystromTableCheck/herdr-mods", "item": "remote-checker", "mod": "remote-checker"}, "focusable": true, "panel": {"title": "PR", "icon": "pr.svg", "leader": "P"} }
+{ "place": "none", "title": "Remote Checker", "version": "1.4.1", "source": {"repo": "https://github.com/SimonBystromTableCheck/herdr-mods", "item": "remote-checker", "mod": "remote-checker"}, "focusable": true, "panel": {"title": "GH", "icon": "pr.svg", "leader": "G"} }

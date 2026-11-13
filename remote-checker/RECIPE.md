@@ -7,7 +7,7 @@ Four tabs, remembered per space: **Active** (that context-aware view), and gh-da
 An avatar in the header switches the GitHub account per space (only for this panel: `gh` and `git` in your terminals keep `gh`'s active account) and signs in more accounts. Without `gh`, or signed out, the panel shows a setup screen that installs the GitHub CLI (Homebrew, or the official release into `~/.local/bin` when there's no Homebrew) and signs you in.
 
 **Install:** tell your Herdr agent "Install the Herdr mod at
-https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/remote-checker". You get a **PR** button in the tab bar that opens it in the right-hand panel,
+https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/remote-checker". You get a **GH** button in the tab bar that opens it in the right-hand panel,
 next to Herdr's Files and Changes. You don't need the `pond` layout. Uses the GitHub CLI (`gh`); if it's missing or signed out, the panel's own setup screen installs it and signs you in. What the agent does:
 
 1. Copy `mods/remote-checker/` into `~/.config/herdr-app/mods/` and run `herdr-app check ~/.config/herdr-app/mods/remote-checker`.
@@ -30,7 +30,7 @@ next to Herdr's Files and Changes. You don't need the `pond` layout. Uses the Gi
 Without changing the tab bar, it also opens beside a terminal:
 `herdr-app do pane.split --direction right --mod remote-checker` (`q` closes that pane).
 
-**Version:** 1.4.0 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.4.1 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** from 1.1.0, its header has a "Check for updates" pill that turns into "Update to x.y.z" when this repo publishes a newer version; click it, confirm, and a new Claude tab updates just this mod (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/remote-checker/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept; edits you made inside the mod folder are not.
 
@@ -83,7 +83,7 @@ Panel: theme `background`, text 13px, rounded 10 with a 1px border (`accent` whi
 - Accounts and setup: `accounts.js` (`gh` runs every call as the space's account, `checkAuth`, `installGh`, `startSignIn`, `avatar`, `setupView`, `accountMenu`) and `install-gh.sh` (the no-Homebrew installer); in `main.js` `account()`, `needsSetup()`, `loadAuth`, `watchAuth`, `pickAccount`. Command `remote-checker.accounts` opens the menu.
 - `update.js`: the self-update pill (the same file in every mod from this repo; `tools/stamp.py` refuses copies that differ). It reads `mod.json` `version` and `source`, fetches the repo's `versions.json` (shared between mods as `herdr-mods.versions`, on start and whenever the panel comes back on screen) and on confirm runs `tab.new` with `claude` in the Herdr home. No `source`: no pill.
 - `main.js` (all logic and rendering), `keybar.js` (footer keycaps and keys card, the same file as the servers, todos and skills mods), icons `pr.svg comment.svg dot.svg ring.svg minus.svg check.svg x.svg external.svg`.
-- `mod.json`: `{ "place": "none", "title": "Remote Checker", "focusable": true, "panel": { "title": "PR", "icon": "pr.svg", "leader": "P" } }`. No `props`. `panel` is what `pond-tabs` (button label and icon) and the `leader` (key) read.
+- `mod.json`: `{ "place": "none", "title": "Remote Checker", "focusable": true, "panel": { "title": "GH", "icon": "pr.svg", "leader": "G" } }`. No `props`. `panel` is what `pond-tabs` (button label and icon) and the `leader` (key) read.
 - `panel.js`: where the panel is and showing or closing it there (the same file in every panel mod from this repo; `tools/stamp.py` refuses copies that differ). `q` closes it wherever it is: a popup closes, a focused pane closes, and a layout block hides the node holding its stack (the `panel` column in Herdr's `main` and its copies). No layout ids are assumed.
 - herdr: `exec theme settings run nextCommand focused panes spaces setShared home` (`layout`, `closeOverlay`, `props` through `panel.js`). Commands: `tab.new` (sign-in), `layout.hide`, `pane.close`, `pane.focus`, `pane.go`.
 - `nextCommand()`: `focus`, `go:<direction>`, `key:<k>` (e.g. `"remote-checker.key:r"` in keys.json), `refresh`. Shared: `remote-checker.hasKeys` (keyboard ownership, polled every 300ms, read by the `leader` mod).
@@ -119,6 +119,10 @@ Panel: theme `background`, text 13px, rounded 10 with a 1px border (`accent` whi
 - A local commit not yet pushed shows `↑1 unpushed` on the PR card.
 
 ## Changes
+
+### 1.4.1 (2026-11-13)
+
+- The tab-bar button is now **GH** (was PR) and the leader key `G` (was `P`).
 
 ### 1.4.0 (2026-11-13)
 

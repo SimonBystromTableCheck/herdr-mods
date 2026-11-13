@@ -1,13 +1,14 @@
 // A lazygit-style git panel: numbered sections, vim-ish keys, writes run in core
 // terminals whose output stays in a copyable log, and conflicts/failures hand off to an agent.
 import { View, div, svg } from "gpui-kit";
-import { v_flex, h_flex, InputState, Input, Editor, EditorState, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
+import { v_flex, h_flex, InputState, Input, Editor, EditorState, Scrollbar, ScrollHandle, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { keybar, keysCard } from "./keybar.js";
-import { spaces, panes, focused, agents, knownAgents, exec, hc, run, theme, settings, props, appHome, watchFolder, nextCommand, readTextFile, setShared, shared } from "herdr";
+import { spaces, panes, focused, agents, knownAgents, exec, hc, run, theme, settings, props, appHome, watchFolder, nextCommand, readTextFile, setShared, shared, layout } from "herdr";
 import * as G from "./git.js";
 import { graphCell } from "./graph.js";
 import { SelfUpdate } from "./update.js";
-import { closePanel, hidePanel, revealPanel } from "./panel.js";
+import { closePanel, hidePanel, revealPanel, pathTo, panelOnScreen } from "./panel.js";
+import { loadFileDiff, loadFolderDiff, treeRows, patchFor, snippetOf, lineOf, sidesOf, incomingPaths, loadConflict, resolveBlock } from "./files.js";
 
 const commitDraft = root => (shared("git.commitDrafts") ?? {})[root] ?? "";
 function setCommitDraft(root, msg) {
@@ -19,13 +20,21 @@ function setCommitDraft(root, msg) {
 const ROW = 22, LINE = 18;
 const CHROME = "mods/workspace-chrome";
 const SECTIONS = [
+  { id: "files", key: "2", title: "Files", cap: 6 },
   { id: "branches", key: "3", title: "Branches", cap: 5, tabs: ["Local", "Remote"] },
   { id: "commits", key: "4", title: "Commits", cap: 6, tabs: ["Branch", "All"] },
   { id: "stash", key: "5", title: "Stash", cap: 2 },
 ];
-const LISTS = ["branches0", "branches1", "commits0", "commits1", "stash"];
+const LISTS = ["files", "branches0", "branches1", "commits0", "commits1", "stash"];
 const PR_COLOR = { OPEN: "ansi2", MERGED: "ansi5", CLOSED: "ansi1" };
 const { q } = G;
+// The panel column grows to this (or its max) while Files shows, so the diff gets the right half.
+const WIDE = 1000;
+const changeRow = r => r?.kind === "add" || r?.kind === "del";
+const lineRow = r => changeRow(r) || ["ctx", "ours", "theirs", "base"].includes(r?.kind);
+// Diffs up to this many rows are drawn as plain rows (clicks, shift-click and drag select);
+// longer ones as a virtual list (keys and plain clicks).
+const PLAIN_ROWS = 2000;
 
 // `fixed`: the repo an expanded Git tab was opened on (its props, read once in init).
 // `keep`: the last place; a mod pane in focus (the conflicts pane, a diff) has no folder, so it stays.
@@ -40,7 +49,7 @@ function location(fixed, keep) {
 
 // lazygit spells keys "<c-p>", "<a-x>", "<space>"; keys here are "ctrl-p", "alt-x", "space".
 const lazyKey = k => k.replace(/^<c-(.+)>$/, "ctrl-$1").replace(/^<a-(.+)>$/, "alt-$1").replace(/^<(.+)>$/, "$1");
-const CONTEXTS = { global: () => true, localBranches: v => v.sec === "branches" && !v.tab.branches,
+const CONTEXTS = { global: () => true, files: v => v.sec === "files", localBranches: v => v.sec === "branches" && !v.tab.branches,
   remoteBranches: v => v.sec === "branches" && v.tab.branches === 1, commits: v => v.sec === "commits", stash: v => v.sec === "stash" };
 
 function keyOf(e) {
@@ -64,14 +73,21 @@ export default class Git extends View {
   init(_props, cx) {
     this.selfUpdate = new SelfUpdate("git", "Git panel"); this.selfUpdate.start(cx);
     this.handle = cx.focus_handle();
-    // Props read later can belong to another copy (gitview's recipe saw it), so read them once.
+    // Props read later can belong to another copy, so read them once.
     const p = props();
     this.fixed = p?.cwd ? { cwd: p.cwd, on: p.on ?? null } : null;
+    // Which expanded tab this copy is in: expand() names it with a token (tabs from before: the only Git pane).
+    this.token = p?.token ?? null;
     if (this.fixed) cx.timer.after(150, () => this.handle.focus());
     this.scrolls = Object.fromEntries([...LISTS, "main"].map(k => [k, VirtualListScrollHandle.new()]));
+    this.diffScroll = ScrollHandle.new();
     this.sec = "branches"; this.tab = { branches: 0, commits: 0 };
     this.sel = {}; this.filter = {}; this.log = []; this.seq = 0; this.copied = [];
-    this.mainTop = 0; this.mainToken = 0;
+    this.mainTop = 0; this.mainToken = 0; this.cur = 0; this.anchor = null;
+    // Files as a tree (t: flat); folded folders by path ("" is "/").
+    this.folded = new Set(); this.flat = shared("git.flatFiles") === true;
+    // A reload or restart while Files had the panel widened: this copy puts the width back.
+    this.widened = this.fixed ? null : shared("git.widened") ?? null;
     this.seqEditor = `${appHome()}/mods/git/seq-edit.pl`;
     cx.spawn(async cx => {
       const r = await exec("sh", ["-c", 'printf %s "$SHELL"']).catch(() => null);
@@ -107,8 +123,28 @@ export default class Git extends View {
       const k = this.keyboard();
       if (k !== this.sharedKeys) { this.sharedKeys = k; setShared(this.fixed ? "git.tabHasKeys" : "git.hasKeys", k); }
       if (k !== this.hadKeys) { this.hadKeys = k; cx.notify(); }
+      if (!this.fixed) this.syncWidth();
+      else this.refocus(cx);
     });
     this.refresh(cx, true);
+  }
+
+  // A closed copy can't report losing the keyboard any more: clear its flag (a tab closed while it
+  // had the keys left the leader thinking the expanded tab still had them, so e collapsed nothing).
+  close() {
+    setShared(this.fixed ? "git.tabHasKeys" : "git.hasKeys", false);
+  }
+
+  // The expanded tab: coming back to it (tab.select, a click on its tab) shows the pane as focused,
+  // but only pane.go hands a mod its "focus". So take the keyboard when this pane becomes the focused
+  // one; only then, so a popup or dialog over it keeps the keys.
+  refocus(cx) {
+    const mine = this.token ? shared("git.tabOf")?.[this.token] : null;
+    const gits = panes().filter(p => p.mod === "git");
+    const pane = mine ? gits.find(p => p.tab === mine) : gits.length === 1 ? gits[0] : null;
+    const active = Boolean(pane) && focused()?.pane === pane.pane;
+    if (active && !this.wasActive && !this.keyboard() && !this.prompt) { this.handle.focus(); cx.notify(); }
+    this.wasActive = active;
   }
 
   // ---- Data ------------------------------------------------------------------
@@ -145,7 +181,7 @@ export default class Git extends View {
           this.locKey = k;
           this.ctx = loc.cwd ? await G.openRepo(loc.cwd, loc.on) : null;
           this.cwd = loc.cwd;
-          Object.assign(this, { status: null, op: null, branches: null, commits: null, stash: null, prs: null, main: null, mainOverride: null, sel: {}, filter: {}, copied: [] });
+          Object.assign(this, { status: null, op: null, branches: null, commits: null, stash: null, prs: null, main: null, mainOverride: null, sel: {}, filter: {}, copied: [], folded: new Set() });
           if (!this.ctx) return;
           this.base = await G.defaultRef(this.ctx);
           this.watch(this.ctx, cx);
@@ -156,6 +192,8 @@ export default class Git extends View {
         const [status, op] = await Promise.all([G.loadStatus(ctx), G.loadOp(ctx)]);
         if (ctx !== this.ctx) return;
         this.status = status; this.op = op;
+        const opKey = op ? `${op.kind}:${op.other}:${op.current ?? ""}` : null;
+        if (opKey !== this.incoming?.key) this.incoming = op ? { key: opKey, paths: await incomingPaths(ctx, op).catch(() => new Set()) } : null;
         if (heavy) {
           const [branches, commits, stash] = await Promise.all([G.loadBranches(ctx, this.base), G.loadCommits(ctx, this.tab.commits === 1 ? ["--all"] : ["HEAD"], this.base), G.loadStash(ctx)]);
           if (ctx !== this.ctx) return;
@@ -176,15 +214,21 @@ export default class Git extends View {
 
   // ---- Lists & selection -----------------------------------------------------
 
-  lk(sec = this.sec) { return sec === "branches" ? `branches${this.tab.branches}` : sec === "commits" ? `commits${this.tab.commits}` : sec; }
+  lk(sec = this.sec) { return sec === "files" ? "files" : sec === "branches" ? `branches${this.tab.branches}` : sec === "commits" ? `commits${this.tab.commits}` : sec; }
 
   rawItems(sec) {
+    if (sec === "files") {
+      const files = this.status?.files ?? [];
+      // A filter lists the matching files flat.
+      return this.flat || this.filter.files ? files.map(f => ({ kind: "file", path: f.path, file: f, depth: 0 })) : treeRows(files, this.folded);
+    }
     if (sec === "branches") return (this.tab.branches ? this.branches?.remote : this.branches?.local) ?? [];
     if (sec === "commits") return this.commits ?? [];
     return this.stash ?? [];
   }
 
   textOf(sec, it) {
+    if (sec === "files") return it.path;
     if (sec === "branches") return `${it.name} ${it.subject}`;
     if (sec === "commits") return it.sha ? `${it.short} ${it.subject} ${it.author} ${it.refs.join(" ")}` : "";
     return it.message;
@@ -242,6 +286,9 @@ export default class Git extends View {
     const it = this.selected(), ctx = this.ctx;
     if (!it || !ctx) return null;
     switch (this.sec) {
+      case "files":
+        if (it.kind === "dir") return { key: `d:${it.path}`, title: it.path || "/", path: it.path, diff: () => loadFolderDiff(ctx, it.path, this.status?.files ?? []) };
+        return { key: `f:${it.path}`, title: it.path, path: it.path, diff: () => it.file.conflict ? loadConflict(ctx, it.file, this.sides()) : loadFileDiff(ctx, it.file) };
       case "branches": return { key: `b:${it.name}:${it.sha}`, title: `log · ${it.name}`, commits: () => G.loadCommits(ctx, [it.name], this.base, 200) };
       case "commits": return it.sha ? { key: `c:${it.sha}`, title: `${it.short} · ${it.subject}`, load: () => G.commitShow(ctx, it.sha) } : null;
       case "stash": return { key: `s:${it.ref}:${it.message}`, title: `${it.ref} · ${it.message}`, load: () => G.stashShow(ctx, it.ref) };
@@ -255,9 +302,20 @@ export default class Git extends View {
     if (spec.log) { this.showLogEditor(spec.log); this.main = { key: spec.key, log: spec.log }; return; }
     if (spec.key === this.main?.key && !force) return;
     const same = spec.key === this.main?.key;
-    this.main = { key: spec.key, title: spec.title, style: spec.style, rows: same ? this.main.rows : null, commits: same ? this.main.commits : null, width: same ? this.main.width : 0 };
+    this.main = { key: spec.key, title: spec.title, style: spec.style, path: spec.path, rows: same ? this.main.rows : null, commits: same ? this.main.commits : null, diff: same ? this.main.diff : null, notesSig: same ? this.main.notesSig : null, width: same ? this.main.width : 0 };
     if (!same) this.mainTop = 0;
     const token = ++this.mainToken, main = this.main;
+    if (spec.diff) {
+      cx.spawn(async cx => {
+        const d = await spec.diff().catch(e => ({ rows: [{ kind: "meta", text: String(e) }], hunks: [] }));
+        if (token !== this.mainToken) return;
+        main.diff = d; main.notesSig = null;
+        this.diffRows(main);
+        if (same) this.clampCursor(); else { this.cur = this.firstChange(); this.anchor = null; }
+        cx.notify();
+      });
+      return;
+    }
     if (spec.commits) {
       cx.spawn(async cx => {
         const commits = await spec.commits().catch(() => []);
@@ -296,6 +354,343 @@ export default class Git extends View {
     this.mainTop = Math.max(0, Math.min(n - 1, this.mainTop + delta));
     this.scrolls.main.scroll_to_item(this.mainTop, "top");
     cx.notify();
+  }
+
+  // ---- Files: the diff, hunks, notes ---------------------------------------------
+
+  // Review notes, kept per repo until sent to an agent (shared, so the expanded tab sees them).
+  notesKey() { return this.ctx ? `${this.ctx.on ?? ""}:${this.ctx.root}` : null; }
+  notes() { return (shared("git.notes") ?? {})[this.notesKey()] ?? []; }
+  setNotes(list) {
+    const all = { ...(shared("git.notes") ?? {}) }, k = this.notesKey();
+    if (!k) return;
+    if (list.length) all[k] = list; else delete all[k];
+    setShared("git.notes", all);
+  }
+
+  // The diff's rows with this file's notes under the line each ends on (rebuilt when the notes change).
+  diffRows(main = this.main) {
+    if (!main?.diff) return main?.rows ?? [];
+    const notes = this.notes().filter(n => main.diff.folder ? this.under(main.path, n.path) : n.path === main.path), sig = notes.map(n => n.id).join(",");
+    if (main.rows && main.notesSig === sig) return main.rows;
+    const rows = [], placed = new Set();
+    const noteRows = n => String(n.text).split("\n").map((line, i) => ({ kind: "note", note: n, text: `${i ? "  " : "✎ "}${line}` }));
+    for (const r of main.diff.rows) {
+      rows.push(r);
+      if (!lineRow(r)) continue;
+      for (const n of notes) if (!placed.has(n.id) && n.side === r.side && n.at === this.anchorOf(r) && n.path === (r.file ?? main.path)) { placed.add(n.id); rows.push(...noteRows(n)); }
+    }
+    const loose = notes.filter(n => !placed.has(n.id));
+    if (loose.length) rows.push({ kind: "section", text: "Notes on lines that moved" }, ...loose.flatMap(noteRows));
+    main.rows = rows; main.notesSig = sig;
+    main.width = Math.min(30000, Math.max(300, ...rows.slice(0, 2000).map(r => String(r.text ?? "").length * 7.3 + 110)));
+    return rows;
+  }
+
+  // The status entry for a path, and the file a diff row belongs to (a folder's diff has several).
+  fileAt(path) { return (this.status?.files ?? []).find(f => f.path === path) ?? null; }
+  rowPath(r) { return r?.file ?? (this.main?.diff?.folder ? null : this.main?.path) ?? null; }
+  under(folder, path) { return !folder || path.startsWith(`${folder}/`); }
+
+  // Files tree: fold or unfold a folder row (enter, a click on a selected folder), keeping it selected.
+  toggleFold(row, cx) {
+    if (row?.kind !== "dir") return;
+    if (this.folded.has(row.path)) this.folded.delete(row.path); else this.folded.add(row.path);
+    this.keepSelected(row, cx);
+  }
+  foldAll(fold, cx) {
+    const row = this.selected("files");
+    this.folded = fold ? new Set(treeRows(this.status?.files ?? [], new Set()).filter(r => r.kind === "dir" && !r.root).map(r => r.path)) : new Set();
+    // The selection climbs to its outermost folded folder.
+    const top = row && fold ? treeRows(this.status?.files ?? [], this.folded).find(r => r.kind === "dir" && !r.root && this.under(r.path, row.path)) : row;
+    this.keepSelected(top ?? row, cx);
+  }
+  keepSelected(row, cx) {
+    const i = this.items("files").findIndex(r => row && r.kind === row.kind && r.path === row.path);
+    if (i >= 0) this.sel.files = i;
+    this.mainOverride = null; this.syncMain(cx); cx.notify();
+  }
+  toggleFlat(cx) {
+    const row = this.selected("files");
+    this.flat = !this.flat; setShared("git.flatFiles", this.flat);
+    this.keepSelected(row?.kind === "file" ? row : null, cx);
+    this.flash(this.flat ? "Files: flat list" : "Files: tree");
+  }
+  // J / K in the diff: the next / previous file row (folders skipped).
+  nextFile(dir, cx) {
+    const items = this.items("files");
+    let i = this.selIndex("files") + dir;
+    while (i >= 0 && i < items.length && items[i].kind !== "file") i += dir;
+    if (i >= 0 && i < items.length) this.move(0, cx, i);
+  }
+
+  // The operation's two sides, named (null when no merge / rebase / pick is running).
+  sides() { return sidesOf(this.op, this.status?.info?.head); }
+  fromIncoming(path) { return Boolean(this.incoming?.paths?.has(path)); }
+
+  revealCursor() {
+    if ((this.main?.rows?.length ?? 0) > PLAIN_ROWS) this.scrolls.main.scroll_to_item(this.cur);
+    else this.diffScroll.scroll_to_item(this.cur);
+  }
+
+  // A press on a diff line: the cursor goes there; shift extends the selection from the cursor;
+  // holding the button and moving selects the lines dragged over.
+  pressLine(i, e, cx) {
+    const rows = this.main?.rows ?? [];
+    if (!lineRow(rows[i])) return;
+    this.handle.focus();
+    this.mainFocus = true;
+    if (e?.modifiers?.shift) { if (this.anchor == null) this.anchor = this.cur; this.cur = i; }
+    else { this.cur = i; this.anchor = null; this.dragging = i; }
+    cx.notify();
+  }
+  dragTo(i, cx) {
+    if (this.dragging == null || i === this.cur || !lineRow(this.main?.rows?.[i])) return;
+    this.anchor = this.dragging; this.cur = i;
+    cx.notify();
+  }
+
+  // A hunk header's buttons: put the cursor on the hunk, then stage / unstage / discard it.
+  onHunk(i, what, cx) {
+    const rows = this.main?.rows ?? [], h = rows[i]?.hunk;
+    let j = i + 1;
+    while (j < rows.length && rows[j].hunk === h && !changeRow(rows[j])) j++;
+    this.cur = j < rows.length && rows[j].hunk === h ? j : i + 1; this.anchor = null; this.mainFocus = true;
+    if (what === "discard") this.discardHunk(cx); else if (what === "note") this.addNote(cx); else this.stageHunk(cx);
+  }
+
+  // Keeps one side of a conflict (o / t / b, or its buttons): rewrites the file without its markers.
+  resolve(choice, cx, block) {
+    const d = this.main?.diff, f = this.fileAt(this.main?.path);
+    const b = block ?? this.main?.rows?.[this.cur]?.block;
+    if (!d?.text || !b || !f) { this.flash("Move onto a conflict first"); return; }
+    const text = resolveBlock(d.text, b, choice), ctx = this.ctx;
+    const label = { ours: this.sides()?.oursShort ?? "ours", theirs: this.sides()?.theirsShort ?? "theirs", both: "both" }[choice];
+    cx.spawn(async cx => {
+      const r = await exec("sh", ["-c", 'printf "%s" "$1" > "$2"', "write", text, f.path], { cwd: ctx.root, on: ctx.on }).catch(e => ({ code: -1, stderr: String(e) }));
+      if (r.code !== 0) this.flash(`Couldn't write ${f.path}: ${(r.stderr ?? "").trim()}`, 6000);
+      else this.flash(`Kept ${label} in conflict ${b.index + 1}${d.blocks.length === 1 ? ": no conflicts left, space stages it" : ""}`);
+      this.refresh(cx, false);
+      cx.notify();
+    });
+  }
+
+  anchorOf(r) { return `${r.kind === "del" ? "o" : "n"}${lineOf(r)}`; }
+  firstChange() { const rows = this.main?.rows ?? []; const i = rows.findIndex(changeRow); return i >= 0 ? i : Math.max(0, rows.findIndex(lineRow)); }
+  clampCursor() {
+    const rows = this.main?.rows ?? [];
+    let i = Math.max(0, Math.min(this.cur, rows.length - 1));
+    if (!lineRow(rows[i])) { let j = i; while (j < rows.length && !lineRow(rows[j])) j++; if (j >= rows.length) { j = i; while (j > 0 && !lineRow(rows[j])) j--; } i = j; }
+    this.cur = i;
+    if (this.anchor != null && this.anchor >= rows.length) this.anchor = null;
+  }
+
+  // Moves the diff cursor to `i` (stepping over headers and notes in `dir`) and keeps it in view.
+  cursorTo(i, dir = 1) {
+    const rows = this.main?.rows ?? [];
+    if (!rows.length) return;
+    i = Math.max(0, Math.min(i, rows.length - 1));
+    let j = i;
+    while (j >= 0 && j < rows.length && !lineRow(rows[j])) j += dir;
+    if (j < 0 || j >= rows.length) { j = i; while (j >= 0 && j < rows.length && !lineRow(rows[j])) j -= dir; }
+    if (j >= 0 && j < rows.length) this.cur = j;
+    this.revealCursor();
+  }
+
+  // ↓ / ↑ (and } / {): the next hunk's (or conflict's) first change, or the start of this one / the previous one.
+  hunkJump(dir) {
+    const rows = this.main?.rows ?? [], group = r => r?.hunk ?? r?.block ?? null, here = group(rows[this.cur]);
+    const starts = [];
+    rows.forEach((r, i) => { if (r.kind === "hunk" || (r.kind === "mark" && r.part === "ours")) starts.push(i); });
+    const firstIn = s => {
+      const g = group(rows[s]);
+      for (let i = s + 1; i < rows.length && group(rows[i]) === g; i++) if (changeRow(rows[i]) || (rows[i].block && lineRow(rows[i]))) return i;
+      return s + 1;
+    };
+    if (dir > 0) { const s = starts.find(s => s > this.cur && group(rows[s]) !== here); if (s != null) this.cursorTo(firstIn(s)); return; }
+    const mine = starts.filter(s => s < this.cur), at = mine.length ? firstIn(mine[mine.length - 1]) : null;
+    const s = at != null && at < this.cur ? mine[mine.length - 1] : mine[mine.length - 2];
+    if (s != null) this.cursorTo(firstIn(s), -1);
+  }
+
+  // The chosen lines (v): changes between the anchor and the cursor on the cursor's side, else null.
+  picked() {
+    if (this.anchor == null) return null;
+    const rows = this.main?.rows ?? [], side = rows[this.cur]?.side;
+    const [a, b] = [Math.min(this.anchor, this.cur), Math.max(this.anchor, this.cur)];
+    return new Set(rows.slice(a, b + 1).filter(r => changeRow(r) && r.side === side));
+  }
+
+  // space in the diff: stage (or, on the staged side, unstage) the chosen lines or the cursor's hunk.
+  stageHunk(cx) {
+    const r = this.main?.rows?.[this.cur], f = this.fileAt(this.rowPath(r));
+    if (r?.side === "conflict") { this.flash("Keep a side first (o / t / b or the buttons), then stage the file"); return; }
+    if (!f || !r?.hunk) { this.flash("Move onto a change first"); return; }
+    if (f.untracked) { this.cmd(`git add ${f.path}`, `git add -- ${q(f.path)}`, cx, { term: false }); return; }
+    const pick = this.picked(), reverse = r.side === "staged";
+    const patch = patchFor(pick ? [...new Set([...pick].map(x => x.hunk))] : [r.hunk], pick, reverse);
+    if (!patch) { this.flash("No changes chosen"); return; }
+    const what = pick ? `${pick.size} line${pick.size === 1 ? "" : "s"}` : "hunk";
+    this.anchor = null;
+    this.cmd(`${reverse ? "unstage" : "stage"} ${what} of ${f.path}`, `printf '%s' ${q(patch)} | git apply --cached${reverse ? " --reverse" : ""} --recount --whitespace=nowarn -`, cx, { term: false });
+  }
+
+  // d in the diff: throw away the chosen lines or the cursor's hunk from the working tree (asks first).
+  discardHunk(cx) {
+    const r = this.main?.rows?.[this.cur], f = this.fileAt(this.rowPath(r));
+    if (!f || !r?.hunk) { this.flash("Move onto a change first"); return; }
+    if (r.side !== "unstaged") { this.flash(r.side === "staged" ? "Unstage it first (space), then discard" : "Resolve the conflict instead"); return; }
+    if (f.untracked) return this.discardFile(f, cx);
+    const pick = this.picked(), patch = patchFor(pick ? [...new Set([...pick].map(x => x.hunk))] : [r.hunk], pick, true);
+    if (!patch) { this.flash("No changes chosen"); return; }
+    const what = pick ? `${pick.size} line${pick.size === 1 ? "" : "s"}` : "this hunk";
+    this.confirm(`Discard ${what} in ${f.path}? It can't be undone.`, "Discard", cx => {
+      this.anchor = null;
+      this.cmd(`discard ${what} of ${f.path}`, `printf '%s' ${q(patch)} | git apply --reverse --recount --whitespace=nowarn -`, cx, { term: false });
+    }, cx);
+  }
+
+  discardFile(f, cx) {
+    if (f.conflict) { this.flash("Resolve the conflict instead (v)"); cx.notify(); return; }
+    if (f.untracked) return this.confirm(`Delete the untracked ${f.path}?`, "Delete file", cx => this.cmd(`git clean -f ${f.path}`, `git clean -fq -- ${q(f.path)}`, cx, { term: false }), cx);
+    const all = f.x === "A" ? `git rm -qf -- ${q(f.path)}` : `git restore --source=HEAD --staged --worktree -- ${q(f.path)}`;
+    this.openMenu(`Discard changes to ${f.path}`, [
+      f.unstaged && f.staged && { key: "u", label: "Discard unstaged changes", hint: "keep what's staged", danger: true, run: cx => this.cmd(`git restore ${f.path}`, `git restore -- ${q(f.path)}`, cx, { term: false }) },
+      { key: "a", label: f.x === "A" ? "Discard the new file" : "Discard all changes", hint: "staged and unstaged", danger: true, run: cx => this.cmd(`discard ${f.path}`, all, cx, { term: false }) },
+      { key: "n", label: "Cancel", run: () => {} },
+    ], cx);
+  }
+
+  // a in the diff: a note on the cursor's line, or on the chosen lines (v).
+  addNote(cx) {
+    const rows = this.main?.rows ?? [], r = rows[this.cur], path = this.rowPath(r), f = path ? { path } : null;
+    if (!f || !lineRow(r)) { this.flash("Move onto a line first"); return; }
+    const [a, b] = this.anchor == null ? [this.cur, this.cur] : [Math.min(this.anchor, this.cur), Math.max(this.anchor, this.cur)];
+    const span = rows.slice(a, b + 1).filter(x => lineRow(x) && x.side === r.side && this.rowPath(x) === path), last = span[span.length - 1];
+    const from = lineOf(span[0]), to = lineOf(last);
+    this.ask(`Note on ${f.path}:${from}${to !== from ? `-${to}` : ""}`, "", (text, cx) => {
+      if (!text.trim()) return;
+      const note = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, path: f.path, side: r.side, at: this.anchorOf(last), from, to, text: text.trim(), snippet: snippetOf(span) };
+      this.setNotes([...this.notes(), note]);
+      this.anchor = null;
+    }, cx, { hint: "What should change here? Enter saves; i or p sends your notes to an agent" });
+  }
+
+  // Ask AI (the diff's button, A): a question about this file's change, or the selected lines,
+  // with the diff in the prompt; then where to send it.
+  askAbout(cx) {
+    const m = this.main, ctx = this.ctx, f = m?.path != null ? { path: m.diff?.folder ? `${m.path || "."}/` : m.path } : null;
+    if (!f || !m?.diff || !ctx) return;
+    const rows = m.rows ?? [], sides = this.sides();
+    const [a, b] = this.anchor == null ? [0, rows.length - 1] : [Math.min(this.anchor, this.cur), Math.max(this.anchor, this.cur)];
+    const part = rows.slice(a, b + 1), picked = this.anchor != null;
+    const text = r => r.kind === "section" ? `## ${r.text}` : r.kind === "hunk" ? r.text
+      : r.kind === "mark" ? (r.part === "ours" ? `<<<<<<< ${sides?.ours ?? "current"}` : r.part === "theirs" ? `======= (below: ${sides?.theirs ?? "incoming"})` : "||||||| base")
+      : r.kind === "note" ? null : ({ add: "+", del: "-", ours: " ", theirs: " ", base: " " }[r.kind] ?? " ") + (r.text ?? "");
+    let lines = part.map(text).filter(x => x != null);
+    if (lines.length > 400) lines = [...lines.slice(0, 400), `… (${lines.length - 400} more lines)`];
+    const what = picked ? `${f.path}:${lineOf(part.find(lineRow)) ?? ""}-${lineOf([...part].reverse().find(lineRow)) ?? ""}` : f.path;
+    const name = m.diff.folder ? `${m.path.split("/").pop() || "/"}/` : f.path.split("/").pop();
+    this.ask(`Ask AI about ${picked ? `these ${part.filter(lineRow).length} lines of ` : ""}${name}`, "", (question, cx) => {
+      const head = this.status?.info?.head;
+      const prompt = [
+        `About ${picked ? "these lines of " : "the uncommitted change to "}${what} in ${ctx.root}${head ? ` (branch ${head})` : ""}${sides ? `, during a ${this.op.kind}: ${sides.ours} vs ${sides.theirs}` : ""}:`,
+        "", "```diff", ...lines, "```", "",
+        question || "Explain what this change does and point out anything risky or wrong. Don't edit anything yet.",
+      ].join("\n");
+      this.pickAgent(prompt, `about ${name}`, cx, null, `Ask AI about ${name}`);
+    }, cx, { hint: "Your question (empty: explain it and flag anything risky). Enter picks the agent" });
+  }
+
+  // X in the diff: removes the notes on the cursor's line.
+  deleteNotes(cx) {
+    const r = this.main?.rows?.[this.cur], path = this.rowPath(r), f = path ? { path } : null;
+    if (!r || !f) return;
+    const at = this.anchorOf(r), keep = this.notes().filter(n => !(n.path === f.path && n.side === r.side && n.at === at));
+    if (keep.length === this.notes().length) { this.flash("No note on this line"); return; }
+    this.setNotes(keep); this.flash("Note removed");
+  }
+
+  notesPrompt(notes) {
+    const head = this.status?.info?.head;
+    const items = notes.map((n, i) => [
+      `${i + 1}. ${n.path}:${n.from}${n.to !== n.from ? `-${n.to}` : ""} (${n.side} changes)`,
+      n.snippet ? "```diff\n" + n.snippet + "\n```" : "",
+      `   ${n.text.replace(/\n/g, "\n   ")}`,
+    ].filter(Boolean).join("\n"));
+    return [`Review notes on the uncommitted changes in ${this.ctx.root}${head ? ` (branch ${head})` : ""}.`,
+      "Address each note in the code, then tell me briefly what you changed.", "", ...items].join("\n");
+  }
+
+  // o in Files: the file in the editor from config.json ("editor", default nvim), at the cursor's line.
+  openEditor(path, line) {
+    if (!this.ctx) return;
+    const editor = this.config?.editor || "nvim";
+    run("terminal.open", { argv: [this.shell ?? "/bin/zsh", "-lic", `${editor} ${line ? `+${line} ` : ""}${q(path)}`], folder: this.ctx.root, place: "right" });
+  }
+
+  // Keys while the diff has the cursor (enter from Files). False: not a diff key.
+  diffKey(k, cx) {
+    const rows = this.main?.rows ?? [];
+    switch (k) {
+      // Hunk to hunk; while selecting lines (v), line by line.
+      case "j": case "down": if (this.anchor != null) this.cursorTo(this.cur + 1, 1); else this.hunkJump(1); break;
+      case "k": case "up": if (this.anchor != null) this.cursorTo(this.cur - 1, -1); else this.hunkJump(-1); break;
+      case "ctrl-d": case "pagedown": this.cursorTo(this.cur + 15, 1); break;
+      case "ctrl-u": case "pageup": this.cursorTo(this.cur - 15, -1); break;
+      case "<": case "home": case "g": this.cursorTo(0, 1); break;
+      case ">": case "end": case "G": this.cursorTo(rows.length - 1, -1); break;
+      case "}": this.hunkJump(1); break;
+      case "A": this.askAbout(cx); break;
+      case "{": this.hunkJump(-1); break;
+      case "J": this.nextFile(1, cx); break;
+      case "K": this.nextFile(-1, cx); break;
+      case "v": this.anchor = this.anchor == null ? this.cur : null; break;
+      case "space": this.stageHunk(cx); break;
+      case "d": this.discardHunk(cx); break;
+      case "a": this.addNote(cx); break;
+      case "X": this.deleteNotes(cx); break;
+      case "p": this.askAI(cx, "notes"); break;
+      case "o": if (rows[this.cur]?.block) this.resolve("ours", cx); else this.openEditor(this.main.path, lineOf(rows[this.cur])); break;
+      case "t": if (rows[this.cur]?.block) this.resolve("theirs", cx); else return false; break;
+      case "b": if (rows[this.cur]?.block) this.resolve("both", cx); else return false; break;
+      case "e": this.openEditor(this.main.path, lineOf(rows[this.cur])); break;
+      case "escape": case "h": case "left":
+        this.dragging = null;
+        if (this.anchor != null) this.anchor = null; else this.mainFocus = false;
+        break;
+      default: return false;
+    }
+    cx.notify();
+    return true;
+  }
+
+  // ---- Files: the panel widens while Files shows ---------------------------------
+
+  // The column holding the panel's stack (what the tab bar shows and hides), as panel.js's hidePanel finds it.
+  panelColumn() {
+    const path = pathTo(layout(), "git");
+    if (!path) return null;
+    for (let i = path.length - 2; i >= 0; i--) if (path[i].type === "stack") return i - 1 > 0 ? path[i - 1] : path[i];
+    return null;
+  }
+
+  syncWidth() {
+    // Widens on Files, then stays wide while the panel shows (moving to 3 / 4 / 5 doesn't jump the
+    // layout back and forth); narrows when the panel is hidden or shows another panel.
+    const shown = Boolean(this.ctx) && panelOnScreen("git") === true;
+    const want = shown && (this.sec === "files" || Boolean(this.widened));
+    if (want && !this.widened) {
+      const col = this.panelColumn(), px = col?.size?.px, to = Math.min(col?.max ?? WIDE, WIDE);
+      this.widened = col?.id && px && px < to - 2 ? { id: col.id, from: px, to } : { skip: true };
+      if (!this.widened.skip) run("layout.resize", { id: col.id, px: to });
+      setShared("git.widened", this.widened);
+    } else if (!want && this.widened) {
+      const w = this.widened;
+      this.widened = null;
+      setShared("git.widened", null);
+      if (!w.skip) run("layout.resize", { id: w.id, px: w.from });
+    }
   }
 
   // ---- Running commands ------------------------------------------------------
@@ -382,19 +777,7 @@ export default class Git extends View {
     const open = panes().find(p => p.tab === tab && p.mod === "git-conflicts");
     if (open) return run("pane.focus", { pane: open.pane });
     const p = { tab, root: ctx.root, gitDir: ctx.gitDir, on: ctx.on ?? null };
-    (async () => {
-      // Full height at the tab's right edge, as the Changes panel opens its diff (gitview's sidebar op).
-      try {
-        const cfg = JSON.parse(await readTextFile(`${appHome()}/mods/gitview/config.json`));
-        const r = await exec("/usr/bin/env", ["GITVIEW_HOST=app", `HERDR_APP_HOME=${appHome()}`, ...(cfg.herdr_app ? [`GITVIEW_HERDR_APP=${cfg.herdr_app}`] : []), ...(cfg.hc ? [`GITVIEW_HC=${cfg.hc}`] : []),
-          cfg.bin, "json", "sidebar", "--tab", tab, "--mod", "git-conflicts", "--props", JSON.stringify(p)]);
-        const out = JSON.parse(r.stdout);
-        if (r.code !== 0 || out.error) throw new Error(out.error);
-        if (out.pane) run("pane.focus", { pane: out.pane });
-      } catch {
-        run("pane.split", { direction: "right", mod: "git-conflicts", props: p });
-      }
-    })();
+    run("pane.split", { direction: "right", mod: "git-conflicts", props: p });
   }
 
   conflictPrompt() {
@@ -420,28 +803,40 @@ export default class Git extends View {
     ].join("\n");
   }
 
-  askAI(cx) {
+  // `want` "notes": the review notes, even when there are conflicts or a failure.
+  askAI(cx, want) {
     if (!this.ctx) return;
-    let prompt, label;
-    if (this.op && this.conflicts().length) { prompt = this.conflictPrompt(); label = "resolve conflicts"; }
-    else if (this.mainOverride?.log && !this.mainOverride.log.running && this.mainOverride.log.code !== 0) { prompt = this.failurePrompt(this.mainOverride.log); label = "fix git failure"; }
-    else if (this.failure) { prompt = this.failurePrompt(this.failure); label = "fix git failure"; }
-    if (!prompt) { this.flash("Nothing to hand off: no conflicts or failed command selected"); cx.notify(); return; }
+    let prompt, label, sent = null;
+    const notes = this.notes();
+    if (want !== "notes" && this.op && this.conflicts().length) { prompt = this.conflictPrompt(); label = "resolve conflicts"; }
+    else if (want !== "notes" && this.mainOverride?.log && !this.mainOverride.log.running && this.mainOverride.log.code !== 0) { prompt = this.failurePrompt(this.mainOverride.log); label = "fix git failure"; }
+    else if (want !== "notes" && this.failure) { prompt = this.failurePrompt(this.failure); label = "fix git failure"; }
+    else if (notes.length) {
+      prompt = this.notesPrompt(notes); label = `address ${notes.length} review note${notes.length === 1 ? "" : "s"}`;
+      // Sent notes are done with; only the ones that went (more may have been added since).
+      sent = () => { const ids = new Set(notes.map(n => n.id)); this.setNotes(this.notes().filter(n => !ids.has(n.id))); };
+    }
+    if (!prompt) { this.flash(want === "notes" ? "No review notes yet: enter on a file, then a on a line" : "Nothing to hand off: no conflicts, failed command or review notes"); cx.notify(); return; }
+    this.pickAgent(prompt, label, cx, sent, `Ask AI to ${label}`);
+  }
+
+  // Where a prompt goes: an agent in this space, a new agent tab, or the clipboard.
+  pickAgent(prompt, label, cx, sent, title) {
     const space = spaces().find(s => s.active);
     const here = agents().filter(a => a.space === space?.id);
     const fresh = this.known?.find(k => k.installed);
-    this.openMenu(`Ask AI to ${label}`, [
-      ...here.slice(0, 8).map((a, i) => ({ key: String(i + 1), label: `Send to ${a.program?.name ?? a.app ?? "agent"} · ${a.tab_name === (a.program?.name ?? a.app) ? `tab ${a.tab_index}` : a.tab_name}`, hint: a.status, run: cx => this.sendToAgent(a, prompt, label, cx) })),
-      fresh && { key: "n", label: `New ${fresh.name} tab`, run: () => { run("tab.new", { argv: fresh.run, task: prompt, folder: this.ctx.root, name: `AI · ${label}` }); this.ai = { label, address: null }; } },
+    this.openMenu(title ?? `Ask AI: ${label}`, [
+      ...here.slice(0, 8).map((a, i) => ({ key: String(i + 1), label: `Send to ${a.program?.name ?? a.app ?? "agent"} · ${a.tab_name === (a.program?.name ?? a.app) ? `tab ${a.tab_index}` : a.tab_name}`, hint: a.status, run: cx => this.sendToAgent(a, prompt, label, cx, sent) })),
+      fresh && { key: "n", label: `New ${fresh.name} tab`, run: () => { run("tab.new", { argv: fresh.run, task: prompt, folder: this.ctx.root, name: `AI · ${label}` }); this.ai = { label, address: null }; sent?.(); } },
       { key: "y", label: "Copy prompt", run: cx => { cx.write_to_clipboard(prompt); this.flash("Prompt copied"); } },
     ], cx);
   }
 
-  sendToAgent(agent, prompt, label, cx) {
+  sendToAgent(agent, prompt, label, cx, sent) {
     cx.spawn(async cx => {
       const r = await hc(["send", agent.address, prompt]).catch(e => ({ code: 1, stderr: String(e) }));
       if (r.code !== 0) this.flash(`Couldn't send: ${(r.stderr || r.stdout).trim()}`, 6000);
-      else this.ai = { label, address: agent.address };
+      else { this.ai = { label, address: agent.address }; sent?.(); }
       cx.notify();
     });
   }
@@ -618,6 +1013,34 @@ export default class Git extends View {
     const sec = this.sec, it = this.selected(), A = this.customActions();
     const add = (key, label, run, extra) => A.push({ key, label, run, ...extra });
     const info = this.status?.info, head = info?.head;
+    if (sec === "files" && it?.kind === "dir") {
+      const files = (this.status?.files ?? []).filter(f => this.under(it.path, f.path)), spec = it.path || ".", where = it.path ? `${it.path}/` : "everything";
+      const unstaged = files.some(f => f.unstaged && !f.conflict);
+      if (unstaged) add("space", `Stage ${where}`, cx => this.cmd(`git add -A ${spec}`, `git add -A -- ${q(spec)}`, cx, { term: false }), { chip: "stage" });
+      else add("space", `Unstage ${where}`, cx => this.cmd(`git restore --staged ${spec}`, `git restore --staged -- ${q(spec)} 2>/dev/null || git reset -q -- ${q(spec)}`, cx, { term: false }), { chip: "unstage" });
+      add("enter", it.open ? "Fold" : "Unfold", cx => this.toggleFold(it, cx), { chip: it.open ? "fold" : "unfold" });
+      add("d", `Discard ${where}…`, cx => this.confirm(`Discard every change in ${where} (${files.length} file${files.length === 1 ? "" : "s"}, untracked ones deleted)? It can't be undone.`, "Discard all", cx =>
+        this.cmd(`discard ${where}`, `git restore --source=HEAD --staged --worktree -- ${q(spec)} 2>/dev/null; git clean -fdq -- ${q(spec)}`, cx, { term: false }), cx), { chip: "discard" });
+      add("A", "Ask AI about these changes", cx => this.askAbout(cx), { chip: "ask AI" });
+    }
+    if (sec === "files") {
+      add("-", "Fold every folder", cx => this.foldAll(true, cx));
+      add("=", "Unfold every folder", cx => this.foldAll(false, cx));
+      add("t", this.flat ? "Show as a tree" : "Show as a flat list", cx => this.toggleFlat(cx), { chip: this.flat ? "tree" : "flat" });
+    }
+    if (sec === "files" && it?.kind === "file") {
+      const f = it.file, files = this.status?.files ?? [], anyUnstaged = files.some(x => x.unstaged && !x.conflict);
+      if (f.conflict) add("space", "Mark resolved (stage)", cx => this.cmd(`git add ${f.path}`, `git add -- ${q(f.path)}`, cx, { term: false }), { chip: "resolved" });
+      else if (f.unstaged) add("space", "Stage", cx => this.cmd(`git add ${f.path}`, `git add -- ${q(f.path)}`, cx, { term: false }), { chip: "stage" });
+      else add("space", "Unstage", cx => this.cmd(`git restore --staged ${f.path}`, `git restore --staged -- ${q(f.path)} 2>/dev/null || git rm -q --cached -- ${q(f.path)}`, cx, { term: false }), { chip: "unstage" });
+      add("enter", "Review the diff (hunks, lines, notes)", cx => { this.mainFocus = true; this.clampCursor(); this.revealCursor(); }, { chip: "review" });
+      add("a", anyUnstaged ? "Stage all" : "Unstage all", cx => anyUnstaged ? this.cmd("git add -A", "git add -A", cx, { term: false }) : this.cmd("git reset", "git reset -q", cx, { term: false }), { chip: anyUnstaged ? "stage all" : "unstage all" });
+      add("d", "Discard…", cx => this.discardFile(f, cx), { chip: "discard" });
+      add("o", "Open in editor", () => this.openEditor(f.path, null), { chip: "edit" });
+      if (this.notes().length) add("i", `Send ${this.notes().length} review note${this.notes().length === 1 ? "" : "s"} to an agent`, cx => this.askAI(cx, "notes"), { chip: "send notes" });
+      add("A", "Ask AI about this change", cx => this.askAbout(cx), { chip: "ask AI" });
+      add("y", "Copy path", cx => { cx.write_to_clipboard(f.path); this.flash("Path copied"); });
+    }
     if (sec === "branches" && it) {
       const remote = it.kind === "remote", ref = it.name;
       if (remote) add("space", it.local ? `Check out ${it.local}` : `Check out as local ${it.short}`, cx => it.local
@@ -721,7 +1144,7 @@ export default class Git extends View {
     const firstGlobal = A.length;
     if (this.op) add("m", `${this.op.kind}: continue / skip / abort…`, cx => this.opMenu(cx));
     if (this.op && this.conflicts().length) add("v", "Resolve conflicts (chunk picker)", () => this.openConflicts());
-    add("i", "Ask AI (conflicts or failed command)", cx => this.askAI(cx));
+    add("i", "Ask AI (conflicts, a failed command or your review notes)", cx => this.askAI(cx));
     add("P", "Push", cx => this.push(cx));
     add("p", "Pull", cx => this.cmd("git pull", "git pull", cx));
     add("c", "Commit", cx => this.commit(cx));
@@ -824,14 +1247,20 @@ export default class Git extends View {
       return;
     }
     const before = new Set(space.tabs.map(t => t.id));
-    run("tab.new", { mod: "git", props: { cwd: this.ctx.root, on: this.ctx.on }, name: `Git · ${this.ctx.root.split("/").pop()}` });
+    const token = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    run("tab.new", { mod: "git", props: { cwd: this.ctx.root, on: this.ctx.on, token }, name: `Git · ${this.ctx.root.split("/").pop()}` });
     cx.spawn(async cx => {
       let tab = null;
       for (let i = 0; i < 40 && !tab; i++) {
         tab = spaces().find(s => s.id === space.id)?.tabs.find(t => !before.has(t.id))?.id ?? null;
         if (!tab) await cx.sleep(50);
       }
-      if (tab) setShared("git.tab", { space: space.id, tab, origin });
+      if (tab) {
+        setShared("git.tab", { space: space.id, tab, origin });
+        // Remember which tab the token opened (dropping tabs that are gone).
+        const alive = new Set(spaces().flatMap(s => s.tabs.map(t => t.id)));
+        setShared("git.tabOf", { ...Object.fromEntries(Object.entries(shared("git.tabOf") ?? {}).filter(([, t]) => alive.has(t))), [token]: tab });
+      }
     });
   }
 
@@ -883,6 +1312,7 @@ export default class Git extends View {
     const idx = SECTIONS.findIndex(s => s.id === this.sec);
     const num = SECTIONS.find(s => s.key === k);
     if (num) { this.focusSection(num.id, cx); return true; }
+    if (this.mainFocus && this.sec === "files" && this.main?.diff && this.diffKey(k, cx)) return true;
     if (this.mainFocus && (k === "j" || k === "down")) { this.scrollMain(1, cx); return true; }
     if (this.mainFocus && (k === "k" || k === "up")) { this.scrollMain(-1, cx); return true; }
     // shift-↑/↓ on commits: start or grow a range (lazygit).
@@ -904,7 +1334,11 @@ export default class Git extends View {
       case "]": this.switchTab(1, cx); return true;
       case "ctrl-d": case "J": this.scrollMain(k === "J" ? 3 : 15, cx); return true;
       case "ctrl-u": case "K": this.scrollMain(k === "K" ? -3 : -15, cx); return true;
-      case "enter": this.mainFocus = !this.mainFocus; cx.notify(); return true;
+      case "enter":
+        if (this.sec === "files" && !this.mainFocus && this.selected()?.kind === "dir") { this.toggleFold(this.selected(), cx); return true; }
+        this.mainFocus = !this.mainFocus;
+        if (this.mainFocus && this.main?.diff) { this.clampCursor(); this.revealCursor(); }
+        cx.notify(); return true;
       case "escape":
         if (this.mainFocus) this.mainFocus = false;
         else if (this.filter[this.lk()]) this.filter[this.lk()] = "";
@@ -1054,6 +1488,21 @@ export default class Git extends View {
     if (this.prompt) return [{ caps: ["enter"], label: "confirm" }, { caps: ["escape"], label: "cancel" }];
     if (this.menu) return [{ caps: ["j", "k"], label: "move" }, { caps: ["enter"], label: "pick" }, { caps: ["escape"], label: "close" }];
     if (this.editorFocused) return [{ caps: ["cmd-c"], label: "copy" }, { caps: ["escape"], label: "back" }];
+    if (this.mainFocus && this.main?.diff) {
+      const r = this.main.rows?.[this.cur], pick = this.anchor != null, n = this.notes().length, sides = this.sides();
+      if (r?.block) return [
+        { caps: ["o"], label: `keep ${sides?.oursShort ?? "current"}` }, { caps: ["t"], label: `keep ${sides?.theirsShort ?? "incoming"}` },
+        { caps: ["b"], label: "both" }, { caps: ["j", "k"], label: "conflict" }, { caps: ["a"], label: "note" }, { caps: ["escape"], label: "back" },
+      ];
+      return [
+        { caps: ["space"], label: `${r?.side === "staged" ? "unstage" : "stage"} ${pick ? "lines" : "hunk"}` },
+        { caps: ["j", "k"], label: pick ? "line" : "hunk" },
+        { caps: ["v"], label: pick ? "end selection" : "select lines" }, { caps: ["a"], label: "note" },
+        ...(n ? [{ caps: ["p"], label: `send ${n} note${n === 1 ? "" : "s"}` }] : []),
+        { caps: ["d"], label: "discard" }, { caps: ["A"], label: "ask AI" }, { caps: ["J", "K"], label: "file" },
+        { caps: ["o"], label: "editor" }, { caps: ["escape"], label: "back" },
+      ];
+    }
     if (this.mainFocus) return [{ caps: ["j", "k"], label: "scroll" }, { caps: ["ctrl-d", "ctrl-u"], label: "page" }, { caps: ["escape"], label: "back" }];
     // The shown section's own actions first (the keybar fits as many as there's room for).
     const all = this.actions().filter(a => a.key !== "ctrl-r");
@@ -1076,6 +1525,18 @@ export default class Git extends View {
         { caps: ["ctrl-d", "ctrl-u"], label: "scroll the diff a page" },
         { caps: ["v"], label: "commits: select a range" }, { caps: ["shift-down", "shift-up"], label: "commits: grow the range" },
       ] },
+      { title: "Files: reviewing the diff (enter)", chips: [
+        { caps: ["j", "k"], label: "next / previous hunk or conflict (arrows, } / { too)" },
+        { caps: ["A"], label: "ask AI about this change (the selected lines, else the file)" },
+        { caps: ["J", "K"], label: "next / previous file" }, { caps: ["v"], label: "select lines: then j / k move a line at a time" },
+        { caps: ["space"], label: "stage the hunk or lines (unstage on the staged side)" },
+        { caps: ["d"], label: "discard the hunk or lines" }, { caps: ["a"], label: "write a note on the line or lines" },
+        { caps: ["X"], label: "delete the notes on this line" }, { caps: ["p", "i"], label: "send the notes to an agent" },
+        { caps: ["e"], label: "open in your editor at this line (o too, outside a conflict)" },
+        { caps: ["o", "t", "b"], label: "on a conflict: keep current / incoming / both" },
+        { caps: ["click"], label: "put the cursor on a line" }, { caps: ["shift-click"], label: "select lines (or drag)" },
+        { caps: ["escape"], label: "back to the list" },
+      ] },
       { title: "Everywhere", chips: [
         { caps: ["/"], label: "filter" }, { caps: ["x"], label: "actions menu" }, { caps: ["escape"], label: "back / clear" },
         { caps: ["q"], label: "close the panel" }, { caps: ["?"], label: "this card" },
@@ -1089,7 +1550,7 @@ export default class Git extends View {
 
   sectionBox(s, t, mono) {
     const focusedSec = this.sec === s.id, lk = this.lk(s.id), items = this.items(s.id), sel = this.selIndex(s.id);
-    const count = s.id === "commits" ? items.filter(r => r.sha).length : items.length;
+    const count = s.id === "commits" ? items.filter(r => r.sha).length : s.id === "files" ? (this.filter.files ? items.length : this.status?.files?.length ?? 0) : items.length;
     const head = h_flex().id(`sec-${s.id}`).h(24).flex_none().px(8).gap(6).items_center().cursor_pointer()
       .on_click((_e, cx) => this.focusSection(s.id, cx))
       .child(div().text_size(10.5).font_semibold().px(4).rounded(4).bg(focusedSec && this.hadKeys ? t.accent : t.raised).text_color(focusedSec && this.hadKeys ? t.accent_foreground : t.muted).child(s.key))
@@ -1099,6 +1560,7 @@ export default class Git extends View {
         .on_click((_e, cx) => { cx.stop_propagation(); if (this.tab[s.id] !== i) { this.sec = s.id; this.switchTab(i - this.tab[s.id], cx); } }).child(name))))
       .when(Boolean(this.filter[lk]), el => el.child(div().text_size(11).text_color(t.accent).truncate().child(`/${this.filter[lk]}`)))
       .child(div().flex_1())
+      .when(s.id === "files" && this.notes().length > 0, el => el.child(div().text_size(11).text_color(t.ansi3).child(`✎ ${this.notes().length}`)))
       .child(div().text_size(11).text_color(t.dim).child(String(count)));
     const row = (it, i, inList) => this.row(s.id, it, i, i === sel, focusedSec, t, mono, inList);
     let body;
@@ -1120,11 +1582,11 @@ export default class Git extends View {
   }
 
   emptyText(sec) {
-    return { branches: "No branches", commits: "No commits", stash: "No stashes" }[sec];
+    return { files: "No changes", branches: "No branches", commits: "No commits", stash: "No stashes" }[sec];
   }
 
   itemKey(sec, it, i) {
-    return sec === "branches" ? `b${it.name}` : sec === "commits" ? it.sha : `s${it.ref}`;
+    return sec === "files" ? `${it.kind === "dir" ? "d" : "f"}${it.path}` : sec === "branches" ? `b${it.name}` : sec === "commits" ? it.sha : `s${it.ref}`;
   }
 
   // Virtual-list rows can't carry handlers, so a second click on the same row within 400 ms counts as a double click.
@@ -1132,9 +1594,11 @@ export default class Git extends View {
     if (i < 0) return;
     const now = Date.now(), double = this.lastClick?.sec === sec && this.lastClick.i === i && now - this.lastClick.at < 400;
     this.lastClick = { sec, i, at: now };
+    const it = this.items(sec)[i], again = sec === "files" && it?.kind === "dir" && this.sec === sec && this.selIndex(sec) === i;
     if (this.sec !== sec) this.focusSection(sec, cx);
     this.move(0, cx, i);
-    if (double) this.actions().find(a => a.key === "space")?.run(cx);
+    if (again) this.toggleFold(it, cx);
+    else if (double && it?.kind !== "dir") this.actions().find(a => a.key === "space")?.run(cx);
     cx.notify();
   }
 
@@ -1145,10 +1609,38 @@ export default class Git extends View {
       .when(selected || picked, e => e.bg(focusedSec ? t.selected : t.hover))
       .hover(s => s.bg(selected && focusedSec ? t.selected : t.hover))
       .when(!inList, e => e.on_click((_e, cx) => this.clickRow(sec, i, cx)));
+    if (sec === "files") return it.kind === "dir" ? this.dirRow(el, it, t) : this.fileRow(el, it, t);
     if (sec === "branches") return this.branchRow(el, it, t);
     if (sec === "commits") return this.commitRow(el, it, t, mono);
     return el.child(div().flex_none().text_color(t.dim).font_family(mono).text_size(11.5).child(it.ref.replace("stash@", "")))
       .child(div().flex_1().min_w(0).truncate().child(it.message)).child(div().flex_none().text_size(11).text_color(t.dim).child(it.date));
+  }
+
+  // lazygit's two status letters: staged (green) then unstaged (red); then the folder, dim, and the name.
+  // A folder in the Files tree: ▾ / ▸, its name ("/" at the root), how many files when folded.
+  dirRow(el, d, t) {
+    const noted = this.notes().some(n => this.under(d.path, n.path));
+    return el.pl(8 + d.depth * 14)
+      .child(div().w(10).flex_none().text_size(10).text_color(t.dim).child(d.open ? "▾" : "▸"))
+      .child(div().flex_1().min_w(0).truncate().text_color(d.conflict ? t.ansi1 : d.root ? t.muted : t.ansi4).child(d.root ? "/" : d.name))
+      .when(noted, e => e.child(div().flex_none().text_size(11).text_color(t.ansi3).child("✎")))
+      .when(!d.open, e => e.child(div().flex_none().text_size(11).text_color(t.dim).child(String(d.count))));
+  }
+
+  fileRow(el, row, t) {
+    const f = row.file, tree = !this.flat && !this.filter.files;
+    const letter = (c, color) => div().w(8).flex_none().text_color(color).child(c === "." ? "" : c);
+    const slash = f.path.lastIndexOf("/"), dir = tree || slash < 0 ? "" : f.path.slice(0, slash + 1), name = f.path.slice(slash + 1);
+    const noted = this.notes().some(n => n.path === f.path);
+    return el.when(tree, e => e.pl(8 + row.depth * 14)).child(h_flex().flex_none().font_family(settings().font_family ?? "JetBrains Mono").text_size(11.5).font_semibold()
+        .child(letter(f.untracked ? "?" : f.x, f.conflict ? t.ansi1 : t.ansi2)).child(letter(f.untracked ? "?" : f.y, t.ansi1)))
+      .child(h_flex().flex_1().min_w(0).overflow_hidden()
+        .child(div().flex_none().text_color(f.conflict ? t.ansi1 : f.unstaged ? t.foreground : t.ansi2).child(name))
+        .child(div().min_w(0).truncate().pl(6).text_size(11).text_color(t.dim).child(dir.replace(/\/$/, ""))))
+      .when(noted, e => e.child(div().flex_none().text_size(11).text_color(t.ansi3).child("✎")))
+      // During a merge / rebase / pick: conflicts were changed on both sides; others came in from the incoming side.
+      .when(f.conflict, e => e.child(div().flex_none().px(4).rounded(4).border_1().border_color(t.ansi1).text_size(10).text_color(t.ansi1).child("both sides")))
+      .when(!f.conflict && this.fromIncoming(f.path), e => e.child(div().flex_none().max_w(120).truncate().px(4).rounded(4).border_1().border_color(t.ansi4).text_size(10).text_color(t.ansi4).child(`▼ ${this.sides()?.theirsShort ?? "incoming"}`)));
   }
 
   branchRow(el, b, t) {
@@ -1187,9 +1679,19 @@ export default class Git extends View {
 
   mainView(t, mono) {
     const m = this.main, log = m?.log;
+    // A file: its name, then its folder (dim, cut first), so a long path never hides the name or the buttons.
+    const file = !log && m?.diff && m.path != null
+      ? m.diff.folder ? { name: m.path ? `${m.path.split("/").pop()}/` : "/", dir: m.path.split("/").slice(0, -1).join("/") }
+        : { name: m.path.split("/").pop(), dir: m.path.split("/").slice(0, -1).join("/") }
+      : null;
     const head = h_flex().h(28).flex_none().px(10).gap(8).items_center().border_b(1).border_color(t.border)
-      .child(div().flex_1().min_w(0).truncate().text_size(11.5).text_color(this.mainFocus ? t.foreground : t.muted)
-        .child(log ? `${log.running ? "running" : log.code === 0 ? "✓" : `✗ exit ${log.code}`} · ${log.title}` : m?.title ?? ""))
+      .when(!file, el => el.child(div().flex_1().min_w(0).truncate().text_size(11.5).text_color(this.mainFocus ? t.foreground : t.muted)
+        .child(log ? `${log.running ? "running" : log.code === 0 ? "✓" : `✗ exit ${log.code}`} · ${log.title}` : m?.title ?? "")))
+      .when(Boolean(file), el => el
+        .child(h_flex().flex_1().min_w(0).gap(6).items_center().overflow_hidden().text_size(11.5)
+          .child(div().flex_none().max_w_full().truncate().font_semibold().text_color(this.mainFocus ? t.foreground : t.muted).child(file.name))
+          .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).child(file.dir)))
+        .child(this.diffButton("ask-file", "Ask AI", cx => this.askAbout(cx), t, t.accent)))
       .when(Boolean(log), el => el
         .when(Boolean(log.running && log.addr), e => e.child(this.iconButton("main-peek", `${CHROME}/terminal.svg`, () => run("terminal.peek", { terminal: log.addr }), t, "Watch")))
         .child(this.iconButton("main-copy", "mods/git/copy.svg", cx => { cx.write_to_clipboard(`$ ${log.title}\n${log.output}`); this.flash("Output copied"); }, t, "Copy"))
@@ -1203,6 +1705,7 @@ export default class Git extends View {
         range => m.commits.slice(range.start, range.end).map(c => this.commitRow(h_flex().h(ROW).flex_none().px(6).gap(6).items_center().min_w(0), c, t, mono)))
         .track_scroll(this.scrolls.main).size_full())
       .child(Scrollbar.vertical("main-commits").viewport_from_layout().absolute().inset_0()));
+    if (m.diff) return box.child(this.diffView(m, t, mono));
     const palette = { add: [t.ansi2, t.ansi2 + "18"], del: [t.ansi1, t.ansi1 + "18"], hunk: [t.ansi6, t.raised], file: [t.foreground, null], meta: [t.ansi3, null] };
     const line = r => {
       const [fg, bg] = palette[r.kind] ?? [t.foreground, null];
@@ -1213,6 +1716,129 @@ export default class Git extends View {
         .child(div().w_full().min_w(m.width).h_full().child(v_virtual_list("main-lines", m.rows.length, LINE, i => String(i),
           range => m.rows.slice(range.start, range.end).map(line)).track_scroll(this.scrolls.main).size_full())))
       .child(Scrollbar.vertical("main-lines").viewport_from_layout().absolute().inset_0()));
+  }
+
+  // A small button inside the diff (hunk headers, conflicts, the action bar).
+  diffButton(id, label, run, t, color) {
+    return div().id(id).flex_none().h(18).px(7).flex().items_center().rounded(4).cursor_pointer()
+      .text_size(10.5).border_1().border_color(color ? color + "88" : t.border)
+      .text_color(color ?? t.muted).bg(t.background).hover(s => s.bg(t.hover).text_color(color ?? t.foreground))
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_click((_e, cx) => { cx.stop_propagation(); this.handle.focus(); run(cx); cx.notify(); })
+      .child(label);
+  }
+
+  // A file's diff: old and new line numbers, the change, notes under their lines. Click a line for
+  // the cursor, shift-click or drag to select lines; hunk headers and conflicts carry their buttons.
+  // During a merge / rebase / pick, conflicts show which side each part comes from.
+  diffView(m, t, mono) {
+    const rows = this.diffRows(m), on = this.mainFocus, sides = this.sides(), side = rows[this.cur]?.side;
+    const [lo, hi] = this.anchor == null ? [-1, -1] : [Math.min(this.anchor, this.cur), Math.max(this.anchor, this.cur)];
+    const OURS = t.ansi2, THEIRS = t.ansi4, incoming = this.fromIncoming(m.path);
+    const SIDE = { staged: incoming ? THEIRS : t.ansi2, unstaged: t.ansi3, conflict: t.ansi1 };
+    const sectionText = r => !sides ? r.text
+      : r.side === "staged" && incoming ? `Staged · from ${sides.theirs}` : r.side === "unstaged" ? `${r.text} · your edits` : r.text;
+    const num = n => h_flex().w(38).h(LINE).flex_none().items_center().justify_end().pr(6).text_color(t.dim).child(n == null ? "" : String(n));
+    const plain = rows.length <= PLAIN_ROWS;
+    const line = (r, i) => {
+      const cursor = on && i === this.cur, chosen = i >= lo && i <= hi && r.side === side && lineRow(r);
+      // Plain rows wrap long lines (the row grows; line numbers stay on its first line); the virtual
+      // list's rows must keep one height, so they stay one line and scroll sideways.
+      let el = plain ? h_flex().w_full().min_h(LINE).flex_none().items_start()
+        : h_flex().h(LINE).flex_none().items_center().whitespace_nowrap().min_w(m.width);
+      const text = (content, color) => (plain ? div().flex_1().min_w(0).py(1) : div()).when(Boolean(color), d => d.text_color(color)).child(content);
+      if (plain) el = el.id(`dl-${i}`).on_mouse_down("left", (e, cx) => this.pressLine(i, e, cx)).on_mouse_move((_e, cx) => this.dragTo(i, cx));
+      // A folder's diff names each file before its hunks.
+      if (r.kind === "file") return el.px(10).pt(4).border_t(1).border_color(t.border).font_semibold().text_color(t.foreground).child(text(r.text));
+      if (r.kind === "section") return el.px(10).gap(6).font_semibold().text_size(11.5).text_color(SIDE[r.side] ?? t.muted).child(text(sectionText(r)));
+      if (r.kind === "hunk") {
+        const staged = r.side === "staged";
+        // Buttons first: a long @@ line (its function context) never pushes them out of view.
+        return el.pl(10).pr(6).gap(6).bg(t.raised).text_color(t.ansi6).when(plain, e => e.items_center())
+          .when(plain, e => e
+            .child(this.diffButton(`hk-s-${i}`, staged ? "Unstage hunk" : "Stage hunk", cx => this.onHunk(i, "stage", cx), t, staged ? t.ansi3 : t.ansi2))
+            .when(r.side === "unstaged", e => e.child(this.diffButton(`hk-d-${i}`, "Discard", cx => this.onHunk(i, "discard", cx), t, t.ansi1))))
+          .child(text(r.text).pl(2));
+      }
+      if (r.kind === "mark") {
+        const b = r.block, c = r.part === "ours" ? OURS : r.part === "theirs" ? THEIRS : t.dim;
+        const name = r.part === "ours" ? `▲ ${sides?.ours ?? `current · ${b.label || "HEAD"}`}` : r.part === "theirs" ? `▼ ${sides?.theirs ?? `incoming · ${b.theirsLabel || "theirs"}`}` : "BASE · how it was before both";
+        return el.pl(10).pr(6).gap(8).bg(c + "22").border_t(1).border_color(c + "66").text_size(11).font_semibold().text_color(c)
+          .when(plain, e => e.flex_wrap().items_center().py(2))
+          .child(plain ? div().flex_none().max_w_full().child(r.part === "ours" ? `Conflict ${b.index + 1}  ${name}` : name) : (r.part === "ours" ? `Conflict ${b.index + 1}  ${name}` : name))
+          .when(plain && r.part === "ours", e => e
+            .child(this.diffButton(`cf-o-${i}`, `Keep ${sides?.oursShort ?? "current"}`, cx => this.resolve("ours", cx, b), t, OURS))
+            .child(this.diffButton(`cf-t-${i}`, `Keep ${sides?.theirsShort ?? "incoming"}`, cx => this.resolve("theirs", cx, b), t, THEIRS))
+            .child(this.diffButton(`cf-b-${i}`, "Both", cx => this.resolve("both", cx, b), t)));
+      }
+      if (r.kind === "note") return el.pl(86).pr(10).bg(t.ansi3 + "1a").text_color(t.ansi3).child(text(r.text));
+      if (r.kind === "meta") return el.px(10).text_color(t.dim).child(text(r.text));
+      const tone = { add: t.ansi2, del: t.ansi1, ours: OURS, theirs: THEIRS, base: t.dim }[r.kind];
+      const fg = r.kind === "ctx" ? t.foreground : tone;
+      const bg = cursor ? t.selected : chosen ? t.selection : tone && r.kind !== "base" ? tone + "18" : null;
+      const sign = { add: "+", del: "-", ours: "▲", theirs: "▼", base: "·" }[r.kind] ?? "";
+      return el.when(Boolean(bg), e => e.bg(bg)).border_l(2).border_color(cursor ? t.accent : chosen ? t.accent + "66" : bg ?? t.background)
+        .child(num(r.old)).child(num(r.new))
+        .child(div().w(12).flex_none().h(LINE).flex().items_center().text_color(fg).child(sign))
+        .child(text(r.text || " ", fg).pr(10));
+    };
+    const list = plain
+      ? div().id("main-diff").flex_1().min_h(0).overflow_y_scrollbar().track_scroll(this.diffScroll).font_family(mono).text_size(12)
+        .on_mouse_up("left", () => { this.dragging = null; })
+        .on_hover(h => { if (!h) this.dragging = null; })
+        .children(rows.map(line))
+      : div().flex_1().min_h(0).relative().font_family(mono).text_size(12)
+        .child(div().id("main-x").size_full().overflow_x_scrollbar()
+          .child(div().w_full().min_w(m.width).h_full().child(v_virtual_list("main-diff-v", rows.length, LINE, i => String(i),
+            range => rows.slice(range.start, range.end).map((r, j) => line(r, range.start + j)))
+            .track_scroll(this.scrolls.main).size_full()
+            .on_item_click((key, cx) => this.pressLine(Number(key), null, cx)))))
+        .child(Scrollbar.vertical("main-diff-v").viewport_from_layout().absolute().inset_0());
+    return v_flex().flex_1().min_h(0)
+      .when(Boolean(sides) && (m.diff.blocks || incoming), e => e.child(this.sidesLegend(sides, t)))
+      .child(list)
+      .child(this.actionBar(m, t));
+  }
+
+  // During an operation: which colour is which side, above the diff.
+  sidesLegend(sides, t) {
+    const dot = (c, text) => h_flex().gap(5).items_center().child(div().size(7).rounded_full().bg(c)).child(div().text_color(c).child(text));
+    return h_flex().h(24).flex_none().px(10).gap(14).items_center().border_b(1).border_color(t.border).text_size(11)
+      .child(dot(t.ansi2, `▲ ${sides.ours}`)).child(dot(t.ansi4, `▼ ${sides.theirs}`));
+  }
+
+  // What the buttons under the diff do: the selected lines, the cursor's hunk or conflict, and the notes.
+  actionBar(m, t) {
+    const rows = m.rows ?? [], r = rows[this.cur], entry = this.selected("files"), f = entry?.kind === "file" ? entry.file : null, sides = this.sides();
+    const pick = this.picked(), n = this.notes().length, bits = [];
+    const b = (id, label, run, color) => bits.push(this.diffButton(id, label, run, t, color));
+    let what;
+    if (r?.block && this.mainFocus) {
+      what = `Conflict ${r.block.index + 1} of ${m.diff.blocks.length}`;
+      b("ab-o", `Keep ${sides?.oursShort ?? "current"}`, cx => this.resolve("ours", cx), t.ansi2);
+      b("ab-t", `Keep ${sides?.theirsShort ?? "incoming"}`, cx => this.resolve("theirs", cx), t.ansi4);
+      b("ab-b", "Keep both", cx => this.resolve("both", cx));
+      b("ab-r", "Open resolver", () => this.openConflicts());
+    } else if (pick?.size) {
+      what = `${pick.size} line${pick.size === 1 ? "" : "s"} selected`;
+      b("ab-s", r?.side === "staged" ? "Unstage lines" : "Stage lines", cx => this.stageHunk(cx), r?.side === "staged" ? t.ansi3 : t.ansi2);
+      if (r?.side === "unstaged") b("ab-d", "Discard lines", cx => this.discardHunk(cx), t.ansi1);
+      b("ab-n", "Note", cx => this.addNote(cx), t.ansi3);
+      b("ab-c", "Clear", () => { this.anchor = null; });
+    } else if (r?.hunk && this.mainFocus) {
+      what = `Line ${lineOf(r) ?? ""} · click, shift-click or drag to select lines`;
+      b("ab-s", r.side === "staged" ? "Unstage hunk" : "Stage hunk", cx => this.stageHunk(cx), r.side === "staged" ? t.ansi3 : t.ansi2);
+      b("ab-n", "Note", cx => this.addNote(cx), t.ansi3);
+    } else what = entry?.kind === "dir" ? `${entry.root ? "Everything" : `${entry.path}/`} · ${entry.count} file${entry.count === 1 ? "" : "s"}`
+      : f ? (f.conflict ? "Conflicted: keep a side in each conflict, then stage the file" : "Click a line to review it · shift-click or drag selects") : "";
+    if (f && !f.conflict) b("ab-f", f.unstaged ? "Stage file" : "Unstage file", cx => this.actions().find(a => a.key === "space")?.run(cx));
+    if (entry?.kind === "dir") b("ab-f", this.actions().find(a => a.key === "space")?.label.startsWith("Stage") ? "Stage folder" : "Unstage folder", cx => this.actions().find(a => a.key === "space")?.run(cx));
+    if (f?.conflict && !(r?.block && this.mainFocus)) b("ab-r", "Open resolver", () => this.openConflicts());
+    if (n) b("ab-p", `Send ${n} note${n === 1 ? "" : "s"} to AI`, cx => this.askAI(cx, "notes"), t.ansi3);
+    return h_flex().h(30).flex_none().px(10).gap(6).items_center().border_t(1).border_color(t.border).bg(t.background)
+      .text_size(11)
+      .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(what))
+      .children(bits);
   }
 
   menuView(t) {
