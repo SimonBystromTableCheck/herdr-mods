@@ -70,7 +70,7 @@ those too). Never touch `layouts/.state/`: the person's clicks (sizes, shown
 panels) live there and survive. Then `layout.switch` to it only if it was showing.
 
 Never touch the person's data outside these folders: `pond-agents.json`,
-`pond-figures/`, `servers.json`, `todos/`, `shared.json`, `data/`.
+`pond-figures/`, `servers.json`, `remote-checker.json`, `todos/`, `shared.json`, `data/`.
 
 ## 5. Finish
 
