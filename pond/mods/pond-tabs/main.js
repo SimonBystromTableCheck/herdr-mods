@@ -27,12 +27,15 @@ const BY_ID = {
   changes: { title: "Changes", icon: "mods/changes/changes.svg" },
 };
 const ADDED = "pond-tabs.added"; // {<layout>: [mods this tab bar added to it]}: never re-added once removed
+const ORDER = "pond-tabs.panelOrder"; // [panel ids] in the order the person dragged them; others keep layout order after
 
 export default class Tabs extends View {
   init(_props, cx) {
     this.selfUpdate = new SelfUpdate("pond-tabs", "tab bar", { short: "Tabs" }); this.selfUpdate.start(cx);
     this.layoutUpdate = new SelfUpdate("pond-tabs", "Pond layout", { layout: true, short: "Pond" }); this.layoutUpdate.start(cx);
     this.pressed = null;
+    this.dragPanel = null; // panel id pressed, while held
+    this.overPanel = null; // panel id under the pointer
     // The Claude account new sessions use (cvp's global profile), for the Claude button; its
     // name and kind come from pond-profiles' local settings (~/.cvm/herdr/pond-profiles.json).
     const account = cx => cx.spawn(async cx => {
@@ -159,13 +162,26 @@ export default class Tabs extends View {
       const mod = c.content?.mod, meta = BY_ID[c.id] ?? this.declared[mod];
       return meta ? { id: c.id, mod, ...meta } : null;
     }).filter(Boolean);
+    const order = shared(ORDER) ?? [], rank = id => { const i = order.indexOf(id); return i < 0 ? order.length : i; };
+    buttons.sort((a, b) => rank(a.id) - rank(b.id)); // stable: unranked ones keep layout order
+    const movePanel = (from, to) => {
+      const ids = buttons.map(b => b.id).filter(id => id !== from);
+      const at = ids.indexOf(to), fromAt = buttons.findIndex(b => b.id === from), toAt = buttons.findIndex(b => b.id === to);
+      ids.splice(fromAt < toAt ? at + 1 : at, 0, from); // dropped right of where it was: lands after the target
+      setShared(ORDER, ids);
+    };
     const enabled = buttons.map(b => b.id);
     this.syncPanel(space, panel, body, enabled);
     const panelButton = (id, label, icon, badge, dot) => {
       const on = panel && !panel.hidden && body?.active === id;
+      const target = this.dragPanel && this.dragPanel !== id && this.overPanel === id;
       return h_flex().id(`panel-${id}`).h(26).px(8).gap(5).flex_none().items_center().rounded(6)
         .text_size(12).bg(on ? t.selected : t.chrome).text_color(on ? t.foreground : t.muted)
-        .hover(s => s.bg(t.hover)).on_mouse_down("left", stop)
+        .border(1).border_color(target ? t.accent : this.dragPanel === id && this.overPanel !== id ? t.border : t.chrome)
+        .hover(s => s.bg(t.hover))
+        .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.dragPanel = id; cx.notify(); })
+        .on_hover((h, cx) => { if (h) this.overPanel = id; else if (this.overPanel === id) this.overPanel = null; if (this.dragPanel) cx.notify(); })
+        .on_mouse_up("left", () => { const from = this.dragPanel; if (from && from !== id) movePanel(from, id); })
         .on_click(() => {
           if (on) run("layout.hide", { id: "panel" });
           else { run("layout.select", { stack: "panel-body", child: id }); run("layout.show", { id: "panel" }); }
@@ -175,7 +191,7 @@ export default class Tabs extends View {
           .bg(t.ansi2).text_color(t.background).text_size(10.5).font_semibold().child(String(badge))));
     };
     return h_flex().size_full().min_w(0).px(10).pl(lightsPadding).gap(3).items_center().bg(t.chrome).border_b(1).border_color(t.border)
-      .on_mouse_up("left", () => { this.pressed = null; })
+      .on_mouse_up("left", (_e, cx) => { this.pressed = null; if (this.dragPanel) { this.dragPanel = null; cx.notify(); } })
       .on_scroll_wheel(e => { if (Math.abs(e.delta.y) >= 1) run(e.delta.y > 0 ? "tab.prev" : "tab.next"); })
       .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(3).overflow_x_scrollbar().children(shown.map(item)))
       .children([this.layoutUpdate.pill(t, { compact: true }), this.selfUpdate.pill(t, { compact: true })].filter(Boolean).map(p => p.mr(3)))

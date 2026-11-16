@@ -23,7 +23,7 @@ https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/pond-tabs". What 
 
 Panel mods from this repo point here for their button; their install does steps 1–2 if needed.
 
-**Version:** 1.4.0 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.5.0 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** from 1.2.0, a small "Tabs ↑ x.y.z" pill appears before + when this repo publishes a newer version (and "Pond ↑ x.y.z" for the shown layout, which updates the layout and offers its mods); click it, confirm, and a new Claude tab updates just this mod (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/pond-tabs/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept; edits you made inside the mod folder are not.
 
@@ -41,11 +41,16 @@ padding, 3px gaps), left to right:
   `done` dot, and on the active tab a 12px close `x` in `dim`.
 - **`+`**, 26px square button, `dim`.
 - **Panel buttons**, 26px tall, radius 6, 12px text, 14px icon + label: one per child of the
-  layout's `panel-body` stack, in its order. Files and Changes show only if enabled in shared
+  layout's `panel-body` stack, in its order unless the person dragged them (below). Files and Changes show only if enabled in shared
   `workspace.panels` (default both). The open one is `selected`/`foreground`;
   others `chrome`/`muted`. Servers adds a 16px round badge (`ansi2` green,
   `background` text, 10.5px semibold) with the number of live terminals
   labeled `herdr.server`, hidden at 0.
+  Drag a panel button onto another to reorder: press, move, release over the target; the
+  hovered target gets a 1px `accent` outline. It lands in the target's place. The order is
+  shared state `pond-tabs.panelOrder` (a list of panel-stack child ids), not the layout file;
+  panels missing from it keep layout order after the ordered ones. A plain click still
+  opens/closes the panel.
 - **Window buttons** (Linux/Windows only, where the system draws none):
   minimize, maximize/restore, close; vector icons on Windows.
 - On macOS with a hidden title bar, left padding clears the traffic lights.
@@ -101,6 +106,10 @@ padding, 3px gaps), left to right:
 
 ## Watch out
 
+- Panel reorder is press on one button, release on another (`on_mouse_down` / `on_mouse_up`,
+  `on_hover` for the outline): GPUI has no in-mod drag-and-drop between elements. Don't save the
+  order with `layout.set`: it rewrites the layout without its root `version`/`source`.
+
 - It needs the layout's right-hand `panel` column with a `panel-body` stack (Herdr's `main` and its
   copies have one). A layout without them shows no panel buttons and adds nothing.
 - Self-adding only appends to the stack; it never removes. Uninstalling a mod leaves its block in the
@@ -125,8 +134,13 @@ padding, 3px gaps), left to right:
   forth, restores each.
 - Starting a server through `servers` shows a green `1` on Servers.
 - An agent working in a tab shows the spinning ring on its pill.
+- Dragging Todos onto Files puts Todos first; the order survives a restart.
 
 ## Changes
+
+### 1.5.0 (2026-11-16)
+
+- Drag a panel button onto another to reorder the panel buttons; the order is remembered (shared `pond-tabs.panelOrder`).
 
 ### 1.4.0 (2026-11-13)
 

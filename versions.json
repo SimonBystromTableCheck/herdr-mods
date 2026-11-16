@@ -48,7 +48,7 @@
       "path": "pond-files/mods/pond-files"
     },
     "pond-tabs": {
-      "version": "1.4.0",
+      "version": "1.5.0",
       "item": "pond-tabs",
       "path": "pond-tabs/mods/pond-tabs"
     },
@@ -65,7 +65,7 @@
   },
   "layouts": {
     "pond": {
-      "version": "1.11.0",
+      "version": "1.11.1",
       "item": "pond",
       "path": "pond/layouts/pond.json",
       "mods": [
