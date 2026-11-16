@@ -3,8 +3,9 @@
 Herdr's Agents list with a pixel-art duck in place of each agent's program icon. The duck
 acts out the agent's status: it jabs a knife while the agent works, glares (then scowls)
 while it waits for you, hops and flaps when it finishes, and bobs contentedly when idle.
-Rows are taller and show the name over its detail, plus a thin context-use bar and the model
-for Claude Code agents. Everything else (grouping, priority sort, pins, sub-agent trees,
+Rows are taller and show the name over a status line, plus a thin context-use bar and the model
+for Claude Code agents. It opens grouped by space, each space marked with its color from the
+spaces list and split by state inside. Everything else (priority sort, pins, sub-agent trees,
 the narrow rail) is the shipped `agents` mod unchanged. The duck is the default **figure set**:
 a "Pond figures" dialog lets you swap it, per space, for emoji, your own pictures (PNG, JPEG,
 GIF, WebP, SVG) or a still duck.
@@ -16,7 +17,7 @@ It is `"place": "none"`: to use it, point a layout block at it instead of the sh
 `agents` (clone the layout first: `herdr-app do layout.clone '{"name":"main","as":"my-main"}'`,
 then set the `agents` block's `content` to `{ "mod": "pond-agents" }`).
 
-**Version:** 1.2.2 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.3.0 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** from 1.2.0, a small "↑ x.y.z" pill appears beside the figures and sort icons when this repo publishes a newer version; click it, confirm, and a new Claude tab updates just this mod (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/pond-agents/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept (your figure sets in `pond-agents.json` and pictures in `pond-figures/`); edits you made inside the mod folder are not.
 
@@ -29,20 +30,26 @@ The sidebar's agents block, top to bottom, on `chrome` with a 1px `border` line 
   last good figures."), a 14px duck icon (`duck-icon.svg`, opens Pond figures) and the 14px
   sort icon (`clock` for Priority, `layers` for Grouped by space).
 - **Group headers** (30px, 11px medium): in Priority view "Needs you" (`blocked` color),
-  "Done" (`done`), "Working" (`working`), "Idle" (`dim`) with a count; in Grouped view the
-  space name. A "Pinned" group comes first when anything is pinned.
-- **Agent rows**, 66px tall (shipped: 30px), rounded 8, `selected` background when focused:
-  - the **duck**, 45px tall and 69px wide (a 368x240 canvas scaled down, the left third
-    reserved for the knife so the body never shifts);
-  - a text column: the name (13px; `muted` when idle and not focused, else `foreground`),
-    under it the detail (11.5px `dim`: a named tab or the agent's live title), under that,
-    for Claude Code, a **context bar**: 72x3px track in `border`, fill `ansi2` (green) under
+  "Done" (`done`), "Working" (`working`), "Idle" (`dim`) with a count; in Grouped view (the
+  default) a 14px rounded square in the space's color (shared `space.colors` from the spaces
+  list: an `ansiN` mark or a hex, default `ansi6`) with the space's first letter in white bold,
+  then the space name in `foreground`. A "Pinned" group comes first when anything is pinned.
+- **State sections** inside each space in Grouped view (22px, 10.5px, indented 12px): "Needs
+  you", "Done", "Working", "Idle" in their status colors with a count, most urgent first; within
+  one, the agent whose state changed most recently comes first.
+- **Agent rows**, at least 50px tall with 7px vertical padding (shipped: 30px), rounded 8,
+  `selected` background when focused:
+  - the **duck**, 32px tall (a 368x240 canvas scaled down, the left third reserved for the
+    knife so the body never shifts);
+  - a text column: the name (13px medium, wrapping, line height 1.25; `muted` when idle and not
+    focused, else `foreground`) with the pin button beside it on hover; under it the detail
+    (11.5px `dim`: a named tab or the agent's live title); under that a **status line** (11px
+    `dim`): the status mark, the time in this state ("<1m", "12m", "3h", "2d"), the machine
+    name (10px) for agents on another machine, and on the right the fold chevron and sub-agent
+    count when it has sub-agents and the account badge; under that, for Claude Code, a
+    **context bar**: 72x3px track in `border`, fill `ansi2` (green) under
     60%, `ansi3` (yellow) from 60%, `ansi1` (red) from 80%, then "NN%" 10px `dim` and
     "· Opus 4.x" 10px `muted`. Hover the bar: "Context NN% used · model";
-  - the machine name (10px `dim`) for agents on another machine;
-  - fold chevron and sub-agent count when it has sub-agents;
-  - time in this state ("<1m", "12m", "3h", "2d", 11px `dim`), swapped for a pin button on hover;
-  - the status mark (below).
 - **Sub-agent rows**, 34px (shipped: 26px), indented 44px with tree lines in `input`, a 27px
   duck, the name, and the status mark.
 - Empty: "No agent status yet. Agents show up here when they report their status…".
@@ -89,9 +96,11 @@ The duck (all native divs, colors fixed, not themed): body `#F5DA81`, beak and f
   it to look and ask before editing; new files go to `pond-figures/<set>/`.
 - Click a row: `pane.focus` on its pane. Click a sub-agent: focus it if it has a pane, else
   `terminal.peek`. Click the duck of a parent: fold or unfold its sub-agents.
-- Hover a row: the time is replaced by a pin button; click it to `terminal.pin` / unpin.
-- Click a group header to fold it; folded it shows its count and most urgent status.
-- Click the sort icon: a popup with Priority / Grouped by space (shared `agents.sort`).
+- Hover a row: a pin button shows beside the name; click it to `terminal.pin` / unpin.
+- Click a group header to fold it; folded it shows its count and most urgent status. Folded
+  groups are remembered across restarts (`localStorage` key `folded`).
+- Click the sort icon: a popup with Priority / Grouped by space (shared `agents.sort`; Grouped
+  when unset).
 - Looking at a done agent keeps it in Done until you leave it. The list order drives
   `agent.next` / `agent.prev`.
 - All animation is native `.loop()`; the only timer redraws every 30s (for the
@@ -120,8 +129,10 @@ Clone of shipped `agents` (`cloned_from: {name: "agents", version: "0.1.14"}`). 
 - `duck.js` also exports `duckMood(mood, height, {still})`, `MOODS` and `DUCK_CENTER`.
 - `figures/`: shipped pictures folder (only a README for now); `sparkles.svg`, `duck-icon.svg`.
 - `main.js`: drops the `icon()` program-icon helper and the `image` import; rows use
-  `duck(a.status, 45, now - since)` and sub rows `duck(st, 27, …)`; row 66px with `pl(4)`,
-  gap 6; name/detail stacked in a `v_flex` instead of "name · detail" on one line; the duck
+  `duck(a.status, 32, now - since)` and sub rows `duck(st, 27, …)`; row `py(7)`, `min_h(50)`
+  with `pl(4)`, gap 6; name, detail, status line and context bar stacked in a `v_flex` instead
+  of "name · detail" on one line; Grouped is the default sort, space headers get a color mark
+  and each space splits into state sections; folded groups persist in `localStorage`; the duck
   gets a tooltip and is always shown; adds `contextBar()`; the sort popup opens
   `mod: "pond-agents"` (shipped opens `agents`).
 - Context data: terminal labels `claude.context` (0–100) and `claude.model`, read from
@@ -151,13 +162,13 @@ Clone of shipped `agents` (`cloned_from: {name: "agents", version: "0.1.14"}`). 
   Herdr can't rotate either: the happy wings lift instead of swinging.
 - Keep the knife room in the canvas for every mood, or the body jumps when a duck starts working.
 - The popup `mod` name must match the folder; a clone under another name must change it.
-- Rows are 66px: about half as many agents fit as with the shipped list.
+- Rows are at least 50px (more when a long name wraps): fewer agents fit than with the shipped list.
 - Theme-independent duck colors: it is the same yellow on light and dark themes.
 
 ## Done when
 
 - `herdr-app check ~/.config/herdr-app/mods/pond-agents` passes.
-- A layout block with `{ "mod": "pond-agents" }` shows the "Agents" header and a 45px duck per agent.
+- A layout block with `{ "mod": "pond-agents" }` shows the "Agents" header and a 32px duck per agent.
 - A working agent's duck jabs its knife and the row shows the spinner; a blocked agent shows
   "Needs you" and its duck scowls after a minute; a finished one hops; an idle one bobs.
 - A Claude Code agent with the status line labels shows a colored context bar and its model.
@@ -168,6 +179,13 @@ Clone of shipped `agents` (`cloned_from: {name: "agents", version: "0.1.14"}`). 
   that space.
 
 ## Changes
+
+### 1.3.0 (2026-11-16)
+
+- Opens grouped by space. Each space header has a small square in the space's color from the spaces list, with its first letter.
+- Inside a space, agents split into Needs you / Done / Working / Idle sections with counts, most urgent first.
+- Compact rows: a 32px duck, the name wraps instead of truncating, and the status, time, machine, sub-agent fold and account badge sit on one line under it. The pin button shows beside the name on hover.
+- Folded groups are remembered across restarts.
 
 ### 1.2.2 (2026-11-12)
 
