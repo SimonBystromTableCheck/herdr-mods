@@ -1,6 +1,6 @@
 {
   "id": "root",
-  "version": "1.10.1",
+  "version": "1.11.0",
   "source": {
     "repo": "https://github.com/SimonBystromTableCheck/herdr-mods",
     "item": "pond",
@@ -180,6 +180,13 @@
                       "type": "block",
                       "content": {
                         "mod": "pond-profiles"
+                      }
+                    },
+                    {
+                      "id": "workbench",
+                      "type": "block",
+                      "content": {
+                        "mod": "workbench"
                       }
                     }
                   ],

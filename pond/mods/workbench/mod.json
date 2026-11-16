@@ -1,0 +1,1 @@
+{ "place": "none", "title": "Workbench", "version": "1.0.0", "source": {"repo": "https://github.com/SimonBystromTableCheck/herdr-mods", "item": "workbench", "mod": "workbench"}, "focusable": true, "panel": {"title": "Find", "icon": "workbench.svg", "leader": "/", "expand": "expand"} }

@@ -56,11 +56,16 @@
       "version": "1.4.0",
       "item": "pond-profiles",
       "path": "pond-profiles/mods/pond-profiles"
+    },
+    "workbench": {
+      "version": "1.0.0",
+      "item": "workbench",
+      "path": "workbench/mods/workbench"
     }
   },
   "layouts": {
     "pond": {
-      "version": "1.10.1",
+      "version": "1.11.0",
       "item": "pond",
       "path": "pond/layouts/pond.json",
       "mods": [
@@ -73,7 +78,8 @@
         "todos",
         "servers",
         "remote-checker",
-        "pond-profiles"
+        "pond-profiles",
+        "workbench"
       ]
     }
   },
@@ -150,6 +156,13 @@
         "pond-profiles"
       ]
     },
+    "workbench": {
+      "kind": "mod",
+      "recipe": "workbench/RECIPE.md",
+      "mods": [
+        "workbench"
+      ]
+    },
     "pond": {
       "kind": "layout",
       "recipe": "pond/RECIPE.md",
@@ -163,7 +176,8 @@
         "todos",
         "servers",
         "remote-checker",
-        "pond-profiles"
+        "pond-profiles",
+        "workbench"
       ],
       "layouts": [
         "pond"

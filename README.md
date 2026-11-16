@@ -17,7 +17,7 @@ Give your Herdr agent the folder's link, e.g.
 
 > Install the Herdr mod at https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/todos
 
-You don't need the `pond` layout for a single mod. The panels (Git, Skills, Todos, Servers, PR, Claude) open from a button in the tab bar, in the right-hand panel next to Herdr's Files and Changes: that button comes from [`pond-tabs`](pond-tabs/), which the panel's install adds if it's missing and sets as your layout's tab bar (on Herdr's own `main` it first makes your own copy, `my-main`, since Herdr's layouts are read-only). Install more panels later and each brings its own button. With [`leader`](leader/), `ctrl-a` and a panel's key opens it too.
+You don't need the `pond` layout for a single mod. The panels (Git, Skills, Todos, Servers, PR, Claude, Find) open from a button in the tab bar, in the right-hand panel next to Herdr's Files and Changes: that button comes from [`pond-tabs`](pond-tabs/), which the panel's install adds if it's missing and sets as your layout's tab bar (on Herdr's own `main` it first makes your own copy, `my-main`, since Herdr's layouts are read-only). Install more panels later and each brings its own button. With [`leader`](leader/), `ctrl-a` and a panel's key opens it too.
 
 It follows the "Layouts and mods other people made" steps in your `~/.config/herdr-app/AGENTS.md`: read the recipe, copy `mods/<name>/`, merge `keys.json` if there is one, `herdr-app check`.
 
@@ -39,7 +39,7 @@ Which version you have: `"version"` in `~/.config/herdr-app/mods/<name>/mod.json
 
 | Layout | Version | |
 | --- | --- | --- |
-| [pond](pond/) | 1.10.1 | Herdr's main layout with my own tabs, agents and files panels, and git, skills, todos, servers, remote-checker and Claude profiles panels on the right |
+| [pond](pond/) | 1.11.0 | Herdr's main layout with my own tabs, agents and files panels, and git, skills, todos, servers, remote-checker, Claude profiles and Find (workbench) panels on the right |
 
 ## Mods
 
@@ -55,6 +55,7 @@ Which version you have: `"version"` in `~/.config/herdr-app/mods/<name>/mod.json
 | [pond-files](pond-files/) | 1.1.2 | Herdr's Files panel with focus, vim keys and a key bar |
 | [pond-tabs](pond-tabs/) | 1.4.0 | Herdr's tab bar with Git, Skills, Todos, Servers, GH and Claude account panel buttons (needs those mods) |
 | [pond-profiles](pond-profiles/) | 1.4.0 | Claude Code accounts (claude.ai or a gateway) and versions via cvm/cvp: switch, pin per folder, usage limits, updates, agent-router models; with a setup wizard and a one-click update of the panel itself |
+| [workbench](workbench/) | 1.0.0 | an IDE-style Find panel: search across files, mass find & replace with a preview, go to file, format with the repo's own tools (commit hooks, VS Code settings, installed formatters) and delete duplicate lines, with an editable file view |
 
 `changes-expand` (a `cmd-g` launcher for [herdr-gitview](https://github.com/ChmaraX/herdr-gitview)'s tab) is retired: Git's Files section replaced gitview here. Its last version is in this repo's history.
 
