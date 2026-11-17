@@ -39,7 +39,7 @@ Which version you have: `"version"` in `~/.config/herdr-app/mods/<name>/mod.json
 
 | Layout | Version | |
 | --- | --- | --- |
-| [pond](pond/) | 1.11.2 | Herdr's main layout with my own tabs, agents and files panels, and git, skills, todos, servers, remote-checker, Claude profiles and Find (workbench) panels on the right |
+| [pond](pond/) | 1.12.0 | Herdr's main layout with my own tabs, agents and files panels, and git, skills, todos, servers, remote-checker, Claude profiles, Find (workbench) and Notes panels on the right |
 
 ## Mods
 
@@ -56,6 +56,7 @@ Which version you have: `"version"` in `~/.config/herdr-app/mods/<name>/mod.json
 | [pond-tabs](pond-tabs/) | 1.5.0 | Herdr's tab bar with Git, Skills, Todos, Servers, GH, Claude account and Find panel buttons, reorderable by drag (needs those mods) |
 | [pond-profiles](pond-profiles/) | 1.4.0 | Claude Code accounts (claude.ai or a gateway) and versions via cvm/cvp: switch, pin per folder, usage limits, updates, agent-router models; with a setup wizard and a one-click update of the panel itself |
 | [workbench](workbench/) | 1.0.0 | an IDE-style Find panel: search across files, mass find & replace with a preview, go to file, format with the repo's own tools (commit hooks, VS Code settings, installed formatters) and delete duplicate lines, with an editable file view |
+| [notes](notes/) | 1.0.0 | an Obsidian vault panel: a note per repo and branch with its todos, find by name or text, links and backlinks, edit in nvim, a `feature-todo` helper for agents, and a setup screen that installs Obsidian / ripgrep and picks or creates the vault |
 
 `changes-expand` (a `cmd-g` launcher for [herdr-gitview](https://github.com/ChmaraX/herdr-gitview)'s tab) is retired: Git's Files section replaced gitview here. Its last version is in this repo's history.
 

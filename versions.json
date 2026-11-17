@@ -61,11 +61,16 @@
       "version": "1.0.0",
       "item": "workbench",
       "path": "workbench/mods/workbench"
+    },
+    "notes": {
+      "version": "1.0.0",
+      "item": "notes",
+      "path": "notes/mods/notes"
     }
   },
   "layouts": {
     "pond": {
-      "version": "1.11.2",
+      "version": "1.12.0",
       "item": "pond",
       "path": "pond/layouts/pond.json",
       "mods": [
@@ -79,7 +84,8 @@
         "servers",
         "remote-checker",
         "pond-profiles",
-        "workbench"
+        "workbench",
+        "notes"
       ]
     }
   },
@@ -163,6 +169,13 @@
         "workbench"
       ]
     },
+    "notes": {
+      "kind": "mod",
+      "recipe": "notes/RECIPE.md",
+      "mods": [
+        "notes"
+      ]
+    },
     "pond": {
       "kind": "layout",
       "recipe": "pond/RECIPE.md",
@@ -177,7 +190,8 @@
         "servers",
         "remote-checker",
         "pond-profiles",
-        "workbench"
+        "workbench",
+        "notes"
       ],
       "layouts": [
         "pond"

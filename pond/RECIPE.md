@@ -4,17 +4,17 @@ Herdr's own `main` window, with a fuller right-hand panel and a few personal swa
 sidebar keeps the spaces list, but its agents list shows animated ducks and Claude's context
 use. The tab bar gains Git, Skills, Todos, Servers and GH buttons next to Files, each
 opening its own panel on the right: a lazygit-style git panel, Claude skills, Markdown todo
-pages, a dev-server runner and the focused branch's GitHub pull request. Files is keyboard-driven (vim keys). There is no Changes
+pages, a dev-server runner, the focused branch's GitHub pull request and an Obsidian notes panel. Files is keyboard-driven (vim keys). There is no Changes
 button: the Git panel's Files section reviews and stages changes.
 
 
 **Install:** Point your Herdr agent at this folder: copy `layouts/pond.json` to
 `~/.config/herdr-app/layouts/` and every folder in `mods/` (`pond-agents`, `pond-files`, `pond-tabs`,
-`git`, `git-conflicts`, `skills`, `todos`, `servers`, `remote-checker`, `pond-profiles`, `workbench`) to `~/.config/herdr-app/mods/`, renaming any that clash
+`git`, `git-conflicts`, `skills`, `todos`, `servers`, `remote-checker`, `pond-profiles`, `workbench`, `notes`) to `~/.config/herdr-app/mods/`, renaming any that clash
 (and the `mod` names in the layout), run `herdr-app check ~/.config/herdr-app/mods/<name>` on
 each, then `herdr-app do layout.switch --name pond`.
 
-**Version:** 1.11.2 (see Changes at the end; also `"version"` in `layouts/pond.json`, and each mod's own in its `mod.json`).
+**Version:** 1.12.0 (see Changes at the end; also `"version"` in `layouts/pond.json`, and each mod's own in its `mod.json`).
 
 **Update:** from 1.6.0, a "Pond ↑ x.y.z" pill appears in the tab bar when a newer layout is published; click it, confirm, and a new Claude tab updates the layout and offers its mods (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `layouts/pond.json` and each folder in `mods/` with this folder's copies (asking an agent to *install* again adds second copies instead). Sizes and panels you clicked are kept (Herdr keeps them in `layouts/.state/`), and so are the mods' settings and data; edits you made inside `pond.json` or the mod folders are not. From 1.10.0 the layout has no `changes` slot; a gitview you installed for it can be removed (its `gitview*` mod folders).
 
@@ -72,7 +72,7 @@ keys are reordered but the tree, ids, sizes and look are the shipped ones except
 | `tabs` block | `tabs` | `pond-tabs` (5 extra panel buttons, Servers badge) |
 | `files` (stack child) | `files` | `pond-files` (vim keys, keybar, plain-text preview) |
 | `changes` (stack child) | `changes` | removed (Git's Files section replaces it) |
-| `panel-body` stack | 2 children | `files` only, + `git`, `skills`, `todos`, `servers`, `remote` (`remote-checker`), `profiles` (`pond-profiles`), `workbench` blocks |
+| `panel-body` stack | 2 children | `files` only, + `git`, `skills`, `todos`, `servers`, `remote` (`remote-checker`), `profiles` (`pond-profiles`), `workbench`, `notes` blocks |
 
 Tree: `root` row → `sidebar` column [`brand`, `sidebar-lists` column [`spaces`, `agents`],
 `sidebar-footer`] + `work` column [`tabs`, `work-body` row [`main` (`tab: active` with the
@@ -116,6 +116,10 @@ Programs the panels run: `git`, `sh`, `hc`, `nvim` (git and skills), `mv` (todos
 - `layout.switch` (`ctrl-shift-l` by default) cycles back to the previous layout.
 
 ## Changes
+
+### 1.12.0 (2026-11-17)
+
+- notes 1.0.0 (new): a **Notes** panel on an Obsidian vault (a note per repo and branch with its todos, find, links and backlinks, edit in nvim, `feature-todo` for agents, a setup screen), leader `N`. Restores the layout's `"version"`, which a Herdr rewrite had dropped. Other mods unchanged: pond-agents 1.4.0, workbench 1.0.0, pond-tabs 1.5.0, git 1.4.0, git-conflicts 1.1.2, todos 1.2.0, servers 1.2.0, remote-checker 1.4.1, skills 1.2.0, pond-files 1.1.2, pond-profiles 1.4.0; leader 2.0.1.
 
 ### 1.11.2 (2026-11-17)
 
