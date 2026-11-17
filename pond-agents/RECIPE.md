@@ -17,7 +17,7 @@ It is `"place": "none"`: to use it, point a layout block at it instead of the sh
 `agents` (clone the layout first: `herdr-app do layout.clone '{"name":"main","as":"my-main"}'`,
 then set the `agents` block's `content` to `{ "mod": "pond-agents" }`).
 
-**Version:** 1.3.0 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.4.0 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** from 1.2.0, a small "↑ x.y.z" pill appears beside the figures and sort icons when this repo publishes a newer version; click it, confirm, and a new Claude tab updates just this mod (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/pond-agents/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept (your figure sets in `pond-agents.json` and pictures in `pond-figures/`); edits you made inside the mod folder are not.
 
@@ -34,6 +34,8 @@ The sidebar's agents block, top to bottom, on `chrome` with a 1px `border` line 
   default) a 14px rounded square in the space's color (shared `space.colors` from the spaces
   list: an `ansiN` mark or a hex, default `ansi6`) with the space's first letter in white bold,
   then the space name in `foreground`. A "Pinned" group comes first when anything is pinned.
+  In Grouped view, spaces with any agent working, done or blocked come first as a whole,
+  above spaces whose agents are all idle; each part keeps the spaces' usual order.
 - **State sections** inside each space in Grouped view (22px, 10.5px, indented 12px): "Needs
   you", "Done", "Working", "Idle" in their status colors with a count, most urgent first; within
   one, the agent whose state changed most recently comes first.
@@ -173,12 +175,17 @@ Clone of shipped `agents` (`cloned_from: {name: "agents", version: "0.1.14"}`). 
   "Needs you" and its duck scowls after a minute; a finished one hops; an idle one bobs.
 - A Claude Code agent with the status line labels shows a colored context bar and its model.
 - The sort popup switches between Priority and Grouped; clicking a row focuses that agent's pane.
+- In Grouped view, a space whose agents are all idle sits below a space with a working agent, even if it comes first in `agents()`.
 - Narrowing the sidebar below 160px shows the numbered rail without ducks.
 - The header duck icon opens Pond figures; choosing Emoji pond for a space switches that
   space's agents to emoji and writes `pond-agents.json`; right-clicking a figure opens it on
   that space.
 
 ## Changes
+
+### 1.4.0 (2026-11-17)
+
+- Grouped view: a space with any agent working, done or blocked moves to the top as a whole; all-idle spaces go below.
 
 ### 1.3.0 (2026-11-16)
 

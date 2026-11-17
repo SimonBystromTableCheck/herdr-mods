@@ -292,6 +292,11 @@ export default class Agents extends View {
     const urgency = new Map(list.map((a) => [a.address, Math.max(this.rank(a), ...this.tree(all, a.address).map((s) => RANK[kidStatus(s.t, this.listed)] ?? 0))]));
     const rankOf = (a) => urgency.get(a.address);
     if (byPriority) list = [...list].sort((x, y) => rankOf(y) - rankOf(x) || this.since(y) - this.since(x) || y.seq - x.seq);
+    else {
+      // Grouped: a space with any agent working, done or blocked moves up whole, keeping its order.
+      const live = new Set(list.filter((a) => rankOf(a) >= RANK.working).map((a) => a.space));
+      list = [...list.filter((a) => live.has(a.space)), ...list.filter((a) => !live.has(a.space))];
+    }
     const pinned = list.filter((a) => a.pinned);
     const rest = list.filter((a) => !a.pinned);
     list = [...pinned, ...rest];

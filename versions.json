@@ -38,7 +38,7 @@
       "path": "skills/mods/skills"
     },
     "pond-agents": {
-      "version": "1.3.0",
+      "version": "1.4.0",
       "item": "pond-agents",
       "path": "pond-agents/mods/pond-agents"
     },
@@ -65,7 +65,7 @@
   },
   "layouts": {
     "pond": {
-      "version": "1.11.1",
+      "version": "1.11.2",
       "item": "pond",
       "path": "pond/layouts/pond.json",
       "mods": [

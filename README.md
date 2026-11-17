@@ -39,7 +39,7 @@ Which version you have: `"version"` in `~/.config/herdr-app/mods/<name>/mod.json
 
 | Layout | Version | |
 | --- | --- | --- |
-| [pond](pond/) | 1.11.1 | Herdr's main layout with my own tabs, agents and files panels, and git, skills, todos, servers, remote-checker, Claude profiles and Find (workbench) panels on the right |
+| [pond](pond/) | 1.11.2 | Herdr's main layout with my own tabs, agents and files panels, and git, skills, todos, servers, remote-checker, Claude profiles and Find (workbench) panels on the right |
 
 ## Mods
 
@@ -51,7 +51,7 @@ Which version you have: `"version"` in `~/.config/herdr-app/mods/<name>/mod.json
 | [servers](servers/) | 1.2.0 | local dev servers as labelled herdr-core terminals that survive restarts |
 | [remote-checker](remote-checker/) | 1.4.1 | the focused branch's GitHub pull request (CI checks, reviewers, comments, diff size and commits, refetched every 10s), Mine / Review / Search lists, a GitHub account per space, and gh setup |
 | [skills](skills/) | 1.2.0 | Claude skills (personal and the repo's): run, edit, scaffold |
-| [pond-agents](pond-agents/) | 1.3.0 | Herdr's agents list with a pixel duck per agent that acts out its status, grouped by space with each space's color, plus the Claude context bar and model; swap figures per space (emoji, your pictures) |
+| [pond-agents](pond-agents/) | 1.4.0 | Herdr's agents list with a pixel duck per agent that acts out its status, grouped by space with each space's color, plus the Claude context bar and model; swap figures per space (emoji, your pictures) |
 | [pond-files](pond-files/) | 1.1.2 | Herdr's Files panel with focus, vim keys and a key bar |
 | [pond-tabs](pond-tabs/) | 1.5.0 | Herdr's tab bar with Git, Skills, Todos, Servers, GH, Claude account and Find panel buttons, reorderable by drag (needs those mods) |
 | [pond-profiles](pond-profiles/) | 1.4.0 | Claude Code accounts (claude.ai or a gateway) and versions via cvm/cvp: switch, pin per folder, usage limits, updates, agent-router models; with a setup wizard and a one-click update of the panel itself |
