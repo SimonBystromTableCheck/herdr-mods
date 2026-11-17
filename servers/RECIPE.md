@@ -1,6 +1,6 @@
 # Servers
 
-A panel of your local dev servers. Each card shows whether the server is running, the branch its folder is on, the localhost URL it printed, and the command it runs; start, stop, restart and its logs are one click or key away. Servers run as labeled herdr-core terminals, so they keep running when Herdr closes and are found again when it reopens. Adding one is a two-step picker: choose a folder under your projects root (`~/code` by default, changeable), then pick a detected start command (package.json scripts, Procfile, Rails, Docker Compose, Django, Cargo, Go) or type one.
+A panel of your local dev servers. Each card shows whether the server is running, the branch its folder is on, the localhost URL it printed, and the command it runs; start, stop, restart and its logs are one click or key away, and so are Open (the server's address in the browser) and Edit (its name, start command and address). Servers run as labeled herdr-core terminals, so they keep running when Herdr closes and are found again when it reopens. Adding one is a two-step picker: choose a folder under your projects root (`~/code` by default, changeable), then pick a detected start command (package.json scripts, Procfile, Rails, Docker Compose, Django, Cargo, Go) or type one.
 
 
 **Install:** tell your Herdr agent "Install the Herdr mod at
@@ -27,7 +27,7 @@ next to Herdr's Files and Changes. You don't need the `pond` layout. What the ag
 Without changing the tab bar, it also opens beside a terminal:
 `herdr-app do pane.split --direction right --mod servers` (`q` closes that pane).
 
-**Version:** 1.2.0 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.3.0 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** from 1.1.0, its header has a "Check for updates" pill that turns into "Update to x.y.z" when this repo publishes a newer version; click it, confirm, and a new Claude tab updates just this mod (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/servers/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept (your servers in `servers.json`); edits you made inside the mod folder are not.
 
@@ -44,25 +44,26 @@ Panel: theme `background`, text 13px, rounded 10 with a 1px border (`accent` whi
 - Empty: "No servers yet" and a primary "Add a server" button.
 - **Add, step 1/2 "Pick a folder"** (replaces the list): header with the projects root (e.g. `~/code`) and a **Change…** button on its right that opens the system folder picker (`pickFolder`) and saves the choice; a folder tree of 28px rows indented 16px per level with chevrons and a folder icon (`accent` when the folder is a git repo or has a package.json, else `muted`), `git` / `pkg` tags on the right, selected row `selected`. Under it "Selected: ~/code/app" (the root, tilde-shortened); footer with Cancel and Next (30px buttons, primary `solid`/`solid_foreground`; Next dimmed to 0.45 until a folder is picked).
 - **Add, step 2/2 "Command"**: a Name input (defaults to the folder name), "Start command" with detected options (radio dot, command in mono 12px, source hint below in 11px `dim`; picked one: `accent` border on `selected`), a free-text command input, and Back / Add server.
-- **Footer, 28px**: keycap chips (start/stop, restart, logs, move, open url, add, remove) and a `?` keycap that opens the all-keys card.
+- **Footer, 28px**: keycap chips (start/stop, restart, logs, move, open url, edit, add, remove) and a `?` keycap that opens the all-keys card.
 
 ## How it behaves
 
 - Every 4s it re-reads `servers.json`, each server's branch and, for running servers without a URL yet, the last 400 lines of output for the first `http://localhost|127.0.0.1|0.0.0.0|[::1]` URL (`0.0.0.0` is shown as `localhost`).
 - Start: removes old finished terminals for that server, then starts a background terminal through your login shell. Stop: kills and removes it, so nothing is left. Restart: stop then start. A server that crashes keeps its finished terminal, so it shows `exited (code)` and Logs still opens its output.
-- Logs opens the terminal with `terminal.peek`. Clicking the URL (or `o`) opens it in the browser.
-- Keys: `j/k` move, `< >` first/last, `s`/`enter`/`space` start or stop, `R` restart (running only), `l` logs, `o` open URL, `a` add, `d` remove (only when not running), `r` refresh, `q` hide the panel and give the keyboard back to the focused pane, `?` the keys card (`escape`, `?` or `q` closes it). In the add flow, `enter` goes next / adds, `escape` goes back / cancels. Click a card to select it.
+- Logs opens the terminal with `terminal.peek`. Clicking the URL on a card opens it in the browser.
+- Open (the card's external-link button, or `o`) opens the server's address: the one set in Edit or when adding it, else the URL a running server printed, else `http://localhost`. Edit (the pencil, or `e`) changes the name, start command and address; the folder stays, and a changed command takes effect on the next start. `enter` saves, `escape` cancels.
+- Keys: `j/k` move, `< >` first/last, `s`/`enter`/`space` start or stop, `R` restart (running only), `l` logs, `o` open the server's address, `e` edit, `a` add, `d` remove (only when not running), `r` refresh, `q` hide the panel and give the keyboard back to the focused pane, `?` the keys card (`escape`, `?` or `q` closes it). In the add flow, `enter` goes next / adds, `escape` goes back / cancels. Click a card to select it.
 - Detected commands: package.json scripts, ordered `dev`, `start`, `serve`, `preview` (and their `name:*` variants) first, run with the package manager from the nearest lockfile up to `$HOME` (`pnpm run`, `yarn`, `bun run`, else `npm run`); each `Procfile.dev` / `Procfile` entry; `bin/dev`; `bin/rails server`; `docker compose up`; `python manage.py runserver`; `cargo run`; `go run .`. Typing a custom command overrides the pick.
 
 ## Built from
 
 - `update.js`: the self-update pill (the same file in every mod from this repo; `tools/stamp.py` refuses copies that differ). It reads `mod.json` `version` and `source`, fetches the repo's `versions.json` (shared between mods as `herdr-mods.versions`, on start and whenever the panel comes back on screen) and on confirm runs `tab.new` with `claude` in the Herdr home. No `source`: no pill.
-- `main.js` (all logic and rendering), `keybar.js` (footer keycaps and keys card, same file as the git and skills mods), icons `play.svg stop.svg restart.svg trash.svg external.svg`.
+- `main.js` (all logic and rendering), `keybar.js` (footer keycaps and keys card, same file as the git and skills mods), icons `play.svg stop.svg restart.svg trash.svg external.svg pencil.svg`.
 - `mod.json`: `{ "place": "none", "title": "Servers", "focusable": true, "panel": { "title": "Servers", "icon": "server.svg", "leader": "r" } }`. No `props`. `panel` is what `pond-tabs` (button label and icon; it adds a green count of running servers) and the `leader` (key) read. `server.svg` is a copy of Herdr's `workspace-chrome` icon.
 - `panel.js`: where the panel is and showing or closing it there (the same file in every panel mod from this repo; `tools/stamp.py` refuses copies that differ). `q` closes it wherever it is: a popup closes, a focused pane closes, and a layout block hides the node holding its stack (the `panel` column in Herdr's `main` and its copies). No layout ids are assumed.
 - herdr: `exec hc home appHome readTextFile writeTextFile terminals theme settings run nextCommand focused setShared`. Commands: `terminal.peek`, `layout.hide`, `pane.focus`, `pane.go`.
 - `nextCommand()`: `focus`, `go:<direction>` (left: `pane.focus` back to the focused pane, since `pane.go` doesn't reliably move the keyboard out of a panel; other directions `pane.go`; `cmd-alt-arrows` are caught in the key handler and do the same; leaving cancels a pending 150ms focus retry, which also skips once focus has landed), `key:<k>` (e.g. `"servers.key:s"` in keys.json). Shared: `servers.hasKeys` (keyboard ownership, polled every 300ms).
-- Config: `~/.config/herdr-app/servers.json`, `{ "servers": [{ "id", "name", "cwd", "command", "added" }] }`; `id` is the name slug (max 20) plus 4 random characters. Saved with `writeTextFile(path, text, expected)`, retrying against the current file on conflict.
+- Config: `~/.config/herdr-app/servers.json`, `{ "servers": [{ "id", "name", "cwd", "command", "added", "url"? }] }`; `url` is saved only when it isn't the default `http://localhost`; `id` is the name slug (max 20) plus 4 random characters. Saved with `writeTextFile(path, text, expected)`, retrying against the current file on conflict.
 - Programs: `hc run --bg --json --no-parent --no-notify --outlive-parent --name srv-<id> --cwd <cwd> --label herdr.server=<id> -- $SHELL -lic '<command>'`, `hc kill`, `hc rm`, `hc read --lines 400`; `git branch --show-current` / `git rev-parse --short HEAD`; `sh` scripts to list folders and detect project files; `open` for URLs.
 - A server's terminal is found in `terminals()` by its `herdr.server` label (or name `srv-<id>`), a live one first, else the newest.
 - Art: Lucide-style 24px stroke icons; Herdr's shipped `mods/workspace-chrome/spinner.svg`, `terminal.svg`, `git-branch.svg`, `plus.svg` and `mods/files/chevron-down.svg`, `chevron-right.svg`, `folder.svg`.
@@ -87,8 +88,13 @@ Panel: theme `background`, text 13px, rounded 10 with a 1px border (`accent` whi
 - `l` peeks at its output; `R` restarts it; `s` stops it and `hc ls` no longer lists it.
 - A command that exits on its own shows `exited (<code>)` in red, and Logs still opens.
 - `d` on a stopped server removes it from the panel and from `servers.json`.
+- Edit → change the name, start command or address → Save: the card shows the new name, and Open goes to the new address.
 
 ## Changes
+
+### 1.3.0 (2026-11-17)
+
+- Open and Edit buttons on each card. Open (`o`) goes to the server's address, which is set per server in Edit (`e`) or when adding it (default `http://localhost`); with none set it goes to the URL the running server printed, as before. Edit changes the name, start command and address; the folder stays, and a new command takes effect on the next start.
 
 ### 1.2.0 (2026-11-13)
 
