@@ -48,7 +48,7 @@ Which version you have: `"version"` in `~/.config/herdr-app/mods/<name>/mod.json
 | [git](git/) | 1.4.0 | a lazygit-style git panel: a Files tree with a hunk / line staging diff, review notes and Ask AI, sections, vim-ish keys, writes run in core terminals, conflicts handed to an agent, plus a Conflicts pane with a lazygit-style chunk picker |
 | [leader](leader/) | 2.0.1 | a tmux-style prefix: `ctrl-a`, then a key, with a popup of the bindings |
 | [todos](todos/) | 1.2.0 | todo pages as Markdown files in `~/.config/herdr-app/todos` |
-| [servers](servers/) | 1.2.0 | local dev servers as labelled herdr-core terminals that survive restarts |
+| [servers](servers/) | 1.3.0 | local dev servers as labelled herdr-core terminals that survive restarts, with Open and Edit buttons |
 | [remote-checker](remote-checker/) | 1.4.1 | the focused branch's GitHub pull request (CI checks, reviewers, comments, diff size and commits, refetched every 10s), Mine / Review / Search lists, a GitHub account per space, and gh setup |
 | [skills](skills/) | 1.2.0 | Claude skills (personal and the repo's): run, edit, scaffold |
 | [pond-agents](pond-agents/) | 1.4.0 | Herdr's agents list with a pixel duck per agent that acts out its status, grouped by space with each space's color, plus the Claude context bar and model; swap figures per space (emoji, your pictures) |

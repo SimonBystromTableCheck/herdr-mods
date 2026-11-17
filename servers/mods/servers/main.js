@@ -13,6 +13,16 @@ const configPath = () => `${appHome()}/servers.json`;
 const tilde = p => p.startsWith(home()) ? "~" + p.slice(home().length) : p;
 const untilde = p => p === "~" || p.startsWith("~/") ? home() + p.slice(1) : p;
 const URL_RE = /https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1?\])(?::\d+)?[^\s'"\x1b)]*/;
+// The page Open goes to when no address is set for the server and it hasn't printed one.
+const DEFAULT_URL = "http://localhost";
+const URL_OK = /^https?:\/\/[^\s/?#]+(?::\d{1,5})?(?:[/?#]\S*)?$/i;
+// "" means the default; a bare host gets http://; null when it isn't a usable address.
+function normalizeUrl(v) {
+  let s = (v ?? "").trim();
+  if (!s) return DEFAULT_URL;
+  if (!/^https?:\/\//i.test(s)) s = `http://${s}`;
+  return URL_OK.test(s) ? s : null;
+}
 
 function keyOf(e) {
   const m = e.modifiers ?? {};
@@ -24,11 +34,12 @@ function keyOf(e) {
 const KEYS = {
   list: [
     { caps: ["s"], label: "start / stop" }, { caps: ["R"], label: "restart" }, { caps: ["l"], label: "logs" },
-    { caps: ["o"], label: "open url" }, { caps: ["a"], label: "add" }, { caps: ["d"], label: "remove" },
+    { caps: ["o"], label: "open url" }, { caps: ["e"], label: "edit" }, { caps: ["a"], label: "add" }, { caps: ["d"], label: "remove" },
   ],
   moving: [{ caps: ["j", "k"], label: "move" }, { caps: ["<", ">"], label: "first / last" }, { caps: ["r"], label: "refresh" }, { caps: ["q"], label: "close the panel" }],
   folder: [{ caps: ["enter"], label: "next" }, { caps: ["escape"], label: "cancel" }],
   command: [{ caps: ["enter"], label: "add server" }, { caps: ["escape"], label: "back" }],
+  edit: [{ caps: ["enter"], label: "save" }, { caps: ["escape"], label: "cancel" }],
 };
 
 // Without the interactive login shell, version managers (nvm, fnm, mise) aren't on PATH.
@@ -148,6 +159,11 @@ export default class Servers extends View {
       cx.notify(); return true;
     }
     if (k === "?") { this.keysOpen = true; cx.notify(); return true; }
+    if (this.edit) {
+      if (k === "escape") { this.edit = null; cx.notify(); return true; }
+      if (k === "enter") { this.saveEdit(cx); return true; }
+      return false; // the fields take the rest
+    }
     if (this.add) {
       if (k === "escape") { if (this.add.step === "command") { this.add.step = "folder"; this.add.error = null; } else this.add = null; cx.notify(); return true; }
       if (k === "enter") { this.add.step === "folder" ? this.add.selected && this.toCommand(cx) : this.confirmAdd(cx); return true; }
@@ -163,7 +179,8 @@ export default class Servers extends View {
       case "s": case "enter": case "space": if (s && !busy) live ? this.stop(s, cx) : this.start(s, cx); return true;
       case "R": if (s && !busy && live) this.stop(s, cx, cx => this.start(s, cx)); return true;
       case "l": if (term) run("terminal.peek", { terminal: term.address }); return true;
-      case "o": { const url = live ? this.urls[s.id]?.split("|")[1] : null; if (url) exec("open", [url]); return true; }
+      case "o": if (s) exec("open", [this.openUrl(s)]); return true;
+      case "e": if (s) this.openEdit(s, cx); return true;
       case "a": this.openAdd(cx); return true;
       case "d": if (s && !busy && !live) { this.remove(s, cx); this.sel = Math.max(0, this.sel - 1); } return true;
       case "r": this.poll(cx); return true;
@@ -175,6 +192,7 @@ export default class Servers extends View {
   }
 
   chips() {
+    if (this.edit) return KEYS.edit;
     if (this.add) return this.add.step === "folder" ? KEYS.folder : KEYS.command;
     return [...KEYS.list.slice(0, 3), { caps: ["j", "k"], label: "move" }, ...KEYS.list.slice(3)];
   }
@@ -202,6 +220,12 @@ export default class Servers extends View {
   terminal(s) {
     const mine = terminals().filter(x => x.labels?.[LABEL] === s.id || x.name === `srv-${s.id}`);
     return mine.find(x => x.state === "live") ?? mine.sort((a, b) => (b.created_ms ?? 0) - (a.created_ms ?? 0))[0] ?? null;
+  }
+
+  // The page Open goes to: the address set for this server, else the one a running server printed, else localhost.
+  openUrl(s) {
+    const live = this.terminal(s)?.state === "live";
+    return s.url ?? (live ? this.urls[s.id]?.split("|")[1] : null) ?? DEFAULT_URL;
   }
 
   // One poll at a time, but a poll stuck on a call that never answers (the app can drop a
@@ -272,6 +296,34 @@ export default class Servers extends View {
     });
   }
 
+  // ---- Edit -----------------------------------------------------------------
+
+  openEdit(s, cx) {
+    this.edit = {
+      id: s.id, error: null,
+      name: InputState.new({ value: s.name, placeholder: "Name" }),
+      command: InputState.new({ value: s.command, placeholder: "Start command" }),
+      url: InputState.new({ value: s.url ?? DEFAULT_URL, placeholder: DEFAULT_URL }),
+    };
+    cx.notify();
+    // Put the keyboard in the Name field, so typing works without another click.
+    cx.timer.after(60, cx => { if (this.edit?.id === s.id) { this.edit.name.focus(); cx.notify(); } });
+  }
+
+  // The folder stays put; a changed command takes effect on the next start.
+  saveEdit(cx) {
+    const e = this.edit, s = this.servers.find(x => x.id === e.id);
+    if (!s) { this.edit = null; cx.notify(); return; }
+    const name = e.name.value().trim(), command = e.command.value().trim(), url = normalizeUrl(e.url.value());
+    if (!name || !command) { e.error = "A name and a start command are needed"; cx.notify(); return; }
+    if (!url) { e.error = "The URL needs a host, e.g. http://localhost:3000"; cx.notify(); return; }
+    Object.assign(s, { name, command });
+    if (url === DEFAULT_URL) delete s.url; else s.url = url;
+    this.edit = null;
+    cx.spawn(async cx => { await this.save(); cx.notify(); });
+    cx.notify();
+  }
+
   // ---- Add flow -------------------------------------------------------------
 
   root() { return this.rootSetting ? untilde(this.rootSetting) : this.defaultRoot; }
@@ -316,6 +368,7 @@ export default class Servers extends View {
     add.custom = InputState.new({ value: "", placeholder: "or type a command, e.g. pnpm start --port 3001" });
     add.custom.on("change", (_e, cx) => { add.choice = add.custom.value().trim() ? "custom" : 0; cx.notify(); });
     add.custom.on("submit", (_e, cx) => this.confirmAdd(cx));
+    add.url = InputState.new({ value: DEFAULT_URL, placeholder: DEFAULT_URL });
     cx.spawn(async cx => { add.commands = await detectCommands(dir); cx.notify(); });
     cx.notify();
   }
@@ -325,9 +378,11 @@ export default class Servers extends View {
     const command = add.choice === "custom" ? add.custom.value().trim() : add.commands?.[add.choice]?.command;
     const name = add.name.value().trim() || add.selected.split("/").pop();
     if (!command) { add.error = "Pick or type a command"; cx.notify(); return; }
+    const url = normalizeUrl(add.url.value());
+    if (!url) { add.error = "The URL needs a host, e.g. http://localhost:3000"; cx.notify(); return; }
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 20) || "server";
     const id = `${slug}-${Math.random().toString(36).slice(2, 6)}`;
-    this.servers.push({ id, name, cwd: add.dir, command, added: new Date().toISOString() });
+    this.servers.push({ id, name, cwd: add.dir, command, ...(url !== DEFAULT_URL ? { url } : {}), added: new Date().toISOString() });
     this.add = null;
     cx.spawn(async cx => { await this.save(); this.poll(cx); cx.notify(); });
     cx.notify();
@@ -368,6 +423,8 @@ export default class Servers extends View {
           .child(this.iconButton(`restart-${s.id}`, `${ICON}/restart.svg`, "Restart", cx => this.stop(s, cx, cx => this.start(s, cx)), t))
           .child(this.iconButton(`stop-${s.id}`, `${ICON}/stop.svg`, "Stop", cx => this.stop(s, cx), t, t.ansi1)))
         .when(!busy && !live, el => el.child(this.iconButton(`start-${s.id}`, `${ICON}/play.svg`, "Start", cx => this.start(s, cx), t, t.ansi2)))
+        .child(this.iconButton(`open-${s.id}`, `${ICON}/external.svg`, `Open ${this.openUrl(s)}`, () => exec("open", [this.openUrl(s)]), t))
+        .child(this.iconButton(`edit-${s.id}`, `${ICON}/pencil.svg`, "Edit", cx => this.openEdit(s, cx), t))
         .when(Boolean(term), el => el.child(this.iconButton(`logs-${s.id}`, `${CHROME}/terminal.svg`, "Logs", () => run("terminal.peek", { terminal: term.address }), t)))
         .when(!busy && !live, el => el.child(this.iconButton(`rm-${s.id}`, `${ICON}/trash.svg`, "Remove", cx => this.remove(s, cx), t))))
       .child(h_flex().gap(6).items_center().pl(16).text_size(12).text_color(branch ? t.foreground : t.dim)
@@ -424,7 +481,7 @@ export default class Servers extends View {
           .child(div().truncate().font_family(mono).text_size(12).child(c.command))
           .child(div().truncate().text_size(11).text_color(t.dim).child(c.hint)));
     };
-    return v_flex().flex_1().min_h(0)
+    return v_flex().flex_1().min_h(0).on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .child(header("Add server · 2/2 · Command", tilde(add.dir)))
       .child(v_flex().id("cmd-list").flex_1().min_h(0).overflow_y_scrollbar().p(10).gap(4)
         .child(div().text_size(11.5).text_color(t.dim).child("Name"))
@@ -433,9 +490,29 @@ export default class Servers extends View {
         .children(add.commands === null ? [div().text_size(12).text_color(t.dim).child("Looking for scripts…")]
           : add.commands.length ? add.commands.map(option) : [div().text_size(12).text_color(t.dim).child("No scripts found — type one below")])
         .child(div().pt(6).child(input(add.custom).when(add.choice === "custom", el => el.border_color(t.accent))))
+        .child(div().pt(10).text_size(11.5).text_color(t.dim).child("Open button address (localhost by default)"))
+        .child(input(add.url))
         .when(Boolean(add.error), el => el.child(div().text_size(12).text_color(t.ansi1).child(add.error))))
       .child(footer(this.button("add-back", "Back", false, cx => { add.step = "folder"; add.error = null; cx.notify(); }, t),
         this.button("add-save", "Add server", true, cx => this.confirmAdd(cx), t)));
+  }
+
+  editView(t, mono) {
+    const e = this.edit, s = this.servers.find(x => x.id === e.id);
+    // Compact: the panel is short, so the three fields and the buttons must all fit without scrolling.
+    const field = st => Input.new(st).h(28).px(8).rounded(6).border_1().border_color(t.input).bg(t.background).text_size(12).text_color(t.foreground);
+    const label = txt => div().pt(5).text_size(11).text_color(t.dim).child(txt);
+    // Clicks in the form stay here: the root takes the keyboard on a click, which would take it back from a field.
+    return v_flex().flex_1().min_h(0).on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .child(v_flex().id("edit-fields").flex_1().min_h(0).overflow_y_scrollbar().px(12).pt(4).pb(2)
+        .child(div().text_size(12).font_semibold().truncate().child(`Edit · ${s?.name ?? "server"}`))
+        .child(label("Name")).child(field(e.name))
+        .child(label("Start command (used the next time it starts)")).child(field(e.command))
+        .child(label("Open button address (localhost by default)")).child(field(e.url))
+        .when(Boolean(e.error), el => el.child(div().pt(4).text_size(11.5).text_color(t.ansi1).child(e.error))))
+      .child(h_flex().flex_none().px(10).py(6).gap(8).justify_end().border_t(1).border_color(t.border)
+        .child(this.button("edit-cancel", "Cancel", false, cx => { this.edit = null; cx.notify(); }, t))
+        .child(this.button("edit-save", "Save", true, cx => this.saveEdit(cx), t)));
   }
 
   render() {
@@ -452,11 +529,12 @@ export default class Servers extends View {
         .child(div().font_semibold().child("Servers"))
         .child(div().flex_1().text_size(12).text_color(t.dim).child(this.servers.length ? `${running}/${this.servers.length} running` : ""))
         .children([this.selfUpdate.pill(t)].filter(Boolean))
-        .when(!this.add, el => el.child(h_flex().id("srv-add").h(26).px(8).gap(5).items_center().rounded(6).cursor_pointer()
+        .when(!this.add && !this.edit, el => el.child(h_flex().id("srv-add").h(26).px(8).gap(5).items_center().rounded(6).cursor_pointer()
           .text_size(12).text_color(t.muted).hover(s => s.bg(t.hover).text_color(t.foreground))
           .on_click((_e, cx) => this.openAdd(cx)).child(svg(`${CHROME}/plus.svg`).size(13)).child("Add"))))
       .when(Boolean(this.add), el => el.child(this.addView(t, mono)))
-      .when(!this.add, el => el.child(v_flex().id("srv-list").flex_1().min_h(0).overflow_y_scrollbar().p(8).gap(8)
+      .when(Boolean(this.edit) && !this.add, el => el.child(this.editView(t, mono)))
+      .when(!this.add && !this.edit, el => el.child(v_flex().id("srv-list").flex_1().min_h(0).overflow_y_scrollbar().p(8).gap(8)
         .children(this.servers.map((s, i) => this.serverRow(s, t, mono, i === sel)))
         .when(this.loaded && !this.servers.length, el => el.child(v_flex().p(16).gap(10).items_center().text_color(t.dim).text_size(12.5)
           .child("No servers yet")
@@ -464,6 +542,6 @@ export default class Servers extends View {
       .child(keybar(t, { id: "servers", chips: this.chips(), width: this.size?.width, onKeys: cx => { this.keysOpen = true; this.handle.focus(); cx.notify(); } }))
       .when(Boolean(this.keysOpen), el => el.child(keysCard(t, { id: "servers", title: "Servers: all keys", onClose: cx => { this.keysOpen = false; cx.notify(); }, groups: [
         { title: "A server", chips: KEYS.list }, { title: "Moving", chips: KEYS.moving },
-        { title: "Adding: pick a folder", chips: KEYS.folder }, { title: "Adding: command", chips: KEYS.command }] })));
+        { title: "Adding: pick a folder", chips: KEYS.folder }, { title: "Adding: command", chips: KEYS.command }, { title: "Editing", chips: KEYS.edit }] })));
   }
 }
