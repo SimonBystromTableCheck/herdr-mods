@@ -8,7 +8,25 @@ REPO = sys.argv[1]
 URL = "https://github.com/SimonBystromTableCheck/herdr-mods"
 # Mods my own layouts use that aren't published (third-party, with local patches):
 # their blocks are cut from the published layouts. Each recipe says how to add them back.
-PRIVATE = {"sysstat"}
+PRIVATE = {"sysstat", "brew"}
+# Blocks I removed from my own layout but the published one keeps: {layout: [(stack id, index, block, make active)]}.
+# Put back into the published copy (only if missing), so hiding a panel for myself doesn't hide it for everyone.
+RESTORE = {"pond": [("panel-body", 0, {"id": "files", "type": "block", "content": {"mod": "pond-files"}}, True)]}
+
+def restore(tree, name):
+    def find(n, i):
+        if isinstance(n, dict):
+            if n.get("id") == i: return n
+            for c in n.get("children", []) + n.get("floating", []):
+                f = find(c, i)
+                if f: return f
+        return None
+    for stack, at, block, active in RESTORE.get(name, []):
+        node = find(tree, stack)
+        if not node or find(tree, block["id"]): continue
+        node.setdefault("children", []).insert(at, block)
+        if active: node["active"] = block["id"]
+    return tree
 
 def strip(node):
     """Drops blocks showing a PRIVATE mod from a layout tree (children and floating)."""
@@ -16,6 +34,8 @@ def strip(node):
         for key in ("children", "floating"):
             if isinstance(node.get(key), list):
                 node[key] = [c for c in node[key] if not (isinstance(c, dict) and (c.get("content") or {}).get("mod") in PRIVATE)]
+        if node.get("type") == "stack" and node.get("active") and node["active"] not in [c.get("id") for c in node.get("children", []) if isinstance(c, dict)]:
+            node.pop("active")  # it pointed at a private block that was just cut
         for v in node.values(): strip(v)
     elif isinstance(node, list):
         for v in node: strip(v)
@@ -70,7 +90,7 @@ for item, kind, mods, layouts, keys in items:
             index["mods"][m] = {"version": v, "item": item, "path": f"{item}/mods/{m}"}
     for l in layouts:
         lp = os.path.join(REPO, item, "layouts", f"{l}.json")
-        tree = strip(json.load(open(lp)))
+        tree = restore(strip(json.load(open(lp))), l)
         if any(f'"mod": "{m}"' in json.dumps(tree) for m in PRIVATE): sys.exit(f"layout {l}: a private mod is still referenced")
         open(lp, "w").write(json.dumps(tree, indent=2) + "\n")
         v = stamp(os.path.join(REPO, item, "layouts", f"{l}.json"), {"repo": URL, "item": item, "layout": l})
