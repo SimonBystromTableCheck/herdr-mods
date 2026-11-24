@@ -4,7 +4,7 @@ import { v_flex, h_flex } from "gpui-base";
 import { props, closeOverlay, theme, run, focused, hc, layout, settings, nextCommand, shared, setShared, spaces, panes, notify, exec, readTextFile, appHome } from "herdr";
 import * as fs from "fs/promises";
 import BINDINGS, { BUILTIN_PANELS } from "./bindings.js";
-import { panelOnScreen, revealPanel, hidePanel } from "./panel.js";
+import { panelOnScreen, revealPanel, hidePanel, pathTo } from "./panel.js";
 
 // Installed panel mods (mod.json "panel" with a "leader" key), cached for every opening of the popup.
 const PANELS = "leader.panels"; // {at, list: [{mod, key, label, expand?}]}
@@ -15,12 +15,24 @@ function keyOf(e) {
   const m = e.modifiers ?? {};
   if (m.control || m.platform || m.alt) return e.keystroke;
   if (["enter", "escape", "tab", "space", "up", "down", "left", "right", "backspace"].includes(e.key)) return e.key;
-  return e.key_char ?? e.key;
+  // Shift+letter: key_char can come back lowercase, so make the shifted letter explicit.
+  const ch = e.key_char ?? e.key;
+  return m.shift && /^[a-z]$/.test(ch) ? ch.toUpperCase() : ch;
 }
 
 function find(node, id) {
   if (node?.id === id) return node;
   for (const child of node?.children ?? []) { const f = find(child, id); if (f) return f; }
+  return null;
+}
+
+function parentOf(node, id, parent = null) {
+  if (!node) return null;
+  if (node.id === id) return parent;
+  for (const c of [...(node.children ?? []), ...(node.floating ?? [])]) {
+    const p = parentOf(c, id, node);
+    if (p) return p;
+  }
   return null;
 }
 
@@ -87,7 +99,7 @@ export default class Leader extends View {
       return;
     }
     const b = this.bindings().find(x => x.key === k);
-    if (!b) { this.miss = k; cx.notify(); return; }
+    if (!b) { this.flash = null; this.miss = k; cx.notify(); return; }
     if (b.action === "expand") return this.expand(cx);
     // gitview (Changes): move for it while this popup is still open, then close it. Closed first,
     // the app still has gitview as the keyboard's owner and hands it `focus` again when the popup
@@ -100,11 +112,52 @@ export default class Leader extends View {
       return this.close();
     }
     if (b.mod) return this.panel(b.mod, cx);
+    if (b.run === "pane.resize") return this.resize(b.args.direction, cx);
     this.close();
     // pane.go would start from the last focused terminal, not the panel this popup took the keyboard
     // from, so that panel makes the move itself once it has the keyboard back.
     if (b.run === "pane.go" && this.fromPanel) return run(`${this.fromPanel}.go:${b.args.direction}`);
     run(b.run, b.args ?? {});
+  }
+
+  // H/J/K/L resize what the keys came from. A terminal or mod pane moves its own border; a layout
+  // panel (the right-hand panel, the sidebar) moves the nearest sized node it sits in. The popup
+  // stays open so the key can be pressed repeatedly; esc closes it.
+  resize(direction, cx) {
+    this.miss = null;
+    const path = this.fromPanel ? pathTo(layout(), this.fromPanel) : null;
+    if (path) return this.resizePanel(path, direction, cx);
+    if (panes().filter(p => p.tab === focused()?.tab).length < 2) {
+      this.flash = "One pane — split it first";
+      return cx.notify();
+    }
+    run("pane.resize", { direction, px: 24 });
+    this.flash = "Pane border";
+    cx.notify();
+  }
+
+  // The nearest ancestor (or the block itself) with a fixed px size; a panel inside a stack has no
+  // size of its own, so the column holding the stack is what moves.
+  resizePanel(path, direction, cx) {
+    const node = [...path].reverse().find(n => n.id && typeof n.size?.px === "number");
+    if (!node) { this.flash = "This panel has no fixed size"; return cx.notify(); }
+    const parent = parentOf(layout(), node.id);
+    const row = parent?.type === "row";
+    const horizontal = direction === "left" || direction === "right";
+    if (row !== horizontal) { this.flash = `Use ${row ? "H/L" : "J/K"} here`; return cx.notify(); }
+    const siblings = parent?.children ?? [];
+    const i = siblings.findIndex(s => s.id === node.id);
+    // Which side of this node the neighbouring pane or panel is on.
+    const border = row
+      ? (i === 0 ? "right" : i === siblings.length - 1 ? "left" : direction === "left" ? "left" : "right")
+      : (i === 0 ? "bottom" : i === siblings.length - 1 ? "top" : direction === "up" ? "top" : "bottom");
+    const towardsStart = direction === "left" || direction === "up";
+    const grows = (border === "left" || border === "top") === towardsStart;
+    const min = node.min ?? 0, max = node.max ?? Infinity;
+    const px = Math.min(max, Math.max(min, node.size.px + (grows ? 40 : -40)));
+    run("layout.resize", { id: node.id, px });
+    this.flash = `${node.id} ${Math.round(px)}px`;
+    cx.notify();
   }
 
   // A panel: shown and holding the keyboard, hide it; shown with the keyboard elsewhere (a terminal),
@@ -192,8 +245,8 @@ export default class Leader extends View {
       .on_key_down((e, cx) => { if (MODIFIERS.has(e.key)) return; cx.stop_propagation(); this.press(keyOf(e), cx); })
       .child(h_flex().gap(8).items_center()
         .child(div().px(6).py(1).rounded(5).bg(t.accent).text_color(t.accent_foreground).font_family(mono).text_size(11.5).child("ctrl-a"))
-        .child(div().flex_1().text_color(this.miss ? t.ansi1 : t.dim).child(this.miss ? `Nothing on "${this.miss}"` : "Press a key"))
-        .child(div().text_size(11).text_color(t.dim).child("esc cancel · ctrl-a send ctrl-a")))
+        .child(div().flex_1().text_color(this.miss ? t.ansi1 : t.dim).child(this.miss ? `Nothing on "${this.miss}"` : this.flash ?? "Press a key"))
+        .child(div().text_size(11).text_color(t.dim).child(this.flash ? "esc done" : "esc cancel · ctrl-a send ctrl-a")))
       .child(h_flex().flex_1().gap(18).items_start().children(groups.map(g => v_flex().flex_1().gap(3)
         .child(div().pb(2).text_size(11).font_semibold().text_color(t.muted).child(g))
         .children(all.filter(b => b.group === g && !b.hidden).map(b => h_flex().gap(8).items_center()

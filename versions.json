@@ -13,7 +13,7 @@
       "path": "git/mods/git-conflicts"
     },
     "leader": {
-      "version": "2.0.1",
+      "version": "2.1.0",
       "item": "leader",
       "path": "leader/mods/leader"
     },

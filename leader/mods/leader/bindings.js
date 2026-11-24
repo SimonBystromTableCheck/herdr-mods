@@ -26,6 +26,10 @@ export default [
   { group: "Panes", key: "j", label: "Go down", run: "pane.go", args: { direction: "down" } },
   { group: "Panes", key: "k", label: "Go up", run: "pane.go", args: { direction: "up" } },
   { group: "Panes", key: "l", label: "Go right", run: "pane.go", args: { direction: "right" } },
+  { group: "Panes", key: "H", label: "Move border left", run: "pane.resize", args: { direction: "left", px: 24 } },
+  { group: "Panes", key: "J", label: "Move border down", run: "pane.resize", args: { direction: "down", px: 24 } },
+  { group: "Panes", key: "K", label: "Move border up", run: "pane.resize", args: { direction: "up", px: 24 } },
+  { group: "Panes", key: "L", label: "Move border right", run: "pane.resize", args: { direction: "right", px: 24 } },
   { group: "Panes", key: "z", label: "Zoom pane", run: "pane.zoom" },
   { group: "Panes", key: "x", label: "Close pane", run: "pane.close" },
 

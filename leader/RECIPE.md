@@ -3,7 +3,8 @@
 A tmux-style prefix key for Herdr. Press `ctrl-a` and a small popup drops in
 near the top of the window listing every binding in four columns (Tabs, Panes,
 Panels, Spaces); the next key runs one (new tab, split, move between panes,
-show a side panel, find a space) and the popup closes. `ctrl-a` twice sends a
+resize a pane or panel, show a side panel, find a space) and the popup closes —
+except the resize keys, which keep it open for repeats. `ctrl-a` twice sends a
 real `ctrl-a` to the terminal. Panels aren't a fixed list: every installed panel mod that names a
 leader key in its `mod.json` shows up under Panels, so it works with any subset of this repo's
 panels, on any layout.
@@ -17,19 +18,21 @@ replacing an existing `ctrl-a`). This takes `ctrl-a` from terminal programs:
 readline/shell beginning-of-line and a tmux prefix; leader `ctrl-a` gives it
 back once. The mod is `"place": "none"`: it only ever opens as this popup.
 
-**Version:** 2.0.1 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 2.1.0 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/leader/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept; edits you made inside the mod folder are not. If its `keys.json` changed, merge it again.
 
 ## What you see
 
-A popup 620×330px, at the top of the window 40px down, `popover` background,
+A popup 620×400px, at the top of the window 40px down, `popover` background,
 `foreground` text at 12.5px, 14px padding, 10px gaps:
 
 - **Top row:** a `ctrl-a` pill (`accent` background, `accent_foreground` text,
   radius 5, terminal font at 11.5px), then "Press a key" in `dim`, or
-  `Nothing on "<key>"` in `ansi1` red after an unbound key, and on the right
-  "esc cancel · ctrl-a send ctrl-a" in 11px `dim`.
+  `Nothing on "<key>"` in `ansi1` red after an unbound key, or the last resize
+  in `dim` (for example `panel 630px`, `Pane border`, `One pane — split it
+  first`), and on the right "esc cancel · ctrl-a send ctrl-a" in 11px `dim`,
+  or "esc done" once a resize left the popup open.
 - **Four columns** of equal width, 18px apart, in order Tabs, Panes, Panels,
   Spaces. Each has an 11px semibold `muted` heading, then rows: the key in a
   30px column (terminal font, `accent`) and its label (truncated). Tabs shows
@@ -40,7 +43,8 @@ Bindings (aliases in brackets, not shown):
 - Tabs: `t` [`c`] new tab, `n` next, `p` previous, `,` rename, `&` close,
   `1`-`9` go to tab N.
 - Panes: `%` [`|`] split right, `"` [`-`] split down, `h` `j` `k` `l` go
-  left/down/up/right, `z` zoom, `x` close.
+  left/down/up/right, `H` `J` `K` `L` move a border left/down/up/right (the
+  focused pane's, or the focused layout panel's), `z` zoom, `x` close.
 - Panels: `e` expand / collapse, `b` toggle sidebar; `f` Files and `d` Changes (diff) when the layout's
   panel stack has a `files` / `changes` child; then each installed panel mod by its own key, in
   folder-name order: with this repo's, `g` Git, `P` PR (remote-checker), `C` Claude (pond-profiles),
@@ -50,9 +54,10 @@ Bindings (aliases in brackets, not shown):
 
 ## How it behaves
 
-- Any bound key runs and closes the popup; `escape` or `q` closes it; an
-  unbound key stays open with the red "Nothing on" hint. Modifier presses alone
-  are ignored.
+- Any bound key runs and closes the popup, except the `H`/`J`/`K`/`L` resize
+  keys, which keep it open so they can be pressed repeatedly; `escape` or `q`
+  closes it; an unbound key stays open with the red "Nothing on" hint. Modifier
+  presses alone are ignored.
 - `ctrl-a` again: closes and sends `ctrl+a` to the focused terminal.
 - Panel keys find the mod's block in the shown layout (by mod, not id) and show it (`panel.js`
   `revealPanel`: select it in every stack on the way, show hidden nodes), then enter it the way the
@@ -70,6 +75,14 @@ Bindings (aliases in brackets, not shown):
   gitview, pond-files, servers, remote-checker) ask that panel to move (`<panel>.go:<dir>`), so
   the move starts from the panel, not the last terminal. From gitview the leader moves itself,
   before closing the popup: `h` is `pane.focus` on the focused pane, `j`/`k`/`l` are `pane.go`.
+- `H`/`J`/`K`/`L` resize whatever had the keyboard. From a terminal or mod pane,
+  `pane.resize` moves its border 24px. From a layout panel (the right-hand panel, the sidebar),
+  the nearest ancestor with a fixed `px` size — the `panel` column, the `sidebar` — moves 40px,
+  clamped to its `min`/`max`; `H`/`L` are width and `J`/`K` height, and the wrong axis says
+  "Use H/L here" ("Use J/K here" for a column). Direction is border movement, as with panes: `H`
+  moves the border left, which widens the right-hand panel and narrows the sidebar. A one-pane tab
+  says "One pane — split it first". The popup stays open and the top row shows the new size
+  (`panel 630px`) or "Pane border".
 - `e` (expand), in order: inside gitview's own tab, or from gitview's list while
   Changes shows → closes the popup and opens gitview's tab through `changes-expand` (this repo); from the git mod's tab → `git.collapse`;
   from the git panel → `git.expand`; from another panel → an info toast
@@ -79,7 +92,7 @@ Bindings (aliases in brackets, not shown):
 
 ## Built from
 
-- `mod.json`: `{ "place": "none", "title": "Leader", "overlay": { "kind": "popup", "at": "top", "offset": 40, "width": 620, "height": 330 } }`.
+- `mod.json`: `{ "place": "none", "title": "Leader", "overlay": { "kind": "popup", "at": "top", "offset": 40, "width": 620, "height": 400 } }`.
 - `bindings.js`: the table, `{ group, key, label, run, args?, hidden? }` or `{ action: "expand" }`,
   and `BUILTIN_PANELS`: Herdr's own panels by their child id in the panel stack (`f` → `files`,
   `d` → `changes`, whatever mod shows there). Edit it to rebind; panel mods' keys are in their
@@ -88,13 +101,15 @@ Bindings (aliases in brackets, not shown):
 - `main.js`: the popup; grabs keyboard with a focus handle (again after 30ms
   and 250ms, since the popup takes focus a moment after opening), reads keys
   from `on_key_down` and from `nextCommand()` `key:<k>` (so `leader.key:x` works
-  from keys.json).
+  from keys.json). `resize`/`resizePanel` decide between `pane.resize` and
+  `layout.resize`; `parentOf` and `panel.js`'s `pathTo` find the sized layout
+  node and which of its sides the neighbour is on.
 - `herdr`: `props`, `closeOverlay`, `theme`, `settings` (`font_family`), `run`,
   `focused`, `hc(["keys", <terminal>, "ctrl+a"])`, `layout`, `shared`,
   `setShared("leader.zen")`, `spaces`, `panes`, `notify`, `nextCommand`,
   `exec("herdr-app", ["do", "mod.open", '{"name":"changes-expand"}'])`.
-- Commands: `tab.new/next/prev/rename/close/select`, `pane.split/go/zoom/close/focus`,
-  `layout.select/show/hide/toggle`, `mod.open {name: "picker"}`,
+- Commands: `tab.new/next/prev/rename/close/select`, `pane.split/go/zoom/close/focus/resize`,
+  `layout.select/show/hide/toggle/resize`, `mod.open {name: "picker"}`,
   `space.rename/next/prev`, `app.help`,
   `<panel>.<expand>` (a panel's `mod.json` `panel.expand`, e.g. `git.expand`), `git.collapse`,
   `<panel>.go:<dir>`, `pane.go`, `pane.focus`.
@@ -131,6 +146,12 @@ Bindings (aliases in brackets, not shown):
   later always gives null.
 - `ctrl-a` forwarding uses `hc keys` on the focused terminal; with a mod
   focused nothing is sent.
+- Resizing a layout node needs a fixed `px` size and `min`/`max` (pond's `panel`
+  280–900, `sidebar` 44–480). A block inside a stack is resized through the column
+  that holds the stack; a weighted node or one with no sized ancestor says
+  "This panel has no fixed size" and does nothing.
+- Shift+letter keys match whether the platform reports `key_char` upper or
+  lowercase; the leader's first uppercase bindings (`H`/`J`/`K`/`L`) rely on it.
 - Runs no programs except `hc`; no network; no files.
 
 ## Done when
@@ -144,8 +165,19 @@ Bindings (aliases in brackets, not shown):
 - In `pond`, `ctrl-a` `T` opens Todos with the keyboard; again hides it.
 - `ctrl-a` `e` in a terminal hides sidebar and panel; again brings back exactly
   what was open.
+- Split a pane, `ctrl-a` `H`/`L`: the divider moves and the top row says
+  "Pane border"; the popup stays open. `escape` closes it.
+- In `pond`, from the Git panel `ctrl-a` `H` widens the right panel 40px (top row
+  `panel 630px`); `ctrl-a` `J` says "Use H/L here". `ctrl-a` `H` from the spaces
+  list narrows the sidebar.
 
 ## Changes
+
+### 2.1.0 (2026-11-24)
+
+- `H`/`J`/`K`/`L` resize what had the keyboard: a terminal or mod pane's border (24px), or the layout panel or sidebar holding the focused panel (40px, clamped to its min/max). The popup stays open for repeats and shows the new size; a one-pane tab says "One pane — split it first".
+- The popup is 620×400 so the longer Panes column fits.
+- Shift+letter bindings match whether the platform reports the character upper or lowercase.
 
 ### 2.0.1 (2026-11-13)
 
