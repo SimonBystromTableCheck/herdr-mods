@@ -39,7 +39,7 @@ Which version you have: `"version"` in `~/.config/herdr-app/mods/<name>/mod.json
 
 | Layout | Version | |
 | --- | --- | --- |
-| [pond](pond/) | 1.12.2 | Herdr's main layout with my own tabs, agents and files panels, and git, skills, todos, servers, remote-checker, Claude profiles, Find (workbench) and Notes panels on the right |
+| [pond](pond/) | 1.12.3 | Herdr's main layout with my own tabs, agents and files panels, and git, skills, todos, servers, remote-checker, Claude profiles, Find (workbench) and Notes panels on the right |
 
 ## Mods
 

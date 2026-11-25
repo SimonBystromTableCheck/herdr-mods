@@ -70,7 +70,7 @@
   },
   "layouts": {
     "pond": {
-      "version": "1.12.2",
+      "version": "1.12.3",
       "item": "pond",
       "path": "pond/layouts/pond.json",
       "mods": [
