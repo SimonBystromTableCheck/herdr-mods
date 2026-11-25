@@ -18,7 +18,7 @@ replacing an existing `ctrl-a`). This takes `ctrl-a` from terminal programs:
 readline/shell beginning-of-line and a tmux prefix; leader `ctrl-a` gives it
 back once. The mod is `"place": "none"`: it only ever opens as this popup.
 
-**Version:** 2.1.0 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 2.2.0 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/leader/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept; edits you made inside the mod folder are not. If its `keys.json` changed, merge it again.
 
@@ -33,6 +33,9 @@ A popup 620×400px, at the top of the window 40px down, `popover` background,
   in `dim` (for example `panel 630px`, `Pane border`, `One pane — split it
   first`), and on the right "esc cancel · ctrl-a send ctrl-a" in 11px `dim`,
   or "esc done" once a resize left the popup open.
+- When a newer version is published from this repo, an accent `leader ↑ x.y.z`
+  pill sits before the right hint. Only copies installed from the repo show it;
+  the author's own live copy has no `source`.
 - **Four columns** of equal width, 18px apart, in order Tabs, Panes, Panels,
   Spaces. Each has an 11px semibold `muted` heading, then rows: the key in a
   30px column (terminal font, `accent`) and its label (truncated). Tabs shows
@@ -83,6 +86,12 @@ Bindings (aliases in brackets, not shown):
   moves the border left, which widens the right-hand panel and narrows the sidebar. A one-pane tab
   says "One pane — split it first". The popup stays open and the top row shows the new size
   (`panel 630px`) or "Pane border".
+- The `leader ↑ x.y.z` pill comes from `SelfUpdate` (`update.js`, the same file every mod from
+  this repo carries): it compares this copy's `mod.json` `version` with the shared
+  `herdr-mods.versions` cache the panel mods fill, fetching `versions.json` when that cache is
+  over 30s old (nothing is fetched without a `source`). Clicking closes the popup and opens the
+  same confirm dialog as the panels' update pills; confirming starts Claude in a tab on this
+  mod's `UPDATE.md`.
 - `e` (expand), in order: inside gitview's own tab, or from gitview's list while
   Changes shows → closes the popup and opens gitview's tab through `changes-expand` (this repo); from the git mod's tab → `git.collapse`;
   from the git panel → `git.expand`; from another panel → an info toast
@@ -98,6 +107,9 @@ Bindings (aliases in brackets, not shown):
   `d` → `changes`, whatever mod shows there). Edit it to rebind; panel mods' keys are in their
   `mod.json` `panel.leader`.
 - `panel.js`: the same file the panel mods carry (finding, showing and hiding a mod's layout block).
+- `update.js`: `SelfUpdate("leader", "Leader", { short: "leader" })`; `render` shows
+  `updatePill` from `available()`. The shared cache key is `herdr-mods.versions`; the
+  confirm dialog is the shipped `confirm` mod.
 - `main.js`: the popup; grabs keyboard with a focus handle (again after 30ms
   and 250ms, since the popup takes focus a moment after opening), reads keys
   from `on_key_down` and from `nextCommand()` `key:<k>` (so `leader.key:x` works
@@ -152,7 +164,11 @@ Bindings (aliases in brackets, not shown):
   "This panel has no fixed size" and does nothing.
 - Shift+letter keys match whether the platform reports `key_char` upper or
   lowercase; the leader's first uppercase bindings (`H`/`J`/`K`/`L`) rely on it.
-- Runs no programs except `hc`; no network; no files.
+- The update pill only appears on a copy installed from this repo (`source` in
+  `mod.json`); a hand-copied or author's copy shows none, and nothing is fetched.
+  It is this mod's only in-app update hint: the panels' pills need a persistent
+  view, which a popup doesn't have.
+- Runs no programs except `hc`; no network except the update check (`versions.json`); no files.
 
 ## Done when
 
@@ -170,8 +186,16 @@ Bindings (aliases in brackets, not shown):
 - In `pond`, from the Git panel `ctrl-a` `H` widens the right panel 40px (top row
   `panel 630px`); `ctrl-a` `J` says "Use H/L here". `ctrl-a` `H` from the spaces
   list narrows the sidebar.
+- A copy installed from this repo with an older `version` shows `leader ↑ x.y.z`
+  before the right hint; clicking it asks to update, then opens a Claude tab on
+  `UPDATE.md`.
 
 ## Changes
+
+### 2.2.0 (2026-11-24)
+
+- The popup shows `leader ↑ x.y.z` when a newer version is published, for copies installed from herdr-mods; clicking it opens the update confirm and a Claude tab on `UPDATE.md`.
+- Ships `update.js` (the same SelfUpdate helper the panels carry).
 
 ### 2.1.0 (2026-11-24)
 

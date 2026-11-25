@@ -3,17 +3,17 @@
   "update": "tools/UPDATE.md",
   "mods": {
     "git": {
-      "version": "1.4.0",
+      "version": "1.5.0",
       "item": "git",
       "path": "git/mods/git"
     },
     "git-conflicts": {
-      "version": "1.1.2",
+      "version": "1.1.3",
       "item": "git",
       "path": "git/mods/git-conflicts"
     },
     "leader": {
-      "version": "2.1.0",
+      "version": "2.2.0",
       "item": "leader",
       "path": "leader/mods/leader"
     },
@@ -70,7 +70,7 @@
   },
   "layouts": {
     "pond": {
-      "version": "1.12.1",
+      "version": "1.12.2",
       "item": "pond",
       "path": "pond/layouts/pond.json",
       "mods": [

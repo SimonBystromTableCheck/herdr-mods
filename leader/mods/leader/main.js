@@ -5,6 +5,7 @@ import { props, closeOverlay, theme, run, focused, hc, layout, settings, nextCom
 import * as fs from "fs/promises";
 import BINDINGS, { BUILTIN_PANELS } from "./bindings.js";
 import { panelOnScreen, revealPanel, hidePanel, pathTo } from "./panel.js";
+import { SelfUpdate } from "./update.js";
 
 // Installed panel mods (mod.json "panel" with a "leader" key), cached for every opening of the popup.
 const PANELS = "leader.panels"; // {at, list: [{mod, key, label, expand?}]}
@@ -59,6 +60,8 @@ export default class Leader extends View {
     cx.timer.after(30, () => this.handle.focus());
     cx.timer.after(250, () => this.handle.focus());
     cx.spawn(async cx => { for (;;) { const c = await nextCommand(); if (c.startsWith("key:")) this.press(c.slice(4), cx); } });
+    this.selfUpdate = new SelfUpdate("leader", "Leader", { short: "leader" });
+    this.selfUpdate.start(cx);
   }
 
   close() { closeOverlay(props().overlay); }
@@ -237,15 +240,30 @@ export default class Leader extends View {
     if (panel) run("layout.hide", { id: "panel" });
   }
 
+  // "leader ↑ x.y.z" when the repo has a newer version. Copies installed from herdr-mods carry a
+  // "source" in mod.json; the author's own live copy doesn't, so it shows nothing.
+  updatePill(t) {
+    const u = this.selfUpdate?.available?.();
+    if (!u) return null;
+    return h_flex().id("leader-update").h(20).px(7).flex_none().items_center().rounded(4)
+      .cursor_pointer().text_size(11).bg(t.accent).text_color(t.accent_foreground)
+      .hover(s => s.opacity(0.88)).tooltip(`Leader ${u.have} → ${u.latest}`)
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_click((_e, cx) => { cx.stop_propagation(); this.close(); this.selfUpdate.update(); })
+      .child(`leader ↑ ${u.latest}`);
+  }
+
   render() {
     const t = theme(), mono = settings().font_family ?? "JetBrains Mono";
     const all = this.bindings(), groups = [...new Set(all.map(b => b.group))];
+    const pill = this.updatePill(t);
     return v_flex().id("leader").size_full().p(14).gap(10).bg(t.popover).text_color(t.foreground).text_size(12.5)
       .track_focus(this.handle)
       .on_key_down((e, cx) => { if (MODIFIERS.has(e.key)) return; cx.stop_propagation(); this.press(keyOf(e), cx); })
       .child(h_flex().gap(8).items_center()
         .child(div().px(6).py(1).rounded(5).bg(t.accent).text_color(t.accent_foreground).font_family(mono).text_size(11.5).child("ctrl-a"))
         .child(div().flex_1().text_color(this.miss ? t.ansi1 : t.dim).child(this.miss ? `Nothing on "${this.miss}"` : this.flash ?? "Press a key"))
+        .when(Boolean(pill), el => el.child(pill))
         .child(div().text_size(11).text_color(t.dim).child(this.flash ? "esc done" : "esc cancel · ctrl-a send ctrl-a")))
       .child(h_flex().flex_1().gap(18).items_start().children(groups.map(g => v_flex().flex_1().gap(3)
         .child(div().pb(2).text_size(11).font_semibold().text_color(t.muted).child(g))

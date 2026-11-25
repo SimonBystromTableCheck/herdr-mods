@@ -14,7 +14,7 @@ button: the Git panel's Files section reviews and stages changes.
 (and the `mod` names in the layout), run `herdr-app check ~/.config/herdr-app/mods/<name>` on
 each, then `herdr-app do layout.switch --name pond`.
 
-**Version:** 1.12.1 (see Changes at the end; also `"version"` in `layouts/pond.json`, and each mod's own in its `mod.json`).
+**Version:** 1.12.2 (see Changes at the end; also `"version"` in `layouts/pond.json`, and each mod's own in its `mod.json`).
 
 **Update:** from 1.6.0, a "Pond ↑ x.y.z" pill appears in the tab bar when a newer layout is published; click it, confirm, and a new Claude tab updates the layout and offers its mods (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `layouts/pond.json` and each folder in `mods/` with this folder's copies (asking an agent to *install* again adds second copies instead). Sizes and panels you clicked are kept (Herdr keeps them in `layouts/.state/`), and so are the mods' settings and data; edits you made inside `pond.json` or the mod folders are not. From 1.10.0 the layout has no `changes` slot; a gitview you installed for it can be removed (its `gitview*` mod folders).
 
@@ -116,6 +116,10 @@ Programs the panels run: `git`, `sh`, `hc`, `nvim` (git and skills), `mv` (todos
 - `layout.switch` (`ctrl-shift-l` by default) cycles back to the previous layout.
 
 ## Changes
+
+### 1.12.2 (2026-11-24)
+
+- leader 2.1.0 and 2.2.0: `H`/`J`/`K`/`L` resize — the focused pane's border when a pane has focus, a layout node's `px` when a panel does (clamped to its min/max, with a hint when that direction doesn't fit) — a taller popup for the new rows, and an `leader ↑ x.y.z` update pill in its header. git 1.5.0: a failed `--continue` mid-merge shows the failure banner and hands off to an agent while no conflicts are left, and the sections column follows the panel's width. git-conflicts 1.1.3: the Conflicts pane reads 20,000 lines of output (was 400). Other mods unchanged: notes 1.0.0, pond-agents 1.4.0, workbench 1.0.0, pond-tabs 1.5.0, todos 1.2.0, remote-checker 1.4.1, skills 1.2.0, pond-files 1.1.2, pond-profiles 1.4.0.
 
 ### 1.12.1 (2026-11-17)
 

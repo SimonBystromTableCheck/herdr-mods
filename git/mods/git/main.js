@@ -723,8 +723,10 @@ export default class Git extends View {
       if (r.code === 0) after?.(cx);
       else {
         onFail?.(cx);
-        // A merge or rebase that stopped on conflicts shows in the banner, not as a failure.
-        if (!op) { this.failure = entry; this.showOutput(entry, cx); }
+        // A merge or rebase that stopped on conflicts shows in the banner, not as a failure;
+        // anything else (a hook failing `merge --continue`, say) is a failure even mid-op.
+        const conflicted = op ? (await exec("git", ["diff", "--name-only", "--diff-filter=U"], { cwd: ctx.root, on: ctx.on }).catch(() => null))?.stdout?.trim() : "";
+        if (!conflicted) { this.failure = entry; this.showOutput(entry, cx); }
       }
       if (this.mainOverride?.log === entry) this.syncMain(cx, true);
       this.refresh(cx, true);
@@ -804,7 +806,8 @@ export default class Git extends View {
     const commit = /\bgit commit\b/.test(entry.title);
     return [
       `This git command failed in ${this.ctx.root} (exit ${entry.code}):`, "", `$ ${entry.title}`, "", "Output:", "```", ...tail, "```", "",
-      commit ? "This is most likely the pre-commit hook. Please fix the reported problems and `git add` the fixes, but don't commit: I'll re-run the commit myself."
+      /--continue\b/.test(entry.title) ? "Every conflict is already resolved and staged, so this is most likely a commit hook (lint, type-check, tests). Please fix the reported problems and `git add` the fixes, but don't run the continue, commit or push yourself: I'll continue from the panel."
+        : commit ? "This is most likely the pre-commit hook. Please fix the reported problems and `git add` the fixes, but don't commit: I'll re-run the commit myself."
         : "Please find the cause and fix it. Don't re-run the git command yourself; tell me when it's safe to retry.",
     ].join("\n");
   }
@@ -1443,7 +1446,7 @@ export default class Git extends View {
     const main = this.ctx ? this.mainView(t, mono) : null;
     const body = !this.ctx
       ? div().flex_1().p(14).text_color(t.dim).child(this.refreshing && !this.locKey ? "Loading…" : `Not a git repository${this.cwd ? `: ${this.cwd}` : ""}`)
-      : wide ? h_flex().flex_1().min_h(0).items_stretch().gap(6).p(6).child(sections.w(Math.max(300, Math.min(520, width * 0.42))).flex_none()).child(main.flex_1())
+      : wide ? h_flex().flex_1().min_h(0).items_stretch().gap(6).p(6).child(sections.w(this.listWidth()).flex_none()).child(main.flex_1())
         : this.mainFocus ? v_flex().flex_1().min_h(0).p(6).child(main.flex_1())
           : v_flex().flex_1().min_h(0).gap(6).p(6).child(sections.flex_1()).child(main.h(Math.max(160, (this.size?.height ?? 600) * 0.38)).flex_none());
     return v_flex().id("git").relative().size_full().min_h(0).rounded(pane ? 0 : 10).overflow_hidden().bg(t.background).when(!pane, el => el.border_1().border_color(hasKeys ? t.accent : t.border))
@@ -1455,13 +1458,16 @@ export default class Git extends View {
       .when(Boolean(this.op), el => el.child(this.opBanner(t)))
       .when(Boolean(this.ai), el => el.child(this.aiBanner(t)))
       .child(body)
-      .when(Boolean(this.failure) && !this.op, el => el.child(this.failureBanner(t)))
+      .when(Boolean(this.failure), el => el.child(this.failureBanner(t)))
       .child(this.footer(t))
       .when(Boolean(this.menu), el => el.child(this.menuView(t)))
       .when(Boolean(this.prompt), el => el.child(this.promptView(t)))
       .when(Boolean(this.commitBox), el => el.child(this.commitView(t)))
       .when(Boolean(this.keysOpen), el => el.child(keysCard(t, { id: "git", title: "Git: all keys", groups: this.keysGroups(), onClose: cx => { this.keysOpen = false; cx.notify(); } })));
   }
+
+  // The sections column's width: the whole panel, or its left share when wide.
+  listWidth() { const w = this.size?.width ?? 400; return w >= 720 ? Math.max(300, Math.min(520, w * 0.42)) : w; }
 
   keyboard() { return this.handle.is_focused() || Boolean(this.editorFocused || this.typing || this.menu); }
 
@@ -1675,7 +1681,7 @@ export default class Git extends View {
   row(sec, it, i, selected, focusedSec, t, mono, inList) {
     // In a commit range (v): drawn like the selected row.
     const picked = !selected && sec === "commits" && Boolean(it.sha) && Boolean(this.rangeSet?.has(it.sha));
-    const el = h_flex().id(`${sec}-${this.itemKey(sec, it, i)}`).h(ROW).flex_none().px(8).gap(6).items_center().rounded(5).cursor_pointer().min_w(0)
+    const el = h_flex().id(`${sec}-${this.itemKey(sec, it, i)}`).h(ROW).flex_none().px(8).gap(6).items_center().rounded(5).cursor_pointer().min_w(0).overflow_hidden()
       .when(selected || picked, e => e.bg(focusedSec ? t.selected : t.hover))
       .hover(s => s.bg(selected && focusedSec ? t.selected : t.hover))
       .when(!inList, e => e.on_click((_e, cx) => this.clickRow(sec, i, cx)));
@@ -1728,7 +1734,7 @@ export default class Git extends View {
       .when(!remote && b.merged && !pr && !b.head && b.name !== this.base?.replace(/^[^/]+\//, ""), e => e.child(badge("merged", t.ansi5)))
       .when(!remote && Boolean(b.worktree), e => e.child(badge("worktree", t.dim)))
       .when(remote && Boolean(b.local), e => e.child(badge(`local: ${b.local === b.short ? "✓" : b.local}`, t.ansi2)))
-      .when((this.size?.width ?? 0) >= 520, e => e.child(div().flex_none().text_size(11).text_color(t.dim).child(b.date.replace(/ ago$/, ""))));
+      .when(this.listWidth() >= 460, e => e.child(div().flex_none().text_size(11).text_color(t.dim).child(b.date.replace(/ ago$/, ""))));
   }
 
   palette(t) { return [t.ansi4, t.ansi5, t.ansi6, t.ansi2, t.ansi3, t.ansi1, t.ansi12 ?? t.ansi4, t.ansi13 ?? t.ansi5]; }
@@ -1737,14 +1743,16 @@ export default class Git extends View {
     const hashColor = c.state === "unpushed" ? t.ansi1 : c.state === "pushed" ? t.ansi3 : t.ansi2;
     const refs = c.refs.map(r => r.replace(/^HEAD -> /, "→ ")).filter(r => r !== "HEAD" && !r.endsWith("/HEAD"));
     const isHead = c.refs.some(r => r.startsWith("HEAD"));
+    // Narrow: one ref chip and no author, so the subject keeps room.
+    const wide = this.listWidth() >= 460, shown = wide ? 2 : 1;
     return el.child(graphCell(c.lane, ROW, this.palette(t), t.background, { highlight: isHead ? t.foreground : null }))
       .child(div().flex_none().font_family(mono).text_size(11.5).text_color(hashColor).child(c.short))
       .when(this.copied.includes(c.sha), e => e.child(div().flex_none().text_size(10.5).text_color(t.ansi6).child("⎘")))
-      .children(refs.slice(0, 2).map(r => div().flex_none().max_w(140).truncate().px(4).rounded(4).text_size(10.5)
+      .children(refs.slice(0, shown).map(r => div().flex_shrink_1().min_w(40).max_w(140).truncate().px(4).rounded(4).text_size(10.5)
         .bg(r.startsWith("→") ? t.accent : t.raised).text_color(r.startsWith("→") ? t.accent_foreground : r.startsWith("tag:") ? t.ansi3 : t.ansi6).child(r)))
-      .when(refs.length > 2, e => e.child(div().flex_none().text_size(10.5).text_color(t.dim).child(`+${refs.length - 2}`)))
-      .child(div().flex_1().min_w(0).truncate().text_color(c.state === "merged" ? t.muted : t.foreground).child(c.subject))
-      .when((this.size?.width ?? 0) >= 520, e => e.child(div().flex_none().text_size(11).text_color(t.dim).child(`${c.author.split(" ")[0]} · ${c.date.replace(/ ago$/, "")}`)));
+      .when(refs.length > shown, e => e.child(div().flex_none().text_size(10.5).text_color(t.dim).child(`+${refs.length - shown}`)))
+      .child(div().flex_1().min_w(60).truncate().text_color(c.state === "merged" ? t.muted : t.foreground).child(c.subject))
+      .when(wide, e => e.child(div().flex_none().text_size(11).text_color(t.dim).child(`${c.author.split(" ")[0]} · ${c.date.replace(/ ago$/, "")}`)));
   }
 
   mainView(t, mono) {

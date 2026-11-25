@@ -267,7 +267,7 @@ export default class Conflicts extends View {
           const w = await hc(["wait", addr, "--timeout", "15", "--json"]).catch(() => null);
           try { const j = JSON.parse(w?.stdout ?? "{}"); if (j.ended) code = j.exit_code ?? 1; } catch { code = 1; }
         }
-        output = (await hc(["read", addr, "--lines", "400"]).catch(() => ({ stdout: "" }))).stdout ?? "";
+        output = (await hc(["read", addr, "--lines", "20000"]).catch(() => ({ stdout: "" }))).stdout ?? "";
         const at = output.indexOf(MARKER);
         output = (at >= 0 ? output.slice(at + MARKER.length) : output).trim();
         hc(["kill", addr]).catch(() => {});
