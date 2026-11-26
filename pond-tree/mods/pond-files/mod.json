@@ -1,0 +1,15 @@
+{
+  "place": "none",
+  "cloned_from": {
+    "name": "files",
+    "version": "0.1.14"
+  },
+  "focusable": true,
+  "title": "Files",
+  "version": "1.1.2",
+  "source": {
+    "repo": "https://github.com/SimonBystromTableCheck/herdr-mods",
+    "item": "pond-files",
+    "mod": "pond-files"
+  }
+}

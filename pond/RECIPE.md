@@ -10,11 +10,11 @@ button: the Git panel's Files section reviews and stages changes.
 
 **Install:** Point your Herdr agent at this folder: copy `layouts/pond.json` to
 `~/.config/herdr-app/layouts/` and every folder in `mods/` (`pond-agents`, `pond-files`, `pond-tabs`,
-`git`, `git-conflicts`, `skills`, `todos`, `servers`, `remote-checker`, `pond-profiles`, `workbench`, `notes`) to `~/.config/herdr-app/mods/`, renaming any that clash
+`git`, `git-conflicts`, `skills`, `todos`, `servers`, `remote-checker`, `pond-profiles`, `workbench`, `notes`, `pond-settings`) to `~/.config/herdr-app/mods/`, renaming any that clash
 (and the `mod` names in the layout), run `herdr-app check ~/.config/herdr-app/mods/<name>` on
 each, then `herdr-app do layout.switch --name pond`.
 
-**Version:** 1.12.3 (see Changes at the end; also `"version"` in `layouts/pond.json`, and each mod's own in its `mod.json`).
+**Version:** 1.13.0 (see Changes at the end; also `"version"` in `layouts/pond.json`, and each mod's own in its `mod.json`).
 
 **Update:** from 1.6.0, a "Pond ↑ x.y.z" pill appears in the tab bar when a newer layout is published; click it, confirm, and a new Claude tab updates the layout and offers its mods (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `layouts/pond.json` and each folder in `mods/` with this folder's copies (asking an agent to *install* again adds second copies instead). Sizes and panels you clicked are kept (Herdr keeps them in `layouts/.state/`), and so are the mods' settings and data; edits you made inside `pond.json` or the mod folders are not. From 1.10.0 the layout has no `changes` slot; a gitview you installed for it can be removed (its `gitview*` mod folders).
 
@@ -121,6 +121,12 @@ Programs the panels run: `git`, `sh`, `hc`, `nvim` (git and skills), `mv` (todos
 - Settings → Look lists **Pond** with its preview picture, and picking it shows the same window.
 
 ## Changes
+
+### 1.13.0 (2026-11-26)
+
+- New mod: [`pond-settings`](../pond-settings/) 1.0.0. **Install it with this update** (copy `pond-settings/mods/pond-settings/` to `mods/pond-settings/`, then `herdr-app check`): open it from the command palette ("Pond settings") to see every layout and mod you have from here, installed vs latest, update them, and try other layouts from this repo (Available layouts). The layout file itself is unchanged.
+- pond-tabs 1.6.0 (an optional hamburger menu for other layouts, pinning for pond-pins; Pond's tab bar looks and works as before), pond-profiles 1.5.0 (usage pins for layouts with pond-usage; gateway model lists as Claude Code sees them). Other mods unchanged: notes 1.0.0, pond-agents 1.4.0, workbench 1.0.0, git 1.5.0, git-conflicts 1.1.3, todos 1.2.0, remote-checker 1.4.1, skills 1.2.0, pond-files 1.1.2; leader 2.2.0.
+- Another layout to try: [`pond-tree`](../pond-tree/) 1.0.0, Pond with a machine → space → agent sidebar and a Chat view. Optional; Pond stays as it is.
 
 ### 1.12.3 (2026-11-25)
 

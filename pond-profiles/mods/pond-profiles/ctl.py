@@ -801,6 +801,20 @@ def cmd_update(target):
 
 # ---- Agent router -----------------------------------------------------------------
 
+def claude_client_ua():
+    """The gateway lists models by the client it thinks is asking: Claude Code's User-Agent gets the
+    gateway's own models (the company's own), any other client the public subset."""
+    global _CLAUDE_UA
+    if not _CLAUDE_UA:
+        code, text = sh([CLAUDE, "--version"])
+        m = re.search(r"(\d+\.\d+\.\d+)", text or "")
+        _CLAUDE_UA = f"claude-cli/{m.group(1) if m else '2'} (external, cli)"
+    return _CLAUDE_UA
+
+
+_CLAUDE_UA = None
+
+
 def cmd_models(name):
     need_profile(name)
     vals = parse_env(f"{PROFILES}/{name}.env")
@@ -808,7 +822,8 @@ def cmd_models(name):
     if not base:
         fail(f"{name} has no gateway URL")
     try:
-        data = json.loads(fetch(f"{base.rstrip('/')}/v1/models?limit=1000", key_headers(vals), timeout=15))
+        data = json.loads(fetch(f"{base.rstrip('/')}/v1/models?limit=1000",
+                                {**key_headers(vals), "User-Agent": claude_client_ua()}, timeout=15))
     except Exception as e:  # noqa: BLE001
         fail(f"Model list failed: {e}")
     out(models=[{"id": m["id"], "name": m.get("display_name") or m["id"], "context": m.get("max_input_tokens")}

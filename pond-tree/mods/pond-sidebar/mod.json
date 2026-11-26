@@ -1,0 +1,14 @@
+{
+  "place": "none",
+  "version": "1.0.0",
+  "source": {
+    "repo": "https://github.com/SimonBystromTableCheck/herdr-mods",
+    "item": "pond-sidebar",
+    "mod": "pond-sidebar"
+  },
+  "title": "Agents",
+  "cloned_from": {
+    "name": "machine-sidebar",
+    "version": "0.1.16"
+  }
+}

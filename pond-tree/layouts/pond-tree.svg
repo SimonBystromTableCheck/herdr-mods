@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200">
+  <!-- pond-tree: brand, pinned cards, machine/space/agent tree, usage cards, footer; tab bar with a hamburger;
+       the chat view; the right panel; status bar -->
+  <rect width="320" height="200" fill="#141619"/>
+  <rect x="0" y="0" width="78" height="200" fill="#1b1e23"/>
+  <rect x="78" y="0" width="1" height="200" fill="#2a2e35"/>
+  <!-- traffic lights + brand (duck tile) -->
+  <g fill="#3d424a"><circle cx="8" cy="9" r="2.5"/><circle cx="16" cy="9" r="2.5"/><circle cx="24" cy="9" r="2.5"/></g>
+  <rect x="32" y="5" width="8" height="8" rx="2" fill="#2a2e35"/>
+  <circle cx="36" cy="9" r="2.3" fill="#e0b341"/>
+  <rect x="43" y="7.5" width="20" height="3" rx="1.5" fill="#3a4048"/>
+  <!-- pinned panel cards -->
+  <g fill="none" stroke="#2f343d" stroke-width="0.8">
+    <rect x="6" y="20" width="15" height="15" rx="3"/><rect x="24" y="20" width="15" height="15" rx="3"/>
+    <rect x="42" y="20" width="15" height="15" rx="3"/><rect x="60" y="20" width="15" height="15" rx="3"/>
+  </g>
+  <rect x="24" y="20" width="15" height="15" rx="3" fill="#2b3a4f"/>
+  <g fill="#3a4048"><rect x="10" y="25" width="7" height="5" rx="1"/><rect x="46" y="25" width="7" height="5" rx="1"/><rect x="64" y="25" width="7" height="5" rx="1"/></g>
+  <rect x="28" y="25" width="7" height="5" rx="1" fill="#6d8fb8"/>
+  <rect x="32" y="21.5" width="5" height="3" rx="1" fill="#3fbf7f"/>
+  <!-- machine -> spaces -> agents (ducks) -->
+  <rect x="6" y="42" width="34" height="3" rx="1.5" fill="#3a4048"/>
+  <g fill="#2f343d"><rect x="8" y="51" width="28" height="3" rx="1.5"/><rect x="8" y="83" width="30" height="3" rx="1.5"/><rect x="8" y="107" width="24" height="3" rx="1.5"/></g>
+  <rect x="10" y="58" width="64" height="13" rx="2" fill="#23272e"/>
+  <rect x="10" y="58" width="1.5" height="13" fill="#4b8fd6"/>
+  <g fill="#e0b341"><circle cx="17" cy="64.5" r="3"/><circle cx="17" cy="77" r="3"/><circle cx="17" cy="94" r="3"/><circle cx="17" cy="118" r="3"/></g>
+  <g fill="#2f343d"><rect x="24" y="61" width="26" height="3" rx="1.5"/><rect x="24" y="74" width="30" height="3" rx="1.5"/><rect x="24" y="91" width="22" height="3" rx="1.5"/><rect x="24" y="115" width="28" height="3" rx="1.5"/></g>
+  <g fill="#6c4fa3"><rect x="55" y="61" width="14" height="3.5" rx="1"/><rect x="58" y="74" width="12" height="3.5" rx="1"/></g>
+  <g fill="#2a2e35"><rect x="24" y="66" width="18" height="2" rx="1"/><rect x="24" y="79" width="14" height="2" rx="1"/></g>
+  <circle cx="71" cy="94.5" r="1.8" fill="#3fbf7f"/>
+  <!-- usage cards -->
+  <rect x="6" y="142" width="66" height="1" fill="#2a2e35"/>
+  <g fill="#2f343d"><rect x="8" y="148" width="22" height="3" rx="1.5"/><rect x="8" y="164" width="18" height="3" rx="1.5"/></g>
+  <g fill="#23272e"><rect x="8" y="154" width="62" height="2.5" rx="1.25"/><rect x="8" y="170" width="62" height="2.5" rx="1.25"/></g>
+  <rect x="8" y="154" width="38" height="2.5" rx="1.25" fill="#c9a25a"/>
+  <rect x="8" y="170" width="20" height="2.5" rx="1.25" fill="#d86b5f"/>
+  <!-- footer: gear, machine, duck -->
+  <g fill="#3a4048"><circle cx="11" cy="182" r="2.5"/><rect x="18" y="180" width="5" height="4" rx="1"/></g>
+  <circle cx="30" cy="182" r="2.5" fill="#e0b341"/>
+  <!-- tab bar: pills, + , hamburger with the open panel -->
+  <g fill="#23272e"><rect x="88" y="6" width="34" height="10" rx="3"/><rect x="126" y="6" width="28" height="10" rx="3"/></g>
+  <rect x="88" y="6" width="34" height="10" rx="3" fill="#2f3a49"/>
+  <rect x="270" y="6" width="42" height="10" rx="3" fill="#2a2e35"/>
+  <g fill="#6d7580"><rect x="274" y="10" width="20" height="2" rx="1"/><rect x="302" y="8.5" width="6" height="1"/><rect x="302" y="10.5" width="6" height="1"/><rect x="302" y="12.5" width="6" height="1"/></g>
+  <rect x="86" y="20" width="230" height="1" fill="#2a2e35"/>
+  <!-- chat view: Chat | Terminal toggle, messages, composer -->
+  <rect x="86" y="26" width="132" height="154" rx="5" fill="#191c21" stroke="#2f343d" stroke-width="1"/>
+  <rect x="180" y="30" width="34" height="8" rx="2.5" fill="#1b1e23" stroke="#2f343d" stroke-width="0.6"/>
+  <rect x="181.5" y="31.5" width="15" height="5" rx="2" fill="#2f3a49"/>
+  <g fill="#2c313a"><rect x="94" y="48" width="96" height="3" rx="1.5"/><rect x="94" y="55" width="80" height="3" rx="1.5"/><rect x="94" y="62" width="90" height="3" rx="1.5"/></g>
+  <rect x="94" y="72" width="40" height="3" rx="1.5" fill="#4b8fd6"/>
+  <rect x="146" y="84" width="64" height="18" rx="6" fill="#23272e"/>
+  <g fill="#3a4048"><rect x="152" y="89" width="50" height="3" rx="1.5"/><rect x="152" y="95" width="34" height="3" rx="1.5"/></g>
+  <g fill="#2c313a"><rect x="94" y="112" width="88" height="3" rx="1.5"/><rect x="94" y="119" width="70" height="3" rx="1.5"/><rect x="94" y="126" width="84" height="3" rx="1.5"/></g>
+  <rect x="94" y="160" width="116" height="13" rx="4" fill="#1f232a" stroke="#2f343d" stroke-width="0.6"/>
+  <circle cx="204" cy="166.5" r="3" fill="#6d7580"/>
+  <!-- right panel -->
+  <rect x="224" y="26" width="90" height="154" rx="5" fill="#1b1e23" stroke="#2f343d" stroke-width="1"/>
+  <rect x="224" y="26" width="90" height="14" rx="5" fill="#20242b"/>
+  <rect x="230" y="31" width="16" height="4" rx="2" fill="#3a4048"/>
+  <g fill="#2c313a"><rect x="230" y="48" width="78" height="22" rx="3"/><rect x="230" y="76" width="78" height="22" rx="3"/><rect x="230" y="104" width="78" height="22" rx="3"/></g>
+  <g fill="#3a4048"><rect x="235" y="53" width="30" height="3" rx="1.5"/><rect x="235" y="81" width="36" height="3" rx="1.5"/><rect x="235" y="109" width="26" height="3" rx="1.5"/></g>
+  <g fill="#3fbf7f"><circle cx="301" cy="54.5" r="1.8"/></g>
+  <!-- status bar -->
+  <rect x="0" y="188" width="320" height="12" fill="#1b1e23"/>
+  <rect x="0" y="188" width="320" height="1" fill="#2a2e35"/>
+  <g fill="#3a4048"><rect x="86" y="192" width="30" height="3" rx="1.5"/><rect x="122" y="192" width="18" height="3" rx="1.5"/></g>
+  <g fill="#4b8fd6"><rect x="300" y="192" width="12" height="3" rx="1.5"/></g>
+</svg>

@@ -4,12 +4,15 @@
 // Personal settings (names, usage, setup state) live in ~/.cvm/herdr/pond-profiles.json, not in this folder.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, ScrollHandle } from "gpui-base";
-import { exec, home, appHome, terminals, panes, spaces, focused, theme, run, notify, nextCommand, setShared, writeTextFile } from "herdr";
+import { exec, home, appHome, terminals, panes, spaces, focused, theme, run, notify, nextCommand, setShared, writeTextFile, readTextFile, layout } from "herdr";
+import { pinnedUsage, loadUsagePins, toggleUsagePin } from "./usage-pins.js";
 import { keybar, keysCard } from "./keybar.js";
 import { SelfUpdate } from "./update.js";
 import { setupView, loadDoctor, openProfileForm, profileForm, openLabelForm, labelForm, openUsageForm, usageForm } from "./setup.js";
 import { closePanel } from "./panel.js";
 
+// Any block showing `mod`, anywhere in the tree.
+const showsMod = (node, mod) => Boolean(node) && (node.content?.mod === mod || (node.children ?? []).some(c => showsMod(c, mod)));
 const MOD = "pond-profiles", ME = `mods/${MOD}`, CHROME = "mods/workspace-chrome";
 const CTL = () => `${appHome()}/${ME}/ctl.py`;
 const UPDATE_EVERY = 6 * 3600 * 1000;
@@ -90,6 +93,18 @@ export default class Claude extends View {
     this.setupShown = false; this.doctor = null;
     this.sel = 0; this.scroll = ScrollHandle.new(); this.handle = cx.focus_handle();
     this.usage = {}; // profile -> {result, at}
+    this.usagePinFile = {};
+    cx.spawn(async () => loadUsagePins(this.usagePinFile)); // pond-usage keeps it fresh while it shows
+    // Pins only mean something to a pond-usage that draws them (its mod.json says "usage_pins": true);
+    // older copies show one fixed account and would ignore them.
+    this.usagePinsOk = false;
+    const pinsOk = cx => cx.spawn(async cx => {
+      let ok = false;
+      try { ok = JSON.parse(await readTextFile(`${appHome()}/mods/pond-usage/mod.json`)).usage_pins === true; } catch {}
+      if (ok !== this.usagePinsOk) { this.usagePinsOk = ok; cx.notify(); }
+    });
+    pinsOk(cx);
+    cx.timer.every(30000, pinsOk);
     this.signin = null; // {profile, code, url, until, status}
     this.selfUpdate = new SelfUpdate(MOD, "Claude panel"); this.selfUpdate.start(cx);
     this.refresh(cx);
@@ -547,8 +562,19 @@ export default class Claude extends View {
       [...body, ...this.errorOf("account", t), ...this.errorOf("key", t), ...this.errorOf("vars", t), ...this.errorOf("label", t)]);
   }
 
+  // Pins this account's usage to the sidebar's usage cards (pond-usage), where the layout has them.
+  usagePin(p, t) {
+    const on = (pinnedUsage() ?? []).includes(p.name);
+    return div().id(`usage-pin-${p.name}`).size(20).flex_none().flex().items_center().justify_center().rounded(4).cursor_pointer()
+      .text_color(on ? t.accent : t.dim).hover(s => s.bg(t.raised).text_color(on ? t.accent : t.foreground))
+      .tooltip(on ? "Unpin from the sidebar" : "Pin to the sidebar")
+      .on_click((_e, cx) => { cx.stop_propagation(); toggleUsagePin(p.name); })
+      .child(svg(`${CHROME}/${on ? "pin" : "pin-off"}.svg`).size(12));
+  }
+
   usageCard(t) {
     const body = [];
+    const sidebar = this.usagePinsOk && showsMod(layout(), "pond-usage");
     for (const p of this.st.profiles) {
       const color = this.accountColor(p, t);
       if (this.form?.type === "usage" && this.form.profile === p.name) {
@@ -568,7 +594,8 @@ export default class Claude extends View {
         .child(div().font_semibold().child(p.label))
         .child(div().flex_1().min_w(0).truncate().text_size(11.5).text_color(t.dim)
           .child(r?.kind === "plan" && r.subscription ? `${titled(r.subscription)} plan` : p.gateway ? host(p.gateway) : ""))
-        .when(Boolean(u), el => el.child(div().flex_none().text_size(11).text_color(t.dim).child(ago(Date.now() - u.at))));
+        .when(Boolean(u), el => el.child(div().flex_none().text_size(11).text_color(t.dim).child(ago(Date.now() - u.at))))
+        .when(sidebar, el => el.child(this.usagePin(p, t)));
       const block = [head];
       if (!u) block.push(this.note("Loading…", t));
       else if (!r.ok) block.push(...this.usageError(p, r, t));

@@ -23,7 +23,7 @@ https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/pond-tabs". What 
 
 Panel mods from this repo point here for their button; their install does steps 1–2 if needed.
 
-**Version:** 1.5.0 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.6.0 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** from 1.2.0, a small "Tabs ↑ x.y.z" pill appears before + when this repo publishes a newer version (and "Pond ↑ x.y.z" for the shown layout, which updates the layout and offers its mods); click it, confirm, and a new Claude tab updates just this mod (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/pond-tabs/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept; edits you made inside the mod folder are not.
 
@@ -51,6 +51,12 @@ padding, 3px gaps), left to right:
   shared state `pond-tabs.panelOrder` (a list of panel-stack child ids), not the layout file;
   panels missing from it keep layout order after the ordered ones. A plain click still
   opens/closes the panel.
+- **Menu mode** (props `{"menu": true}`, as in `pond-tree`): instead of the panel buttons, one
+  menu button (the open panel's icon and name, then a hamburger icon) opens a 230px dropdown
+  anchored below it: one 29px row per panel with its icon, name, Servers' badge, the Claude
+  account dot and its leader key, a pin toggle when the layout has a `pond-pins` block (accent when
+  pinned), drag to reorder (same order as the buttons), click to open/close and close the dropdown.
+  It's this mod reopened as a popup (`props.items`).
 - **Window buttons** (Linux/Windows only, where the system draws none):
   minimize, maximize/restore, close; vector icons on Windows.
 - On macOS with a hidden title bar, left padding clears the traffic lights.
@@ -137,6 +143,12 @@ padding, 3px gaps), left to right:
 - Dragging Todos onto Files puts Todos first; the order survives a restart.
 
 ## Changes
+
+### 1.6.0 (2026-11-26)
+
+- Optional hamburger menu: with props `{"menu": true}` on its block (the `pond-tree` layout sets it), the panel buttons move into a dropdown under a menu button at the right, which shows the open panel's icon and name. The dropdown lists every panel with its server badge, account dot and leader key; drag rows to reorder (the same `pond-tabs.panelOrder`); click opens or closes. Without the prop (Pond, your own layouts) nothing changes.
+- Pinning for [`pond-pins`](../pond-pins/): where a `pond-pins` block is in the layout, each dropdown row gets a pin toggle; pins are saved in `~/.config/herdr-app/pond-pins.json` and the pins block is shown while anything is pinned. Without pond-pins, no pin icons and no file.
+- A mod can ask for a block of its own: `"dock": {into, at, id, size, hidden, layouts?}` in its `mod.json` adds it to that node the first time it's seen (only in the listed layouts), like panel mods get a panel slot. pond-pins uses it.
 
 ### 1.5.0 (2026-11-16)
 

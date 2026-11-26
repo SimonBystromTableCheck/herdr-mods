@@ -1,0 +1,20 @@
+{
+  "place": "none",
+  "title": "Pinned panels",
+  "dock": {
+    "into": "sidebar-lists",
+    "at": 0,
+    "id": "pins",
+    "size": 68,
+    "hidden": true,
+    "layouts": [
+      "pond-tree"
+    ]
+  },
+  "version": "1.0.0",
+  "source": {
+    "repo": "https://github.com/SimonBystromTableCheck/herdr-mods",
+    "item": "pond-pins",
+    "mod": "pond-pins"
+  }
+}

@@ -69,6 +69,18 @@ Layouts: the same, with `layouts/<installed>.json` (back up to
 those too). Never touch `layouts/.state/`: the person's clicks (sizes, shown
 panels) live there and survive. Then `layout.switch` to it only if it was showing.
 
+**New mods in a layout.** The layout's `mods` in versions.json can name a mod
+the person doesn't have (the new version added it). Herdr's own mods (the keys
+of `installed.json`) need nothing. For each other one, list it in step 3 as
+"new: <name> <version>" with its item's `## Changes`, and install it when they
+say yes: copy `<tmp>/<path>/` to `mods/<name>/` as is (its `source` stamp keeps
+it updatable), merge the item's `keys` if any as in step 4, and
+`herdr-app check mods/<name>`. Never overwrite: if `mods/<name>/` exists without
+this repo's `source`, it's the person's own mod with that name: tell them and
+skip it. Do this before replacing the layout file, so the layout never shows a
+mod that isn't there yet. A declined one: say the layout may show an empty block
+where that mod goes.
+
 Never touch the person's data outside these folders: `pond-agents.json`,
 `pond-figures/`, `servers.json`, `remote-checker.json`, `todos/`, `shared.json`, `data/`.
 

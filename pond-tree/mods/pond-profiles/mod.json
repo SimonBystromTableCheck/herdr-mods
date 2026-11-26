@@ -1,0 +1,1 @@
+{ "place": "none", "title": "Claude", "version": "1.5.0", "source": {"repo": "https://github.com/SimonBystromTableCheck/herdr-mods", "item": "pond-profiles", "mod": "pond-profiles"}, "focusable": true, "panel": {"title": "Claude", "icon": "claude.svg", "leader": "C"} }

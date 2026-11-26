@@ -1,0 +1,24 @@
+{
+  "place": "none",
+  "title": "Pond settings",
+  "version": "1.0.0",
+  "source": {
+    "repo": "https://github.com/SimonBystromTableCheck/herdr-mods",
+    "item": "pond-settings",
+    "mod": "pond-settings"
+  },
+  "overlay": {
+    "width": 640,
+    "height": 600
+  },
+  "palette": [
+    {
+      "title": "Pond settings",
+      "command": "mod.open",
+      "args": {
+        "name": "pond-settings"
+      },
+      "words": "pond mods layouts versions update"
+    }
+  ]
+}

@@ -35,7 +35,7 @@ next to Herdr's Files and Changes. You don't need the `pond` layout. Needs macOS
 Without changing the tab bar, it also opens beside a terminal:
 `herdr-app do pane.split --direction right --mod pond-profiles` (`q` closes that pane).
 
-**Version:** 1.4.0 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.5.0 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** from 1.3.0, the panel's header shows "Update to x.y.z" when a newer version is published; click it, confirm, and a new Claude tab updates just this mod. Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/pond-profiles/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder (`~/.cvm/herdr/`) and are kept.
 
@@ -173,6 +173,11 @@ function; the cvp step warns when new terminals can't find `hc`.
 - An agent-router role's model and effort dropdowns save and show the new value after reload.
 
 ## Changes
+
+### 1.5.0 (2026-11-26)
+
+- Usage cards get a pin (top right) to show that account's usage in the sidebar, when the layout has a [`pond-usage`](../pond-usage/) block that supports it (pond-usage 1.0.0 from this repo; older copies don't, so no pin). Pins are saved in `~/.config/herdr-app/pond-usage.json`.
+- Gateway model lists ask as Claude Code does (its User-Agent), so a gateway that serves different models per client lists the ones Claude Code gets.
 
 ### 1.4.0 (2026-11-13)
 

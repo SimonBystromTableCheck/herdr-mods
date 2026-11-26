@@ -1,0 +1,1484 @@
+import { View, div, image, svg } from "gpui-kit";
+import { v_flex, h_flex, Popup, ScrollHandle } from "gpui-base";
+import { machines, agents, terminals, panes, focused, spaces, run, theme, shared, setShared, setAgentOrder, nextCommand, openOverlay, closeOverlay, props, layout, hc, notify, home, watchFolder, exec, knownAgents, pickFolder, readTextFile } from "herdr";
+
+import { machineMetrics } from "./machine-metrics.js";
+import { refreshContext } from "./context.js";
+import { machineDetails } from "./details.js";
+import { osOf } from "./os.js";
+import { look, changedHosts, machinesChanged } from "./turns.js";
+import { agentFolder } from "./sessions.js";
+import { NewMenu } from "./new-menu.js";
+import { dragger, dropPlace } from "./drag.js";
+import { find, narrow } from "./layout.js";
+import { collectUsage, readMachineUsage, usageDays, usageDue, usagePlace } from "./token-usage.js";
+import { usageDetails, usageRailMark, usageStrip } from "./usage-card.js";
+import { contextText, healthBars, healthFill } from "./context-bar.js";
+// Pond: agents drawn as the Pond figures (ducks, slimes, per space), from pond-agents' figure code and pond-agents.json.
+import { figureFor, load as loadFigures } from "./figures-lib/figures.js";
+import { duckWidth, duck } from "./figures-lib/duck.js";
+const FIG_H = 18, FIG_W = duckWidth(FIG_H), SUB_FIG_H = 14;
+// A space being dragged up or down its machine's list; one at a time across copies.
+const spaceDrag = dragger("y");
+let spaceMachine = null;
+
+const localMachineLabel = () => shared("machine.local-label") ?? "This computer";
+const statsFor = (machine, t) => machineMetrics(machine, false, t);
+const classic = () => ["classic", "contained"].includes(shared("harness.sidebar"));
+/** Hex color a laid over b at share (0 to 1), as one solid color; b when either isn't a 6-digit hex. */
+const mix = (a, b, share) => {
+  const rgb = c => /^#[0-9a-f]{6}/i.test(c ?? "") ? [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16)) : null;
+  const [x, y] = [rgb(a), rgb(b)];
+  if (!x || !y) return b;
+  return "#" + x.map((v, i) => Math.round(v * share + y[i] * (1 - share)).toString(16).padStart(2, "0")).join("");
+};
+const treeColor = t => mix(t.dim, t.surface, 0.7);
+/**
+ * A tree's lines in a row at x px, starting from px above it: on down past the row, and an elbow reach px into it
+ * elbowAt px down.
+ */
+const treeLines = (t, x, elbowAt, down, elbow, from = 0, reach = 9) => {
+  const color = treeColor(t);
+  return [
+    ...(down ? [div().absolute().left(x).top(from).bottom(0).w(1).bg(color)] : []),
+    ...(elbow ? [div().absolute().left(x).top(from).w(reach).h(elbowAt - from).overflow_hidden()
+      .child(div().absolute().left(0).bottom(0).w(2 * reach).h(Math.max(elbowAt - from, 2 * reach)).border_l(1).border_b(1).border_color(color).rounded_bl(reach))] : []),
+  ];
+};
+/**
+ * One of a machine's agents or terminals, its rows hung from the machine's icon, 19 px in: the line at 18 and its
+ * elbow reaching the row at 28.
+ */
+const underMachine = (t, rows, last, elbowAt) => {
+  return rows.map((r, i) => v_flex().relative().w_full().flex_none().pl(28).child(r)
+    .children(treeLines(t, 18, elbowAt, !last, i === 0, 0, 10)));
+};
+
+/** Pond: one of a folder's agents or terminals, hung from the folder row's icon (at 15 px), 24 px in. */
+const underFolder = (t, rows, last, elbowAt) => {
+  return rows.map((r, i) => v_flex().relative().w_full().flex_none().pl(24).child(r)
+    .children(treeLines(t, 15, elbowAt, !last, i === 0, 0, 8)));
+};
+
+/**
+ * The context window as harns's Settings chose: filling with what's used (gray, amber past 75%, red past 90%), or
+ * as the health bar draining to what's left (`healthFill`, shared with the chat's meter).
+ */
+function contextBar(t, used, width, height = 3) {
+  const { share, color } = healthFill(t, used) ?? { share: used, color: used > 90 ? "#d88179" : used > 75 ? t.working : t.muted };
+  return div().w(width).h(height).flex_none().rounded_full().bg(t.border)
+    .when(share > 0, el => el.child(div().h_full().rounded_full().w(Math.max(2, Math.round(width * share / 100))).bg(color)));
+}
+
+/**
+ * Pond: the Claude profile an agent runs on (its terminal's herdr.claude-profile label, set by pond-profiles' launch
+ * hook), as pond-agents draws it: a small tile, purple for a gateway, blue for a plan login.
+ */
+function accountBadge(t, label, gateway) {
+  return div().flex_none().px(4).h(14).flex().items_center().rounded(3).text_size(9.5)
+    .bg(gateway ? t.ansi5 : t.ansi4).text_color(t.background).child(label);
+}
+/** The profile's name as pond-profiles names it, else the profile id capitalized; null without one. */
+const accountLabel = (accounts, name) => name ? accounts?.[name]?.label ?? name[0].toUpperCase() + name.slice(1) : null;
+
+const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
+
+function lead(tab, all = panes()) {
+  const mine = all.filter(p => p.tab === tab.id && p.terminal);
+  return mine.find(p => p.program?.agent) ?? mine.find(p => p.focused) ?? mine[0];
+}
+
+function harnessSessionTitle(l) {
+  const prog = l?.program?.name;
+  const live = clean(l?.title);
+  const prefixes = [prog, l?.program?.key, l?.app === "pi" ? "\u03c0" : null].filter(Boolean);
+  const separators = [" - ", " \u2014 ", " \u2013 ", " | ", ": "];
+  let session = live;
+  for (const prefix of prefixes) {
+    const start = session.toLowerCase();
+    const name = prefix.toLowerCase();
+    const separator = separators.find(s => start.startsWith(`${name}${s}`));
+    if (separator) { session = session.slice(prefix.length + separator.length).trim(); break; }
+  }
+  const folder = folderName(l?.cwd);
+  const suffix = folder && separators.find(s => session.endsWith(`${s}${folder}`));
+  if (suffix) session = session.slice(0, -(suffix.length + folder.length)).trim();
+  else if ((l?.app === "codex" || l?.program?.key === "codex") && session.includes(" | ")) session = session.slice(0, session.lastIndexOf(" | ")).trim();
+  const telling = session && session !== prog && !/^[~/]|^[A-Za-z]:\\/.test(session) && !session.includes("@") && session.toLowerCase() !== l?.program?.key && session !== folder;
+  return telling ? session : "";
+}
+const paneBranch = a => panes().find(p => p.pane === a.pane)?.branch ?? spaces().find(s => s.id === a.space)?.branch ?? null;
+const folderName = path => String(path ?? "").replace(/[\\/]+$/, "").split(/[\\/]/).at(-1) ?? "";
+const RANK = { blocked: 4, done: 3, working: 2, idle: 1 };
+/** A sub-agent without a pane isn't in agents(): its raw word, error counting as blocked. */
+const kidStatus = (k, listed) => {
+  const s = listed.get(k.address) ?? k.status;
+  return s === "error" ? "blocked" : s === "done" ? "idle" : s;
+};
+
+function duration(ms) {
+  const m = Math.floor(ms / 60000);
+  if (m < 1) return "<1m";
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  return h < 24 ? `${h}h` : `${Math.floor(h / 24)}d`;
+}
+
+/** The agent's icon from the app's program table: a one-color glyph or a picture. */
+function icon(p, size, color) {
+  if (!p?.icon) return null;
+  return p.icon.endsWith('.svg') ? svg(p.icon).size(size).flex_none().text_color(color) : image(p.icon).w(size).h(size).flex_none();
+}
+
+const HOP_MS = 700, FEET = 8.8 / 12;
+const HALO = [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]];
+
+/**
+ * A program's logo set on the bot: a one-color glyph sits on a halo of itself in the row's color (copies nudged 1 px
+ * every way), which hides the bot behind it and fills the glyph's small gaps, shaped like the logo; a picture, which
+ * can't be recolored, sits on a disc of that color. Its box is the logo plus 1 px all round.
+ */
+function badgeOf(p, size, color, ring) {
+  if (!p?.icon) return null;
+  if (!p.icon.endsWith('.svg')) return div().p(1).rounded_full().bg(ring).child(image(p.icon).w(size).h(size).flex_none());
+  return haloed(p.icon, size, color, ring);
+}
+
+/** A one-color glyph on a halo of itself in the row's color: copies nudged 1 px every way, under it. */
+function haloed(src, size, color, ring) {
+  const glyph = (dx, dy, c) => svg(src).size(size).flex_none().text_color(c).absolute().left(1 + dx).top(1 + dy);
+  return div().relative().size(size + 2).flex_none()
+    .children(HALO.map(([dx, dy]) => glyph(dx, dy, ring)))
+    .child(glyph(0, 0, color));
+}
+
+/**
+ * The agent icon (a sub-agent's: the same bot without its antenna), with its program's icon small at its bottom right
+ * on a halo of the row's color (badgeOf). `hop` (working; its own place in its hops, { n, up, go, ripple }, from
+ * hopFor): that logo hops in amber from side to side over the bot, its halo masking the bot as it passes, a ripple
+ * spreading where it lands.
+ */
+function agentPic(t, p, size, color, ring, sub = false, hop = false, tint = null, corner = null) {
+  const bot = svg(`mods/pond-sidebar/icons/${sub ? "bot-small" : "bot"}.svg`).size(size).flex_none().text_color(color);
+  const badge = badgeOf(p, Math.round(size * 0.65), hop ? t.working : tint ?? color, ring);
+  const mark = corner === "ask" ? ["mods/pond-sidebar/icons/question.svg", "#d88179"]
+    : corner === "done" ? ["mods/pond-sidebar/icons/circle-check.svg", t.ansi2 ?? t.done] : null;
+  const cornerMark = () => haloed(mark[0], Math.round(size * 0.6), mark[1], ring).absolute().right(-5).top(-3);
+  if (!hop || !badge) return div().relative().size(size).flex_none().child(bot)
+    .when(Boolean(badge), el => el.child(badge.absolute().right(-5).bottom(-4)))
+    .when(Boolean(mark), el => el.child(cornerMark()));
+  const box = Math.round(size * 0.65) + 2, rest = size + 5 - box;
+  return div().relative().size(size).flex_none().child(bot)
+    .children(hopParts(t, badge, box, size + 6 - box, [rest - 2, rest + 3], size / 16, hop));
+}
+
+/**
+ * A logo hopping between lefts a and b at `top` (its box `box` px), with its ripple, for a relative parent. The view's
+ * beat (hopTick) drives it, each step a native transition: across to the other side over one hop at an even pace
+ * while it rises (slowing) and falls (speeding up), so it traces a round arc. Every landing starts a fresh ripple ring
+ * there, spreading and fading, so ring and landing stay together however long it runs. Each ring is a new element,
+ * named by its logo's address and the beat it landed on (`ripple`): herdr keeps an element's last state by its id,
+ * so a ring that reused an older one's id, or another logo's landing on the same beat, would animate from that.
+ */
+function hopParts(t, badge, box, top, [a, b], scale, hop) {
+  const to = hop.n % 2 ? b : a, landed = hop.n % 2 ? a : b, ground = top + box * FEET;
+  const w = (hop.go ? 16 : 5) * scale, h = (hop.go ? 4 : 1.4) * scale, policy = { duration: 480, easing: "ease-out" };
+  return [
+    ...(hop.n > 0 ? [svg("mods/pond-sidebar/icons/ripple.svg").id(`ripple-${hop.ripple}`).absolute().left(landed + box / 2 - w / 2)
+      .top(ground - h / 2).w(w).h(h).text_color(t.working).opacity(hop.go ? 0 : 0.9)
+      .transition("width", policy).transition("height", policy).transition("left", policy).transition("top", policy).transition("opacity", policy)] : []),
+    div().absolute().top(top).left(to).transition("left", { duration: HOP_MS, easing: "linear" })
+      .child(badge.relative().top(hop.up ? -4 : 0).transition("top", { duration: HOP_MS / 2, easing: hop.up ? "ease-out" : "ease-in" })),
+  ];
+}
+
+const READ_AFTER = [1000, 4000];
+
+export default class Agents extends View {
+  init(_props, cx) {
+    if (props()?.loginBar) return;
+    if (props()?.newMenu) { this.menu = new NewMenu(); this.menu.init(cx); return; }
+    if (props()?.newSpace) {
+      this.nsFolder = spaces().find((s) => s.active)?.folder || home();
+      this.nsAgents = null;
+      this.nsLoading = true;
+      cx.spawn(async (cx) => {
+        try { this.nsAgents = (await knownAgents()).filter((a) => a.installed && a.run); }
+        catch { this.nsAgents = []; }
+        this.nsLoading = false;
+        cx.notify();
+      });
+      return;
+    }
+    this.hoveredSpace = null;
+    this.folded = new Set();
+    this.hosts = {};
+    this.retrying = {};
+    this.refreshHosts(cx);
+    this.changed = JSON.parse(localStorage.getItem("changed") ?? "{}");
+    this.pins = JSON.parse(localStorage.getItem("pins") ?? "[]");
+    this.order = JSON.parse(localStorage.getItem("order") ?? "[]");
+    this.drag = null; this.drop = null;
+    this.machineOrder = JSON.parse(localStorage.getItem("machines.order") ?? "[]");
+    this.mdrag = null; this.mdrop = null;
+    this.scrollY = 0; this.viewH = 0; this.rowsH = 0;
+    try { this.osIcons = JSON.parse(localStorage.getItem("os") ?? "{}"); } catch { this.osIcons = {}; }
+    this.osAsked = {};
+    this.osConfirmed = new Set();
+    this.figFile = {};
+    // Claude profile names and kinds (pond-profiles keeps them in ~/.cvm/herdr/pond-profiles.json), for the agents' badges.
+    this.accounts = {};
+    const accounts = (cx) => cx.spawn(async (cx) => {
+      const text = await readTextFile(`${home()}/.cvm/herdr/pond-profiles.json`).catch(() => null);
+      if (text === this.accountsText) return;
+      this.accountsText = text;
+      try { this.accounts = JSON.parse(text ?? "{}").accounts ?? {}; } catch { this.accounts = {}; }
+      cx.notify();
+    });
+    accounts(cx);
+    cx.timer.every(5000, accounts);
+    const figures = (cx) => cx.spawn(async (cx) => { await loadFigures(this.figFile); cx.notify(); });
+    figures(cx);
+    cx.timer.every(10000, figures);
+    this.scrollHandle = ScrollHandle.new();
+    this.scrollHandle.scroll_to_item(0);
+    this.hop = { beat: 0, go: true };
+    this.hopFrom = new Map();
+    this.hopSeen = new Set();
+    cx.timer.every(HOP_MS / 2, (cx) => this.hopTick(cx));
+    cx.timer.every(1000, (cx) => {
+      this.noticeOs(cx);
+      this.noticeTurns(cx);
+      if (this.detailsWanted && Date.now() < this.detailsWanted.until) this.readDetails(this.detailsWanted.name, cx);
+      // Pond: no token usage (no Usage strip).
+      cx.notify();
+    });
+    this.noticeTurns(cx);
+    this.watchLocalContext(cx);
+    cx.spawn(async () => {
+      for (;;) {
+        const c = await nextCommand();
+        if (c === "next-machine") this.jumpMachine(1);
+        else if (c === "prev-machine") this.jumpMachine(-1);
+      }
+    });
+  }
+
+  /**
+   * Reads every connected machine's token usage into shared `usage.tokens` when it's due (see `usageDue`), one reading
+   * at a time.
+   */
+  readUsage(cx) {
+    if (this.usageBusy) return;
+    const state = shared("usage.tokens");
+    const list = machines();
+    if (!usageDue(state, list)) return;
+    this.usageBusy = true;
+    cx.spawn(async cx => {
+      try { setShared("usage.tokens", await collectUsage(list, host => readMachineUsage(exec, host), state)); }
+      finally { this.usageBusy = false; cx.notify(); }
+    });
+  }
+
+  /**
+   * Usage at the bottom of the sidebar: open, the Strip (today's tokens over two weeks of columns) when harns's settings
+   * put it here; on the rail, always, as five small columns over today's tokens, since the rail's footer has no room.
+   * Resting on either hangs the two-week card right against the sidebar, as a machine's band does.
+   */
+  usageRow(t, collapsed) {
+    const key = "usage";
+    const state = shared("usage.tokens");
+    const days = (this.usageMemo = usageDays(state, this.usageMemo)).days;
+    return div().id("usage-trig").relative().w_full().flex_none().pt(4).pb(6)
+      .when(collapsed, el => el.flex().justify_center())
+      .when(!collapsed, el => el.px(8))
+      .on_hover((on, cx) => { if (on) this.detailsEnter(key, cx); else { if (this.muted === key) this.muted = null; this.detailsLeave(key, cx); } })
+      .child((collapsed ? usageRailMark : usageStrip)(t, days, { icon: "mods/pond-sidebar/icons/coins.svg" }))
+      .child(this.hang(key, usageDetails(t, days, { icon: "mods/pond-sidebar/icons/coins.svg", errors: state?.errors }), 0));
+  }
+
+  /**
+   * Shows the top agent of the next machine (dir 1) or the previous one (-1) that has agents, in the list's order,
+   * from the machine of the agent or terminal in front; past the last it comes round to the first.
+   */
+  jumpMachine(dir) {
+    const listed = this.machineTops ?? [];
+    if (!listed.length) return;
+    const f = focused(), list = agents();
+    const shown = f?.terminal ?? f?.agent ?? list.find(a => a.tab === f?.tab && a.space === f?.space)?.address
+      ?? list.find(a => a.focused)?.address ?? "";
+    const here = shown.includes("/") ? shown.split("/")[0] : "";
+    const at = listed.findIndex(m => m.machine === here);
+    const next = at < 0 ? (dir > 0 ? 0 : listed.length - 1) : (at + dir + listed.length) % listed.length;
+    if (next !== at) run("agent.focus", { terminal: listed[next].top });
+  }
+
+  /**
+   * Asks each machine that answers what it runs, once a run (the icon kept from the last run shows until it answers);
+   * one that couldn't say is asked again a minute later.
+   */
+  noticeOs(cx) {
+    for (const m of machines()) {
+      const key = m.name ?? "";
+      if (this.osConfirmed.has(key) || Date.now() - (this.osAsked[key] ?? 0) < 60000 || (m.name && m.layout !== "ready")) continue;
+      this.osAsked[key] = Date.now();
+      cx.spawn(async (cx) => {
+        const os = await osOf(m.name ?? null);
+        if (!os) return;
+        this.osConfirmed.add(key);
+        this.osIcons[key] = os;
+        try { localStorage.setItem("os", JSON.stringify(this.osIcons)); } catch {}
+        cx.notify();
+      });
+    }
+  }
+
+  /** Its system's icon once known, else a drive (another machine) or a screen (this computer). */
+  machineIcon(machine) {
+    const os = this.osIcons?.[machine?.name ?? ""];
+    return os ? `mods/pond-sidebar/os/${os}.svg` : `mods/pond-sidebar/icons/${machine?.name ? "hard-drive" : "monitor"}.svg`;
+  }
+
+  /**
+   * Half a hop: for each logo, a landing that starts its next hop, or the top of its arc. Nothing to draw while no
+   * logo hops. Logos that stopped hopping since the last beat are forgotten. When one lands, its ripple is drawn small
+   * and let go to spread on the next frame (30 ms on); a beat where none lands needs no second frame.
+   */
+  hopTick(cx) {
+    for (const address of this.hopFrom.keys()) if (!this.hopSeen.has(address)) this.hopFrom.delete(address);
+    if (!this.hopping) return;
+    const h = this.hop;
+    h.beat++;
+    const lands = [...this.hopFrom.values()].some(from => (h.beat - from) % 2 === 0);
+    h.go = !lands;
+    cx.notify();
+    if (lands) cx.timer.after(30, (cx) => { h.go = true; cx.notify(); });
+  }
+
+  /**
+   * A working logo's place in its own hops ({ n, up, go, ripple } for agentPic): counted from the beat it was first
+   * drawn working on, rising on its even beats (each landing starts a hop) and falling on its odd ones.
+   * `ripple` names its latest landing's ring: its address, so two logos landing on one beat don't share a ring, and
+   * the shared beat of that landing, since its own count starts again at 0 each time it starts working.
+   */
+  hopFor(address) {
+    if (!this.hopFrom.has(address)) this.hopFrom.set(address, this.hop.beat);
+    this.hopSeen.add(address);
+    const from = this.hopFrom.get(address), k = this.hop.beat - from, up = k % 2 === 0, n = Math.floor(k / 2);
+    return { n, up, go: up ? this.hop.go : true, ripple: `${address}-${from + 2 * n}` };
+  }
+
+  /**
+   * A machine's band in Tree, with the start of its agents' line: from its icon (under the disc) down through the band
+   * and its 2 px margin to the first agent's elbow. Drawn before the band, so the band's hover covers it there.
+   */
+  treeTop(t, g, collapsed, band) {
+    const hangs = !collapsed && !this.folded.has(g.id) && (g.members.length > 0 || this.plainTerminals(g.machine).length > 0);
+    return div().relative().w_full().flex_none().pb(2)
+      .when(hangs, el => el.child(div().absolute().left(18).top(19).bottom(0).w(1).bg(treeColor(t))))
+      .child(band);
+  }
+
+  /**
+   * The icon a machine's header shows, open or on the rail: in Classic its system's, in Tree a server or this laptop.
+   */
+  headerIcon(machine) {
+    return classic() ? this.machineIcon(machine) : `mods/pond-sidebar/icons/${machine?.name ? "server" : "laptop"}.svg`;
+  }
+
+  /** Once a second: reads the context of machines where a turn ended, an agent came or went, or that came online. */
+  noticeTurns(cx) {
+    const now = look(agents(), machines());
+    const first = !this.seen;
+    if (!first && machinesChanged(this.seen, now)) this.refreshHosts(cx);
+    this.due ??= [];
+    for (const host of changedHosts(this.seen, now)) {
+      if (first) refreshContext(this, cx, host);
+      else for (const ms of READ_AFTER) this.due.push({ host, at: Date.now() + ms });
+    }
+    this.seen = now;
+    const ready = this.due.filter(d => d.at <= Date.now());
+    this.due = this.due.filter(d => d.at > Date.now());
+    for (const host of new Set(ready.map(d => d.host))) refreshContext(this, cx, host);
+  }
+
+  /** Reads this computer's context each time its relays write a snapshot. */
+  watchLocalContext(cx) {
+    const sep = home().includes("\\") ? "\\" : "/";
+    const dir = [home(), ".config", "harness", "context"].join(sep);
+    cx.spawn(async cx => {
+      for (;;) {
+        try { await watchFolder(dir); } catch { return; }
+        refreshContext(this, cx, null, { footers: false });
+      }
+    });
+  }
+
+  /**
+   * Stamps agents whose state changed; one that finished or started needing you, or is new, goes to the top of the
+   * order.
+   */
+  track(list, now) {
+    let dirty = false;
+    const seeding = this.order.length === 0;
+    for (const a of list) {
+      const s = a.status === "done" ? "idle" : a.status;
+      if (seeding) { this.order.push(a.address); continue; }
+      const was = this.changed[a.address]?.s;
+      if (!this.order.includes(a.address) || (was !== s && (s === "blocked" || (s === "idle" && was === "working")))) this.toTop(a.address);
+    }
+    if (seeding && list.length) localStorage.setItem("order", JSON.stringify(this.order));
+    for (const a of list) {
+      const s = a.status === "done" ? "idle" : a.status;
+      if (this.changed[a.address]?.s === s) continue;
+      this.changed[a.address] = { s, at: now };
+      dirty = true;
+    }
+    if (!dirty) return;
+    const listed = new Set(list.map((a) => a.address));
+    for (const [k, c] of Object.entries(this.changed)) if (!listed.has(k) && now - c.at > 30 * 86400000) delete this.changed[k];
+    const kept = this.order.filter(k => listed.has(k) || this.changed[k]);
+    if (kept.length !== this.order.length) { this.order = kept; localStorage.setItem("order", JSON.stringify(kept)); }
+    localStorage.setItem("changed", JSON.stringify(this.changed));
+  }
+
+  /** Reads a hovered machine's details now (if over 3 s old) and keeps them fresh for a while. */
+  wantDetails(name, cx) {
+    this.detailsWanted = { name, until: Date.now() + 30000 };
+    this.readDetails(name, cx);
+  }
+
+  readDetails(name, cx) {
+    const key = name ?? "@local";
+    this.details ??= {};
+    if (this.detailsBusy?.[key] || Date.now() - (this.details[key]?.at ?? 0) < 3000) return;
+    (this.detailsBusy ??= {})[key] = true;
+    cx.spawn(async cx => {
+      try { this.details[key] = { ...(await machineDetails(name)), at: Date.now() }; }
+      finally { this.detailsBusy[key] = false; cx.notify(); }
+    });
+  }
+
+  detailsEnter(key, cx) {
+    const OPEN_AFTER = 450, LIVE = 400;
+    this.hot = key;
+    if (this.muted === key) return;
+    this.detailsTimer?.cancel();
+    if (this.detailsKey || Date.now() - (this.detailsClosed ?? 0) < LIVE) { this.detailsKey = key; cx.notify(); return; }
+    this.detailsTimer = cx.timer.after(OPEN_AFTER, cx => { if (this.hot === key && !this.drag?.moved && !this.mdrag?.moved) { this.detailsKey = key; cx.notify(); } });
+  }
+
+  /** Closes a little after the pointer has left both the row and its card. */
+  detailsLeave(key, cx) {
+    if (this.hot === key) this.hot = null;
+    cx.timer.after(150, cx => {
+      if (this.detailsKey !== key || this.hot === key || this.overCard === key) return;
+      this.detailsKey = null; this.detailsClosed = Date.now(); cx.notify();
+    });
+  }
+
+  /**
+   * The card, hung from the row's top-right corner (the row must be relative), while it's the one up: `edge` px
+   * further, the row's distance from the sidebar's edge, so the card sits right against the sidebar.
+   */
+  hang(key, card, edge = 8) {
+    return Popup.new(`details-${key}`, div()).absolute().top(-1).right(-1).size(1)
+      .when(this.detailsKey === key && !this.drag?.moved && !this.mdrag?.moved, pop => pop.content(div().id(`details-hover-${key}`).pl(edge)
+        .on_hover((on, cx) => { if (on) this.overCard = key; else { if (this.overCard === key) this.overCard = null; this.detailsLeave(key, cx); } })
+        .child(card)));
+  }
+
+  /**
+   * A machine's band (its header, and in Classic its rings); resting on it shows its details beside the sidebar, level
+   * with it.
+   */
+  machineCard(t, machine, trigger, edge = 8) {
+    const key = `m:${machine.name ?? "@local"}`;
+    return div().id(`mtrig-${key}`).relative().w_full()
+      .on_hover((on, cx) => {
+        if (on) { this.wantDetails(machine.name, cx); this.detailsEnter(key, cx); }
+        else { if (this.muted === key) this.muted = null; this.detailsLeave(key, cx); }
+      })
+      .child(trigger)
+      .child(this.hang(key, this.detailsCard(t, machine), edge));
+  }
+
+  /**
+   * A grid: each section a title (icon, name), then rows of label | bar | value in fixed columns, so every bar and
+   * value lines up.
+   */
+  detailsCard(t, machine) {
+    const key = machine.name ?? "@local";
+    const d = this.details?.[key];
+    const s = (shared("machine.stats") ?? {})[key];
+    const fresh = s && !s.error && Date.now() - s.at <= 15000;
+    const GB = 1024 ** 3;
+    const gb = b => b == null ? "?" : (b / GB >= 100 ? Math.round(b / GB) : (b / GB).toFixed(1));
+    const ok = v => Number.isFinite(v);
+    const WARN = "#e8823a", CRIT = "#d88179";
+    const level = (v, warn, crit) => v >= crit ? CRIT : v >= warn ? WARN : t.accent;
+    const BAR = 148, LABEL = 44, VALUE = 90;
+    const row = (label, fill, color, value) => h_flex().w_full().pl(18).gap(8).items_center().h(18)
+      .child(div().w(LABEL).flex_none().text_size(11).text_color(t.dim).child(label))
+      .child(div().w(BAR).h(4).flex_none().rounded_full().bg(t.border)
+        .child(div().h_full().rounded_full().w(ok(fill) ? Math.max(2, Math.round(BAR * Math.max(0, Math.min(100, fill)) / 100)) : 0).bg(color)))
+      .child(h_flex().w(VALUE).flex_none().justify_end().text_size(11).text_color(color === t.accent ? t.muted : color).child(value));
+    const pct = v => ok(v) ? `${Math.round(v)}%` : "\u2013";
+    const usage = (label, v, size) => row(label, v, ok(v) ? level(v, 80, 95) : t.dim, size ?? pct(v));
+    const temp = c => ok(c) ? row("Temp", c, level(c, 70, 85), `${Math.round(c)}\u00b0C`) : null;
+    const section = (icon, title, ...rows) => v_flex().w_full().gap(3)
+      .child(h_flex().w_full().gap(6).items_center()
+        .child(svg(`mods/pond-sidebar/stats/${icon}.svg`).size(12).flex_none().text_color(t.muted))
+        .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(title)))
+      .children(rows.filter(Boolean));
+    const note = text => div().pl(18).text_size(11).text_color(t.dim).truncate().child(text);
+    const up = sec => { if (!ok(sec)) return ""; const m = Math.floor(sec / 60), h = Math.floor(m / 60), dd = Math.floor(h / 24); return dd ? `up ${dd}d ${h % 24}h` : h ? `up ${h}h ${m % 60}m` : `up ${m}m`; };
+    const card = v_flex().w(340).p(12).gap(10).rounded(10).border_1().border_color(t.border).bg(t.popover ?? t.raised).text_size(12).shadow_md()
+      .child(h_flex().gap(10).items_center()
+        .child(svg(this.machineIcon(machine)).size(26).flex_none().text_color(t.muted))
+        .child(v_flex().flex_1().min_w(0).gap(1)
+          .child(div().text_size(13.5).font_semibold().text_color(t.foreground).child(machine.name || localMachineLabel()))
+          .when(Boolean(d && !d.error), el => el.child(div().text_size(11).text_color(t.dim).truncate().child([d.os, up(d.uptime)].filter(Boolean).join(" \u00b7 "))))));
+    if (!d) return card.child(div().text_color(t.dim).child("Reading details\u2026"));
+    if (d.error) return card.child(div().text_color(t.dim).child(d.error));
+    const used = d.memory.total && d.memory.available != null ? d.memory.total - d.memory.available : null;
+    const memPct = fresh && ok(s.memory) ? s.memory : used != null ? 100 * used / d.memory.total : null;
+    const memUsed = used ?? (ok(memPct) && d.memory.total ? d.memory.total * memPct / 100 : null);
+    return card
+      .child(section("cpu", d.cpu.model || "CPU",
+        usage("Load", fresh ? s.cpu : null),
+        temp(d.cpu.temp),
+        note([d.cpu.cores && `${d.cpu.cores} cores`, d.cpu.threads && `${d.cpu.threads} threads`, d.load && `load ${d.load.map(x => x?.toFixed(2)).join(" ")}`].filter(Boolean).join(" \u00b7 "))))
+      .child(section("ram", "Memory", usage("Used", memPct, `${gb(memUsed)} / ${gb(d.memory.total)} GB`)))
+      .children(d.gpus.filter(g => g.load != null || g.temp != null || g.memTotal).map(g => section("gpu", g.name,
+        ok(g.load) ? usage("Load", g.load) : null,
+        g.memTotal ? usage("VRAM", 100 * g.memUsed / g.memTotal, `${gb(g.memUsed)} / ${gb(g.memTotal)} GB`) : null,
+        temp(g.temp),
+        ok(g.power) ? row("Power", g.powerLimit ? 100 * g.power / g.powerLimit : null, g.powerLimit ? level(100 * g.power / g.powerLimit, 85, 98) : t.dim,
+          g.powerLimit ? `${Math.round(g.power)} / ${Math.round(g.powerLimit)} W` : `${Math.round(g.power)} W`) : null)))
+      .children(d.disks.map(k => section("usage", `Disk ${k.mount}`, usage("Used", 100 * (k.total - k.free) / k.total, `${gb(k.total - k.free)} / ${gb(k.total)} GB`))))
+      .when(Boolean(d.board), el => el.child(section("board", "Board", note(d.board))));
+  }
+
+  /**
+   * Status and for how long, its turn, where it runs (machine, space and tab, folder, branch), context used, and its
+   * sub-agents.
+   */
+  agentDetails(t, a, all, name) {
+    const now = Date.now();
+    const term = all.find(x => x.address === a.address);
+    const since = term?.status_ms ?? this.since(a);
+    const word = { working: "Working", blocked: "Needs you", done: "Finished \u00b7 not yet seen", idle: "Idle" };
+    const color = { working: t.working, blocked: t.blocked, done: t.ansi2 ?? t.done }[a.status] ?? t.muted;
+    const machine = a.address.includes("/") ? a.address.split("/")[0] : localMachineLabel();
+    const tab = spaces().flatMap(s => s.tabs).find(x => x.id === a.tab);
+    const folder = agentFolder(a, tab ? lead(tab) : null, all);
+    const branch = paneBranch(a);
+    const context = (shared("agents.context") ?? {})[a.address];
+    const used = Number.isFinite(context?.percent) ? Math.max(0, Math.min(100, context.percent)) : null;
+    const LABEL = 64;
+    const row = (label, value) => h_flex().w_full().gap(8).items_start()
+      .child(div().w(LABEL).flex_none().text_size(11).text_color(t.dim).child(label))
+      .child(div().flex_1().min_w(0).whitespace_normal().text_color(t.muted).child(value));
+    const kids = this.tree(all, a.address);
+    return v_flex().w(340).p(12).gap(8).rounded(10).border_1().border_color(t.border).bg(t.popover ?? t.raised).text_size(12).shadow_md()
+      .child(h_flex().w_full().gap(10).items_center()
+        .child(!classic()
+          ? figureFor(a.space_name, a.status, 24, Date.now() - this.since(a))
+          : (icon(a.program, 26, t.muted) ?? svg("mods/pond-sidebar/icons/bot.svg").size(26).flex_none().text_color(t.muted)))
+        .child(v_flex().flex_1().min_w(0).gap(1)
+          .child(div().text_size(13.5).font_semibold().text_color(t.foreground).whitespace_normal().child(name || a.program?.name || a.address))
+          .child(div().text_size(11).text_color(t.dim).truncate().child([a.program?.name, machine].filter(Boolean).join(" \u00b7 ")))))
+      .child(row("Status", h_flex().gap(6).items_center()
+        .child(div().text_color(color).child(word[a.status] ?? a.status))
+        .when(Boolean(since), el => el.child(div().text_color(t.dim).child(`\u00b7 ${duration(now - since)}`)))
+        .when(Number.isFinite(term?.turn), el => el.child(div().text_color(t.dim).child(`\u00b7 turn ${term.turn}`)))))
+      .child(row("Space", [a.space_name, a.tab_name || (Number.isFinite(a.tab_index) ? `tab ${a.tab_index + 1}` : "")].filter(Boolean).join(" / ")))
+      .when(Boolean(term?.labels?.["herdr.claude-profile"]), el => {
+        const p = term.labels["herdr.claude-profile"], gateway = Boolean(this.accounts?.[p]?.gateway);
+        return el.child(row("Profile", h_flex().gap(6).items_center()
+          .child(accountBadge(t, accountLabel(this.accounts, p), gateway))
+          .child(div().text_color(t.dim).child(gateway ? "gateway" : "plan login"))));
+      })
+      .when(Boolean(term?.labels?.["claude.model"]), el => el.child(row("Model", term.labels["claude.model"])))
+      .when(Boolean(folder), el => el.child(row("Folder", folder)))
+      .when(Boolean(branch), el => el.child(row("Branch", branch)))
+      .child(row("Context", used == null ? "No reading yet" : h_flex().gap(8).items_center()
+        .child(contextBar(t, used, 148, 4))
+        .child(div().text_size(11).child(contextText(used)))))
+      .when(kids.length > 0, el => el.child(v_flex().w_full().gap(4).pt(2)
+        .child(div().text_size(11).text_color(t.dim).child(`Sub-agents \u00b7 ${kids.length}`))
+        .children(kids.map(({ t: k, lines }) => {
+          const st = kidStatus(k, this.listed);
+          return h_flex().w_full().gap(6).items_center().pl(Math.max(0, lines.length - 1) * 12)
+            .child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(k.name || k.template || k.program?.name || k.address))
+            .child(div().flex_none().text_size(11).text_color({ working: t.working, blocked: t.blocked }[st] ?? t.dim)
+              .child([word[st] ?? st, k.status_ms ? duration(now - k.status_ms) : ""].filter(Boolean).join(" \u00b7 ")));
+        }))));
+  }
+
+  /**
+   * Cards whose place within their machine changed since the last draw: each starts offset by the places it moved
+   * (CARD px apiece), with a fresh id so its transition starts there, and slides to 0 a frame later.
+   */
+  noticeMoves(list, cx) {
+    const CARD = 50;
+    const machineOf = x => x.includes("/") ? x.split("/")[0] : "";
+    const place = new Map(), count = {};
+    for (const a of list) { const m = machineOf(a.address); place.set(a.address, count[m] = (count[m] ?? -1) + 1); }
+    const before = this.places;
+    this.places = place;
+    if (!before) return;
+    let moved = false;
+    for (const [address, now] of place) {
+      const was = before.get(address);
+      if (was === undefined || was === now) continue;
+      (this.slides ??= {})[address] = (was - now) * CARD;
+      (this.moveGen ??= {})[address] = (this.moveGen[address] ?? 0) + 1;
+      moved = true;
+    }
+    if (moved) cx.timer.after(32, cx => { this.slides = {}; cx.notify(); });
+  }
+
+  /** The rail band's CPU reading: its ring alone, centred under the machine's icon, in the open rings row's 22 px. */
+  railCpu(t, machine) {
+    const sample = (shared("machine.stats") ?? {})[machine ?? "@local"];
+    const value = sample && !sample.error && Date.now() - sample.at <= 15000 && Number.isFinite(sample.cpu) ? sample.cpu : null;
+    const name = machine ?? localMachineLabel();
+    return h_flex().h(22).flex_none().items_center().justify_center()
+      .child(div().id(`rail-cpu-${machine ?? "local"}`).tooltip(`${name} · CPU: ${value == null ? "unavailable" : `${Math.round(value)}%`}`)
+        .child(svg(`mods/pond-sidebar/stats/rings/ring-${value == null ? 0 : Math.max(0, Math.min(100, Math.round(value)))}.svg`).size(12).flex_none()
+          .text_color(value == null ? t.dim : t.accent)));
+  }
+
+  toTop(address) {
+    this.order = [address, ...this.order.filter(x => x !== address)];
+    localStorage.setItem("order", JSON.stringify(this.order));
+  }
+
+  /** A dragged agent, put before (or after) another. */
+  moveTo(address, target, after) {
+    if (address === target) return;
+    const rest = this.order.filter(x => x !== address);
+    const at = rest.indexOf(target);
+    if (at < 0) return;
+    rest.splice(after ? at + 1 : at, 0, address);
+    this.order = rest;
+    localStorage.setItem("order", JSON.stringify(this.order));
+  }
+
+  /** Machines in the order dragged to, the ones never dragged after them in Herdr's order. */
+  sortMachines(list) {
+    const at = name => { const i = this.machineOrder.indexOf(name ?? ""); return i < 0 ? Infinity : i; };
+    return list.map((m, i) => [m, i]).sort(([a, i], [b, j]) => at(a.name) - at(b.name) || i - j).map(([m]) => m);
+  }
+
+  /** A dragged machine, put before (or after) another, and kept. */
+  moveMachine(key, target, after) {
+    if (key === target) return;
+    const names = this.sortMachines(machines().filter(m => !m.temporary)).map(m => m.name ?? "");
+    const rest = names.filter(x => x !== key);
+    const at = rest.indexOf(target);
+    if (at < 0) return;
+    rest.splice(after ? at + 1 : at, 0, key);
+    this.machineOrder = rest;
+    localStorage.setItem("machines.order", JSON.stringify(rest));
+  }
+
+  /**
+   * A machine's rows as drawn, or in the Classic style one box: its band on top, a rule, then its agents and terminals.
+   */
+  boxed(t, g, index, items) {
+    if (!classic() || !g.machine) return items;
+    const [band, ...rest] = items;
+    return [
+      ...(index > 0 ? [div().h(12).flex_none()] : []),
+      v_flex().w_full().flex_none().rounded(10).border_1().border_color(t.border).overflow_hidden()
+        .child(band)
+        .when(rest.length > 0, el => el.child(div().h(1).flex_none().bg(t.border)).child(v_flex().w_full().p(4).children(rest))),
+    ];
+  }
+
+  setPins(pins) {
+    this.pins = pins;
+    localStorage.setItem("pins", JSON.stringify(pins));
+  }
+
+  /** Drops pins of agents that ended. */
+  prunePins(all) {
+    const machine = (addr) => (addr.includes("/") ? addr.split("/")[0] : "");
+    const heard = new Set(all.map((k) => machine(k.address)));
+    const live = new Set(all.filter((k) => k.state === "live").map((k) => k.address));
+    const kept = this.pins.filter((p) => !heard.has(machine(p)) || live.has(p));
+    if (kept.length !== this.pins.length) this.setPins(kept);
+  }
+
+  since(a) {
+    return this.changed[a.address]?.at ?? 0;
+  }
+
+  refreshHosts(cx) {
+    cx.spawn(async cx => {
+      try {
+        const r = await hc(["machine", "ls", "--json"]);
+        if (r.code === 0) this.hosts = Object.fromEntries((JSON.parse(r.stdout).machines ?? []).map(m => [m.name, m]));
+      } catch {}
+      cx.notify();
+    });
+  }
+
+  /** Retry a machine that isn't connected. */
+  retry(name, cx) {
+    if (this.retrying[name]?.busy) return;
+    this.retrying[name] = { busy: true };
+    cx.notify();
+    cx.spawn(async cx => {
+      const failed = message => notify({ title: `Couldn't reconnect to ${name}`, body: message, level: "error" });
+      try {
+        const r = await hc(["machine", "login", name, "--json"]);
+        let error = null;
+        if (r.code !== 0) {
+          try { error = JSON.parse(r.stdout || r.stderr).error ?? null; } catch {}
+          error ??= { message: (r.stderr || r.stdout || "hc machine login failed").trim() };
+        }
+        if (!error) notify({ title: `Reconnected to ${name}`, level: "success", timeout: 4000 });
+        else if (/terminal/i.test(error.message ?? "") || /types the password/i.test(error.hint ?? "")) await this.loginInTerminal(name, failed);
+        else failed(error.message);
+      } catch (e) {
+        failed(String(e?.message ?? e));
+      }
+      this.retrying[name] = { busy: false };
+      this.refreshHosts(cx);
+      cx.notify();
+    });
+  }
+
+  async loginInTerminal(name, failed) {
+    const slug = name.toLowerCase().replace(/[^a-z0-9_-]/g, "-").slice(0, 20);
+    const r = await hc(["run", "--bg", "--json", "--no-parent", "--name", `login-${slug}-${Date.now().toString(36).slice(-5)}`,
+      "--", "hc", "machine", "login", name]).catch(() => null);
+    let address = null;
+    try { address = r?.code === 0 ? JSON.parse(r.stdout).address : null; } catch {}
+    if (!address) return failed(`Couldn't open a terminal for it. Run \`hc machine login ${name}\` in one.`);
+    openOverlay({
+      kind: "dialog",
+      key: `machine-login-${name}`,
+      width: 640,
+      height: 300,
+      layout: {
+        type: "column",
+        children: [
+          { type: "block", size: { px: 34 }, content: { mod: "pond-sidebar", props: { loginBar: name, terminal: address } } },
+          { type: "block", content: { terminal: address } },
+        ],
+      },
+    });
+  }
+
+  /** The login dialog's title bar. */
+  loginBar(t) {
+    const { loginBar: name, terminal } = props();
+    return h_flex()
+      .size_full()
+      .px(12)
+      .gap(8)
+      .items_center()
+      .bg(t.chrome ?? t.background)
+      .border_b(1)
+      .border_color(t.border)
+      .text_size(12)
+      .child(svg("mods/pond-sidebar/icons/hard-drive.svg").size(13).flex_none().text_color(t.dim))
+      .child(div().flex_none().text_color(t.foreground).font_medium().child(`Log in to ${name}`))
+      .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child("Type the password or code below; this closes when it connects."))
+      .child(div()
+        .id("login-close")
+        .size(20)
+        .flex_none()
+        .rounded(5)
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_color(t.dim)
+        .hover(s => s.bg(t.hover).text_color(t.foreground))
+        .tooltip("Cancel")
+        .on_click(() => {
+          run("terminal.kill", { terminal });
+          closeOverlay(props().overlay);
+        })
+        .child(svg("mods/pond-sidebar/icons/x.svg").size(12)));
+  }
+
+  peek(addr) {
+    run("terminal.peek", { terminal: addr });
+  }
+
+  /** Live sub-agents of `addr`, depth first, each with the tree lines in front of it. */
+  tree(all, addr, lead = []) {
+    const kids = all.filter((k) => k.parent === addr && k.state === "live");
+    return kids.flatMap((k, i) => {
+      const last = i === kids.length - 1;
+      return [
+        { t: k, lines: [...lead, last ? "└" : "├"] },
+        ...this.tree(all, k.address, [...lead, last ? "" : "│"]),
+      ];
+    });
+  }
+
+  subRow(t, s, shown, compact, space = null) {
+    const k = s.t;
+    const st = kidStatus(k, this.listed);
+    const on = k.address === shown;
+    const hops = false;
+    const bright = on || (st !== "idle" && !hops);
+    const color = on ? t.accent : compact && bright ? t.foreground : t.muted;
+    const ring = this.hoveredSub === k.address ? t.hover : on ? t.raised : t.surface;
+    if (hops) this.hopping = true;
+    const pic = classic() ? icon(k.program, 14, color)
+      : figureFor(space, st, SUB_FIG_H, 0);
+    const name = k.name || k.template || k.program?.name || k.address;
+    const box = h_flex().id(`sub-${k.address}`).relative().h(24).flex_none().items_center().rounded(8)
+      .when(on, (el) => el.bg(t.raised)).hover((s) => s.bg(t.hover)).cursor_pointer()
+      .on_hover((over, cx) => {
+        if (over) this.hoveredSub = k.address; else if (this.hoveredSub === k.address) this.hoveredSub = null;
+        cx.notify();
+      })
+      .on_click(() => this.peek(k.address));
+    if (compact) return box.justify_center().tooltip(name).child(pic ?? this.status(t, { status: st }, true));
+    return box
+      .pl(classic() ? 17 * s.lines.length + 17 : 53 + 23 * (s.lines.length - 1))
+      .pr(8)
+      .text_size(12)
+      .children(classic()
+        ? s.lines.flatMap((l, j) => l ? [div().absolute().left(17 + 17 * j).top(0).w(1).bg(mix(t.dim, t.surface, 0.4))
+          .when(l === "└", el => el.h(13)).when(l !== "└", el => el.bottom(0))] : [])
+        : s.lines.flatMap((l, j) => treeLines(t, 46 + 23 * j, 12, l === "│" || l === "├", l === "├" || l === "└", 0, 7)))
+      .when(Boolean(pic), el => el.child(div().mr(classic() ? 8 : 10).child(pic)))
+      .child(div().flex_1().truncate().text_color(bright ? t.foreground : t.muted).child(name))
+      .child(hops ? div().size(14).flex_none() : this.status(t, { status: st }));
+  }
+
+  /** The machine's panes that aren't agents: a shell, a dev server, lazygit. */
+  plainTerminals(machine) {
+    const key = machine.name ?? "";
+    const agentPanes = new Set(agents().map((a) => a.pane).filter(Boolean));
+    return panes().filter((p) => p.terminal && !agentPanes.has(p.pane)
+      && (p.terminal.includes("/") ? p.terminal.split("/")[0] : "") === key);
+  }
+
+  /**
+   * The machine's plain terminals at the bottom of its group, under its agents, a row each: the program's icon in the
+   * agent cards' icon column (their 2 px stripe and 8 px padding), the program running now, its folder. A click focuses
+   * the pane and shows the Terminal view, as a shell has no chat. In Classic their count is in the machine's header. On
+   * the rail (compact) just the icon, centred as the agents' are, with the rest in its tooltip.
+   */
+  terminalRows(t, machine, compact = false, keep = null) {
+    const shown = focused()?.pane;
+    return this.plainTerminals(machine).filter((p) => !keep || keep(p)).map((p) => {
+      const on = p.pane === shown, name = p.program?.name || p.title || "shell", where = folderName(p.cwd);
+      // Pond: a Claude terminal (an agent whose status stopped reporting, a resumed session) gets the duck, as its tab does.
+      const claude = p.program?.agent && /claude/i.test(p.program?.name ?? "");
+      const pic = claude ? duck(p.status, 16, 0)
+        : icon(p.program, 16, on ? t.accent : t.muted) ?? svg("mods/pond-sidebar/icons/terminal.svg").size(15).flex_none().text_color(on ? t.accent : t.muted);
+      const open = () => {
+        run("pane.focus", { pane: p.pane });
+        if (find(layout(), "chat-view")) run("layout.select", { stack: "chat-view", child: "terminal-panel" });
+      };
+      const box = h_flex().id(`term-${p.pane}`).h(28).flex_none().items_center().rounded(6).border_l(2)
+        .border_color(on && compact ? t.accent : t.surface).when(on, (el) => el.bg(compact ? t.selected : t.raised))
+        .hover((s) => s.bg(t.hover)).cursor_pointer()
+        .tooltip([name, p.title && p.title !== name ? p.title : "", p.cwd].filter(Boolean).join(" · "))
+        .on_click(open);
+      if (compact) return box.justify_center().pr(2).child(h_flex().w(16).flex_none().justify_center().child(pic));
+      return box.pl(8).pr(8).gap(10).text_size(12.5)
+        .child(h_flex().size(16).flex_none().items_center().justify_center().child(pic))
+        .child(div().flex_none().text_color(on ? t.foreground : t.muted).child(name))
+        .when(Boolean(where), (el) => el.child(div().flex_1().min_w(0).truncate().text_size(11.5).text_color(t.dim).child(where)));
+    });
+  }
+
+  /**
+   * An agent's status mark (compact: a ! for blocked, under a "Needs you" header); hovering any of them gives the
+   * context window used.
+   */
+  status(t, a, compact = false) {
+    const context = a.address ? (shared('agents.context') ?? {})[a.address] : null;
+    const known = Number.isFinite(context?.percent);
+    const percent = known ? Math.max(0, Math.min(100, context.percent)) : 0;
+    const state = { working: "Working", done: "Finished · not yet viewed", blocked: "Needs you" }[a.status];
+    const tip = a.address ? `Context: ${known ? contextText(percent) : "unavailable"}${state ? ` · ${state}` : ""}` : state;
+    const mark = el => div().size(14).flex_none().flex().items_center().justify_center().when(Boolean(tip), d => d.tooltip(tip)).child(el);
+    if (a.status === "working") return mark(svg("mods/pond-sidebar/icons/spinner.svg").size(15).flex_none().text_color(t.working).spin(900));
+    if (a.status === "done") return mark(svg("mods/pond-sidebar/icons/circle-check.svg").size(13).flex_none().text_color(t.ansi2 ?? t.done));
+    if (a.status === "blocked" && compact) return mark(div().size(14).rounded(4).bg(t.blocked + "26").text_size(10.5).font_bold().text_color(t.blocked).flex().items_center().justify_center().child("!"));
+    if (a.status === "blocked") return div().flex_none().px(6).h(18).rounded(5).bg(t.blocked + "26").text_size(10.5).font_semibold().text_color(t.blocked).flex().items_center()
+      .when(Boolean(tip), d => d.tooltip(tip)).child("Needs you");
+    if (compact) return (known ? contextBar(t, percent, 14) : div().w(14).h(3).flex_none().rounded_full().bg(t.border)).when(Boolean(tip), d => d.tooltip(tip));
+    return div().size(14).flex_none();
+  }
+
+  /** The New space dialog: pick a folder, then the agent (or a plain terminal) to start in it. */
+  newSpace(t) {
+    const tilde = (p) => p && p.startsWith(home()) ? "~" + p.slice(home().length) : p;
+    const close = () => closeOverlay(props().overlay);
+    const create = (agent) => {
+      close();
+      run("space.new", { folder: this.nsFolder, ...(agent ? { argv: agent.run } : {}), focus: true });
+    };
+    const row = (id, icon, name, hint, action) => h_flex().id(id).h(32).px(9).gap(9).flex_none().items_center().rounded(7)
+      .text_size(12.8).text_color(t.foreground).cursor_pointer().hover((s) => s.bg(t.selected))
+      .on_click(action)
+      .child(icon).child(div().flex_1().min_w(0).truncate().child(name))
+      .when(Boolean(hint), (el) => el.child(div().text_size(11).text_color(t.dim).child(hint)));
+    const agents = this.nsAgents ?? [];
+    return v_flex().size_full().min_h(0).p(16).gap(12).bg(t.popover).text_size(13)
+      .child(h_flex().items_center().gap(8)
+        .child(div().flex_1().text_size(15).font_semibold().text_color(t.foreground).child("New space"))
+        .child(div().id("ns-close").size(22).flex_none().flex().items_center().justify_center().rounded(5).cursor_pointer()
+          .text_color(t.dim).hover((s) => s.bg(t.hover).text_color(t.foreground)).on_click(close).child("×")))
+      .child(div().text_size(11.5).text_color(t.dim).child("Pick a folder, then what to start in it."))
+      .child(h_flex().gap(9).items_center().p(9).rounded(8).bg(t.raised)
+        .child(svg("mods/pond-sidebar/icons/folder.svg").size(14).flex_none().text_color(t.muted))
+        .child(div().flex_1().min_w(0).truncate().text_size(12).text_color(t.foreground).child(tilde(this.nsFolder)))
+        .child(div().id("ns-folder").h(24).px(9).flex_none().flex().items_center().rounded(6).cursor_pointer()
+          .border_1().border_color(t.input).text_size(11.5).text_color(t.muted).hover((s) => s.bg(t.hover).text_color(t.foreground))
+          .on_click((_e, cx) => cx.spawn(async (cx) => {
+            const p = await pickFolder({ prompt: "Choose the new space's folder" });
+            if (p) { this.nsFolder = p; cx.notify(); }
+          }))
+          .child("Choose…")))
+      .child(div().text_size(10.5).font_semibold().text_color(t.dim).child("START WITH"))
+      .child(v_flex().flex_1().min_h(0).gap(2).overflow_y_scrollbar()
+        .child(row("ns-terminal", svg("icons/shell.svg").size(14).text_color(t.foreground), "Terminal", "", () => create(null)))
+        .when(this.nsLoading, (el) => el.child(div().px(9).py(8).text_size(11.5).text_color(t.dim).child("Checking installed agents…")))
+        .when(!this.nsLoading && agents.length === 0, (el) => el.child(div().px(9).py(8).text_size(11.5).text_color(t.dim).child("No launchable agents found; Terminal still works.")))
+        .children(agents.map((a) => row(`ns-${a.key}`, a.tint ? svg(a.icon).size(14).text_color(t.foreground) : image(a.icon).size(14), a.name, "", () => create(a)))))
+      .child(h_flex().justify_end()
+        .child(div().id("ns-cancel").h(30).px(12).flex().items_center().rounded(7).cursor_pointer().border_1().border_color(t.border)
+          .text_size(12).text_color(t.foreground).hover((s) => s.bg(t.hover)).on_click(close).child("Cancel")));
+  }
+
+  render(cx) {
+    const t = theme();
+    if (props()?.loginBar) return this.loginBar(t);
+    if (props()?.newSpace) return this.newSpace(t);
+    if (this.menu) return this.menu.render();
+    const collapsed = narrow();
+    this.hopping = false;
+    this.hopSeen = new Set();
+    let list = agents();
+    this.listed = new Map(list.map((a) => [a.address, a.status]));
+    const all = terminals();
+    const shown = focused()?.agent;
+    const now = Date.now();
+    this.track(list, now);
+    const at = new Map(this.order.map((x, i) => [x, i]));
+    list = [...list].sort((x, y) => (at.get(x.address) ?? -1) - (at.get(y.address) ?? -1));
+    this.prunePins(all);
+    const pinned = this.pins.map((p) => list.find((a) => a.address === p)).filter(Boolean);
+    const rest = list.filter((a) => !this.pins.includes(a.address));
+    list = [...pinned, ...rest];
+    this.noticeMoves(list, cx);
+
+    const withKids = (a, i) => {
+      const subs = this.tree(all, a.address);
+      const r = row(a, i, subs);
+      if (this.folded.has(a.address)) return [r];
+      return [r, ...subs.map((s) => this.subRow(t, s, shown, collapsed, a.space_name))];
+    };
+
+    /** The fold chevron; folded, the count too, colored by the most urgent one. */
+    const fold = (a, subs) => {
+      const sts = subs.map((s) => kidStatus(s.t, this.listed));
+      const top = sts.reduce((m, s) => ((RANK[s] ?? 0) > (RANK[m] ?? 0) ? s : m), null);
+      const open = !this.folded.has(a.address);
+      return div()
+        .id(`fold-${a.address}`)
+        .h(18)
+        .px(3)
+        .gap(3)
+        .flex()
+        .items_center()
+        .rounded(4)
+        .text_size(11)
+        .text_color(open ? t.dim : (t[top] ?? t.dim))
+        .cursor_pointer()
+        .hover((s) => s.bg(t.hover).text_color(t.foreground))
+        .on_click((_e, cx) => {
+          cx.stop_propagation();
+          open ? this.folded.add(a.address) : this.folded.delete(a.address);
+          cx.notify();
+        })
+        .child(svg(`mods/pond-sidebar/icons/chevron-${open ? "down" : "right"}.svg`).size(11).flex_none())
+        .when(!open, (el) => el.child(String(subs.length)));
+    };
+
+    const tabs = spaces().flatMap(s => s.tabs);
+    const label = (a) => {
+      const tab = tabs.find(tab => tab.id === a.tab);
+      const pane = tab ? lead(tab) : null;
+      const source = pane ?? { title: a.title, program: a.program, app: a.app };
+      // A tab someone renamed names its agent too, so the row and the tab bar carry the same name.
+      return (tab?.named ? tab.name : "") || harnessSessionTitle(source) || source.program?.name || folderName(pane?.cwd) || tab?.name || "";
+    };
+
+    /**
+     * With the Health bar context bars (Tree) the logo carries the status (agentPic): it hops in amber while working;
+     * a green check (finished, not yet looked at) or a red question mark (it needs you) sits above it. So the
+     * spinner, check and "Needs you" badge go, and on the rail its second line is always the health bar.
+     */
+    const row = (a, i, subs = []) => {
+      const logoStatus = false;   // Pond: the figure's mood shows the status; the marks on the right stay
+      const hops = logoStatus && a.status === "working", finished = logoStatus && a.status === "done", asks = logoStatus && a.status === "blocked";
+      const ring = this.hovered === a.address ? t.hover : a.focused ? t.selected : t.surface;
+      const iconColor = logoStatus ? (a.focused ? t.foreground : t.muted) : a.focused ? t.accent : t.muted;
+      if (hops) this.hopping = true;
+      const pic = classic() ? icon(a.program, 16, a.focused ? t.accent : t.muted)
+        : figureFor(a.space_name, a.status, FIG_H, Date.now() - this.since(a));
+      const idle = logoStatus ? !a.focused : a.status === "idle" && !a.focused;
+      const isPinned = this.pins.includes(a.address);
+      const pin = div()
+        .id(`pin-${a.address}`)
+        .size(14)
+        .flex_none()
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(4)
+        .text_color(t.dim)
+        .cursor_pointer()
+        .hover((s) => s.bg(t.hover).text_color(t.foreground))
+        .tooltip(isPinned ? "Unpin" : "Pin to the top")
+        .on_click((_e, cx) => {
+          cx.stop_propagation();
+          this.setPins(isPinned ? this.pins.filter((p) => p !== a.address) : [...this.pins, a.address]);
+          this.hovered = null;
+          cx.notify();
+        })
+        .child(svg(`mods/pond-sidebar/icons/${isPinned ? "pin-off" : "pin"}.svg`).size(12));
+      const full = isPinned;
+      const name = label(a) || a.space_name || "";
+      const profile = all.find((x) => x.address === a.address)?.labels?.["herdr.claude-profile"] ?? null;
+      const badge = profile ? accountBadge(t, accountLabel(this.accounts, profile), this.accounts?.[profile]?.gateway) : null;
+      // The model its status line last reported (claude.model, from pond-profiles' statusline hook).
+      const model = all.find((x) => x.address === a.address)?.labels?.["claude.model"] ?? null;
+      const tab = tabs.find(x => x.id === a.tab);
+      const folder = folderName(agentFolder(a, tab ? lead(tab) : null));
+      const branch = paneBranch(a);
+      const where = [
+        [folder !== name && folder !== a.space_name ? folder : "", "folder", t.dim],
+        [branch, "branch", t.accent],
+        [full && a.space_name !== name ? a.space_name : "", "layers", t.dim],
+      ].filter(([text]) => text);
+      const context = (shared("agents.context") ?? {})[a.address];
+      const used = Number.isFinite(context?.percent) ? Math.max(0, Math.min(100, context.percent)) : null;
+      const barWidth = pic ? 14 : 36;
+      const bar = used == null ? null : contextBar(t, used, barWidth).tooltip(`Context: ${contextText(used)}`);
+      const machineOf = x => x.includes("/") ? x.split("/")[0] : "";
+      const draggable = !isPinned;
+      const dragging = this.drag?.moved && this.drag.address === a.address;
+      const dropHere = this.drag?.moved && this.drop?.target === a.address;
+      const slide = this.slides?.[a.address];
+      const card = v_flex()
+        .id(`ag-${a.address}-${this.moveGen?.[a.address] ?? 0}`)
+        .relative()
+        .top(slide ?? 0)
+        .transition("top", { duration: 280, easing: "ease-out" })
+        .py(5)
+        .gap(1)
+        .flex_none()
+        .rounded(6)
+        .border_l(2).border_color(a.focused ? t.accent : t.surface)
+        .when(a.focused, (el) => el.bg(t.selected))
+        .when(dragging, (el) => el.opacity(0.45))
+        .cursor_pointer()
+        .hover((s) => s.bg(t.hover))
+        .on_hover((on, cx) => {
+          if (on) { this.hovered = a.address; this.detailsEnter(a.address, cx); }
+          else { if (this.hovered === a.address) this.hovered = null; this.detailsLeave(a.address, cx); }
+          cx.notify();
+        })
+        .child(this.hang(a.address, this.agentDetails(t, a, all, name)))
+        .when(draggable, el => el
+          .on_mouse_down("left", (e) => { this.drag = { address: a.address, machine: machineOf(a.address), y: e.position.y, moved: false }; this.drop = null; })
+          .on_mouse_move((e, cx) => {
+            const d = this.drag;
+            if (!d) return;
+            if (!d.moved && Math.abs(e.position.y - d.y) > 4) d.moved = true;
+            if (!d.moved) return;
+            const drop = d.address !== a.address && machineOf(a.address) === d.machine ? { target: a.address, after: e.local_position.y > 22 } : null;
+            if (drop?.target !== this.drop?.target || drop?.after !== this.drop?.after) { this.drop = drop; cx.notify(); }
+          })
+          .on_mouse_up("left", (_e, cx) => {
+            const d = this.drag;
+            if (d?.moved) {
+              if (this.drop) this.moveTo(d.address, this.drop.target, this.drop.after);
+              this.dragged = true;
+            }
+            this.drag = null; this.drop = null;
+            cx.notify();
+          }))
+        .on_click(() => {
+          if (this.dragged) { this.dragged = false; return; }
+          run("pane.focus", { pane: a.pane });
+        })
+        .when(dropHere, el => el.child(div().absolute().left(6).right(6).h(2).rounded_full().bg(t.accent).when(this.drop.after, d => d.bottom(-1)).when(!this.drop.after, d => d.top(-1))));
+      if (collapsed) {
+        return card.pr(2)
+          .child(h_flex().items_center().justify_center()
+            .child(h_flex().w(classic() ? 16 : FIG_W).flex_none().justify_center().when(Boolean(pic), el => el.child(pic)))
+            .child(div().w(0).overflow_hidden().child(" "))
+            .when(subs.length > 0 || (a.status === "blocked" && !asks), el => el.child(div().w(0).h(18).flex_none())))
+          .child(div().relative().w_full().text_size(11.5).child(div().w(0).overflow_hidden().child(" "))
+            .child(h_flex().absolute().top(0).bottom(0).left(0).right(0).items_center().justify_center()
+              .child(this.status(t, logoStatus ? { ...a, status: "idle" } : a, true))));
+      }
+      return card.px(8)
+        .child(h_flex().w_full().gap(8).items_center()
+          .when(Boolean(pic), el => el.child(div().id(`agent-fold-${a.address}`).ml(-2).mr(2)
+            .when(subs.length > 0, el => el.on_click((_e, cx) => {
+              cx.stop_propagation();
+              this.folded.has(a.address) ? this.folded.delete(a.address) : this.folded.add(a.address);
+              cx.notify();
+            })).child(pic)))
+          .child(div().flex_1().min_w(0).truncate().text_color(idle ? t.muted : t.foreground).child(name))
+          .when(Boolean(badge), el => el.child(badge))
+          .when(subs.length > 0, el => el.child(fold(a, subs)))
+          .child(this.hovered === a.address ? pin : hops || finished || asks ? div().size(14).flex_none() : this.status(t, a)))
+        .child(h_flex().w_full().gap(8).items_center().text_size(10.5).text_color(t.dim)
+          .when(Boolean(pic), el => el.child(h_flex().w(classic() ? 16 : FIG_W).flex_none().ml(-2).mr(2).justify_center().when(Boolean(bar), c => c.child(bar))))
+          .child(h_flex().flex_1().min_w(0).gap(6).items_center().overflow_hidden()
+            .children(where.map(([text, glyph, color]) => h_flex().gap(4).items_center()
+              .when(glyph === "folder", el => el.flex_none())
+              .when(glyph === "branch", el => el.flex_1().min_w(0))
+              .when(glyph !== "folder" && glyph !== "branch", el => el.min_w(0))
+              .child(svg(`mods/pond-sidebar/icons/${glyph}.svg`).size(10).flex_none().text_color(color))
+              .child(div().min_w(0).truncate().text_color(glyph === "branch" ? t.muted : color).child(text)))))
+          // The model at the right end, its right edge under the badge's (the 14 px status column follows); a long name
+          // ends in an ellipsis rather than pushing the branch out.
+          .when(Boolean(model), el => el.child(div().flex_shrink(1).min_w(0).max_w(120).truncate().text_color(t.muted).child(model)))
+          .when(Boolean(model) && !collapsed, el => el.child(div().w(14).flex_none()))
+          .when(!pic && Boolean(bar), el => el.child(bar)));
+    };
+
+    const allSpaces = spaces();
+    const spaceAt = new Map(allSpaces.map((sp, i) => [sp.id, i]));
+    const groups = pinned.length ? [{ id: "pinned", label: "Pinned", status: null, members: pinned }] : [];
+    for (const machine of this.sortMachines(machines())) {
+      const machineKey = machine.name ?? "";
+      groups.push({
+        id: `machine-${machineKey || "local"}`,
+        label: machine.name || localMachineLabel(),
+        status: null,
+        members: rest.filter(a => (a.address.includes("/") ? a.address.split("/")[0] : "") === machineKey)
+          .map((a, i) => [a, i]).sort(([x, i], [y, j]) => (spaceAt.get(x.space) ?? 1e9) - (spaceAt.get(y.space) ?? 1e9) || i - j).map(([a]) => a),
+        machine,
+      });
+    }
+    setAgentOrder(groups.flatMap(g => g.members).map(a => a.address));
+    this.machineTops = groups.filter(g => g.machine && g.members.length).map(g => ({ machine: g.machine.name ?? "", top: g.members[0].address }));
+
+    /**
+     * A machine without agents: what it is, or on the rail, in the same 26 px, a mark for it with the words in its
+     * tooltip: a dash for no agents, a spinner while connecting, a cross when offline or waiting for a login.
+     */
+    const empty = (g) => {
+      const ready = g.machine?.layout === "ready", loading = !ready && g.machine?.layout === "loading";
+      const text = ready ? "No agents" : this.hosts[g.machine?.name]?.state === "needs_login" ? "Needs login" : loading ? "Connecting…" : "Offline";
+      const mark = ready ? svg("mods/pond-sidebar/icons/minus.svg").size(12) : loading ? svg("mods/pond-sidebar/icons/spinner.svg").size(13).spin(900) : svg("mods/pond-sidebar/icons/x.svg").size(11);
+      return div().id(`empty-${g.id}`).h(26).flex_none().flex().items_center().text_size(11).text_color(t.dim)
+        .when(collapsed, el => el.justify_center().tooltip(text).child(mark.flex_none().text_color(t.dim)))
+        .when(!collapsed, el => el.pl(29).child(text));
+    };
+    /** A group's header: a machine's (inside its band, which folds it) or Pinned's (which folds itself). */
+    const header = (g) => {
+      const open = !this.folded.has(g.id);
+      const isMachine = Boolean(g.machine);
+      const top = g.members.reduce((m, a) => ((RANK[a.status] ?? 0) > (RANK[m] ?? 0) ? a.status : m), null);
+      // Same mark treatment as a folder row: a plain 14px icon, no circle behind it.
+      const machineMark = () => svg(this.headerIcon(g.machine)).size(14).flex_none().text_color(t.dim);
+      if (collapsed) {
+        return h_flex().id(g.id).h(30).pt(isMachine ? 6 : 8).flex_none().items_center().justify_center().cursor_pointer()
+          .tooltip(g.label)
+          .when(!isMachine, el => el.on_click((_e, cx) => { open ? this.folded.add(g.id) : this.folded.delete(g.id); cx.notify(); }))
+          .child(isMachine ? machineMark() : svg("mods/pond-sidebar/icons/pin.svg").size(12).flex_none().text_color(t.dim));
+      }
+      return h_flex()
+        .id(g.id)
+        .px(8)
+        .pt(8)
+        .h(30)
+        .flex_none()
+        .gap(6)
+        .items_center()
+        .text_size(11)
+        .font_medium()
+        .cursor_pointer()
+        .hover((s) => s.text_color(t.foreground))
+        .when(!isMachine, el => el.on_click((_e, cx) => {
+          open ? this.folded.add(g.id) : this.folded.delete(g.id);
+          cx.notify();
+        }))
+        .when(isMachine, el => el.gap(7).text_size(12.5).font_medium().pt(0).pl(8).pr(4).h(28).child(machineMark()))
+        .child(div().truncate().text_color(isMachine ? t.muted : t[g.status] ?? t.dim).child(g.label))
+        .when(isMachine && classic(), (el) => {
+          const n = this.plainTerminals(g.machine).length, count = (id, glyph, value, tip) => h_flex().id(id).gap(3).items_center()
+            .font_medium().text_size(11).text_color(t.dim).tooltip(tip)
+            .child(svg(`mods/pond-sidebar/icons/${glyph}.svg`).size(12).flex_none()).child(String(value));
+          return el.child(h_flex().gap(8).items_center()
+            .child(count(`agents-${g.id}`, "bot", g.members.length, `${g.members.length} agent${g.members.length === 1 ? "" : "s"}`))
+            .when(n > 0, (row) => row.child(count(`terms-${g.id}`, "terminal", n, `${n} terminal${n === 1 ? "" : "s"} besides the agents`))));
+        })
+        .when(!isMachine && !open, (el) => el.child(div().font_medium().text_size(11).text_color(t.dim).child(String(g.members.length))))
+        .child(div().flex_1())
+        .when(!open, (el) => el
+          .when(Boolean(top) && top !== "idle", (el) => el.child(this.status(t, { status: top }, true)))
+          .when(!isMachine, el => el.child(svg("mods/pond-sidebar/icons/chevron-right.svg").size(11).flex_none().text_color(t.dim))))
+        .when(isMachine, el => el.child(div().size(14).flex_none().flex().items_center().justify_center()
+          .tooltip(open ? "Fold this machine's agents" : "Show this machine's agents")
+          .child(svg(`mods/pond-sidebar/icons/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim))))
+        .when(isMachine && g.machine?.layout === "ready", el => el.child(div()
+          .id(`add-${g.id}`)
+          .size(14)
+          .flex_none()
+          .rounded(5)
+          .flex()
+          .items_center()
+          .justify_center()
+          .text_color(t.dim)
+          .hover(s => s.bg(t.hover).text_color(t.foreground))
+          .tooltip(`Add an agent on ${g.label}`)
+          .on_click((_e, cx) => {
+            cx.stop_propagation();
+            this.muted = `m:${g.machine.name ?? "@local"}`;
+            this.detailsTimer?.cancel();
+            if (this.detailsKey === this.muted) { this.detailsKey = null; this.detailsClosed = 0; }
+            cx.notify();
+            openOverlay({ mod: "pond-sidebar", kind: "popup", width: 280, height: 500, props: { newMenu: true, machine: g.machine.name } });
+          })
+          .child(svg("mods/pond-sidebar/icons/plus.svg").size(12))))
+        .when(isMachine && Boolean(g.machine?.name) && g.machine?.layout !== "ready", el => {
+          const name = g.machine.name;
+          const busy = Boolean(this.retrying[name]?.busy);
+          const state = (this.hosts[name]?.state ?? g.machine.layout).replace(/_/g, " ");
+          return el.child(div()
+            .id(`retry-${g.id}`)
+            .size(14)
+            .flex_none()
+            .rounded(5)
+            .flex()
+            .items_center()
+            .justify_center()
+            .text_color(busy ? t.working ?? t.dim : t.dim)
+            .hover(s => s.bg(t.hover).text_color(t.foreground))
+            .tooltip(busy ? `Reconnecting to ${name}…` : `${name}: ${state}. Click to reconnect.`)
+            .on_click((_e, cx) => {
+              cx.stop_propagation();
+              this.retry(name, cx);
+            })
+            .child(svg(`mods/pond-sidebar/icons/${busy ? "spinner" : "rotate-cw"}.svg`).size(busy ? 15 : 12)));
+        });
+    };
+    /** Pond: a space's row under its machine: the folder (space) name, its fold, a count while folded, + for a new tab. */
+    const folderHeader = (sp, members, nTerms) => {
+      const key = `space-${sp.id}`, open = !this.folded.has(key);
+      const top = members.reduce((m, a) => ((RANK[a.status] ?? 0) > (RANK[m] ?? 0) ? a.status : m), null);
+      return h_flex().id(key).h(28).flex_none().relative().pl(8).pr(4).gap(7).items_center().rounded(6).cursor_pointer()
+        .text_size(12.5).hover((st) => st.bg(t.hover))
+        .when(spaceDrag.shown?.id === sp.id, (el) => el.opacity(0.45))
+        .on_hover((on, cx) => {
+          const v = on ? sp.id : null;
+          if (this.hoveredSpace !== v) { this.hoveredSpace = v; cx.notify(); }
+        })
+        .on_mouse_down("left", (e) => { spaceMachine = sp.machine ?? ""; spaceDrag.press(sp.id, e); })
+        .on_mouse_move((e, cx) => { if (spaceMachine === (sp.machine ?? "") && spaceDrag.over(sp.id, e)) cx.notify(); })
+        .on_click((_e, cx) => {
+          if (spaceDrag.shown || this.spaceDragged) { this.spaceDragged = false; return; }
+          open ? this.folded.add(key) : this.folded.delete(key);
+          cx.notify();
+        })
+        .when(spaceDrag.shown?.target?.id === sp.id, (el) => el.child(div().absolute().left(6).right(6).h(2).rounded(1).bg(t.accent)
+          .when(spaceDrag.shown.target.after, (d) => d.bottom(-1)).when(!spaceDrag.shown.target.after, (d) => d.top(-1))))
+        .child(svg("mods/pond-sidebar/icons/folder.svg").size(14).flex_none().text_color(sp.active ? t.foreground : t.dim))
+        .child(div().flex_1().min_w(0).truncate().font_medium().text_color(sp.active ? t.foreground : t.muted).child(sp.name || "folder"))
+        .when(!open, (el) => el
+          .when(Boolean(top) && top !== "idle", (el) => el.child(this.status(t, { status: top }, true)))
+          .child(div().text_size(11).text_color(t.dim).child(String(members.length + nTerms))))
+        .when(this.hoveredSpace === sp.id, (el) => el.child(div().id(`remove-${key}`).size(16).flex_none().rounded(5).flex().items_center().justify_center()
+          .text_color(t.dim).hover((st) => st.bg(t.hover).text_color(t.blocked)).tooltip("Remove space")
+          .on_click((_e, cx) => {
+            cx.stop_propagation();
+            openOverlay({ mod: "confirm", kind: "dialog", width: 420, height: 190, props: {
+              title: "Remove space?",
+              detail: `"${sp.name || "This space"}" and its tabs will close. Its terminals will end.`,
+              command: { name: "space.close", args: { id: sp.id, confirmed: true } },
+            }});
+          })
+          .child(svg("mods/pond-sidebar/icons/x.svg").size(11))))
+        .child(div().size(16).flex_none().flex().items_center().justify_center()
+          .child(svg(`mods/pond-sidebar/icons/chevron-${open ? "down" : "right"}.svg`).size(11).flex_none().text_color(t.dim)))
+        .child(div().id(`add-${key}`).size(16).flex_none().rounded(5).flex().items_center().justify_center().text_color(t.dim)
+          .hover((st) => st.bg(t.hover).text_color(t.foreground))
+          .tooltip(`New tab in ${sp.name || "this space"}`)
+          .on_click((_e, cx) => { cx.stop_propagation(); run("tab.new", { space: sp.id }); })
+          .child(svg("mods/pond-sidebar/icons/plus.svg").size(11)));
+    };
+    /** Pond: a machine's agents and terminals, by space (folder), each hung from the machine's line. */
+    const byFolder = (g, machineWrap = true) => {
+      const machineKey = g.machine.name ?? "";
+      const tabSpace = new Map(allSpaces.flatMap((sp) => sp.tabs.map((tb) => [tb.id, sp.id])));
+      const mine = allSpaces.filter((sp) => (sp.machine ?? "") === machineKey);
+      const known = new Set(mine.map((sp) => sp.id));
+      const entries = mine.map((sp) => {
+        const members = g.members.filter((a) => a.space === sp.id);
+        const terms = this.terminalRows(t, g.machine, false, (p) => tabSpace.get(p.tab) === sp.id);
+        const key = `space-${sp.id}`;
+        const kids = this.folded.has(key) ? [] : [...members.map((a, i) => [withKids(a, i), 17]), ...terms.map((r) => [[r], 14])]
+          .flatMap(([rows, at], n, all) => underFolder(t, rows, n === all.length - 1, at));
+        return [[folderHeader(sp, members, terms.length), ...kids], 14];
+      });
+      // Agents whose space isn't listed for this machine (rare): on their own, as before.
+      const stray = g.members.filter((a) => !known.has(a.space)).map((a, i) => [withKids(a, i), 17]);
+      if (!machineWrap) {
+        // This machine's header is hidden (the only machine): the folders are the top-level groups.
+        const out = [];
+        entries.forEach(([rows], i) => { if (i) out.push(div().h(6).flex_none()); out.push(...rows); });
+        for (const [rows] of stray) out.push(...rows);
+        return out;
+      }
+      return [...entries, ...stray].flatMap(([rows, at], n, all) => underMachine(t, rows, n === all.length - 1, at));
+    };
+    const newSpace = (collapsed) => {
+      const plus = () => svg("mods/pond-sidebar/icons/plus.svg").size(14).flex_none().text_color(t.dim);
+      return h_flex().id("new-space").h(28).flex_none().mt(6).items_center().rounded(6).cursor_pointer()
+        .text_size(12).text_color(t.dim).hover((s) => s.bg(t.hover).text_color(t.foreground))
+        .tooltip("New space")
+        .on_click(() => openOverlay({ mod: "pond-sidebar", kind: "dialog", width: 440, height: 430, props: { newSpace: true } }))
+        .when(collapsed, (el) => el.justify_center().child(plus()))
+        .when(!collapsed, (el) => el.pl(8).pr(8).gap(7).child(plus()).child(div().child("New space")));
+    };
+
+    const rows = groups.flatMap((g, index) => {
+      const localOnly = !classic() && Boolean(g.machine) && !g.machine.name
+        && machines().filter(m => !m.temporary).length <= 1;
+      if (localOnly) {
+        // The local machine's header would only repeat the space names; the folders are the groups.
+        return [
+          ...(index > 0 ? [div().h(10).flex_none()] : []),
+          ...byFolder(g, false),
+        ];
+      }
+      return this.boxed(t, g, index, [
+        ...(index > 0 && !(classic() && g.machine) ? [div().h(20).flex_none()] : []),
+        ...(g.machine ? [this.machineCard(t, g.machine, v_flex().id(`band-${g.id}`).w_full().pb(3).rounded(8).border_1()
+          .when(classic(), el => el.rounded(0).bg(t.raised).border_color(t.raised).hover(s => s.bg(t.hover)))
+          .when(!classic(), el => el.border_color("#00000000").hover(s => s.bg(t.hover)))
+          .relative().cursor_pointer()
+          .on_mouse_down("left", (e) => { this.mdrag = { key: g.machine.name ?? "", y: e.position.y, moved: false }; this.mdrop = null; })
+          .on_mouse_move((e, cx) => {
+            const d = this.mdrag;
+            if (!d) return;
+            if (!d.moved && Math.abs(e.position.y - d.y) > 4) d.moved = true;
+            if (!d.moved) return;
+            const key = g.machine.name ?? "";
+            const drop = d.key !== key ? { target: key, after: e.local_position.y > 17 } : null;
+            if (drop?.target !== this.mdrop?.target || drop?.after !== this.mdrop?.after) { this.mdrop = drop; cx.notify(); }
+          })
+          .on_mouse_up("left", (_e, cx) => {
+            const d = this.mdrag;
+            if (d?.moved) {
+              if (this.mdrop) this.moveMachine(d.key, this.mdrop.target, this.mdrop.after);
+              this.mdragged = true;
+            }
+            this.mdrag = null; this.mdrop = null;
+            cx.notify();
+          })
+          .on_click((_e, cx) => {
+            if (this.mdragged) { this.mdragged = false; return; }
+            this.folded.has(g.id) ? this.folded.delete(g.id) : this.folded.add(g.id);
+            cx.notify();
+          })
+          .when(Boolean(this.mdrag?.moved) && this.mdrop?.target === (g.machine.name ?? ""), el => el.child(div().absolute().left(6).right(6).h(2).rounded_full().bg(t.accent)
+            .when(this.mdrop.after, d => d.bottom(-1)).when(!this.mdrop.after, d => d.top(-1))))
+          .child(header(g)).when(classic(), el => el.child(collapsed ? this.railCpu(t, g.machine.name ?? null) : statsFor(g.machine.name ?? null, t))))]
+          .map(card => classic() ? card : this.treeTop(t, g, collapsed, card)) : [header(g)]),
+        ...(this.folded.has(g.id) ? [] : !g.machine ? g.members.flatMap(withKids) : classic() ? [
+          ...(g.members.length ? g.members.flatMap(withKids) : [empty(g)]),
+          ...this.terminalRows(t, g.machine, collapsed),
+        ] : !collapsed ? [
+          ...(g.members.length || this.plainTerminals(g.machine).length ? [] : [empty(g)]),
+          ...byFolder(g),
+        ] : [
+          ...(g.members.length ? [] : [empty(g)]),
+          ...((terms) => [...g.members.map((a, i) => [withKids(a, i), 17]), ...terms.map(r => [[r], 14])]
+            .flatMap(([rows, at], n, all) => collapsed ? rows : underMachine(t, rows, n === all.length - 1, at)))(this.terminalRows(t, g.machine, collapsed)),
+        ]),
+      ]);
+    });
+    rows.push(newSpace(collapsed));
+
+    return v_flex()
+      .size_full()
+      .min_h(0)
+      .bg(t.surface)
+      .text_size(13)
+      .child(div().h(10).flex_none())
+      .when(list.length === 0 && !collapsed, (el) =>
+        el.child(div().px(12).text_size(12).text_color(t.dim).child("No agent status yet. Agents show up here when they report their status. Older versions and agents inside tmux may not.")),
+      )
+      .child(this.scrollArea(t, collapsed, rows))
+      ;
+  }
+
+  /**
+   * The list scrolls without a bar, and fades at the top (under the logo) and the bottom (over settings)
+   * wherever more is out of sight that way.
+   */
+  scrollArea(t, collapsed, rows) {
+    const max = Math.max(0, this.rowsH - this.viewH);
+    if (this.scrollY > max) this.scrollY = max;
+    const above = this.scrollY > 1, below = this.scrollY < max - 1;
+    const STEPS = 12;
+    const fade = top => v_flex().absolute().left(0).right(0).h(32).when(top, el => el.top(0)).when(!top, el => el.bottom(0))
+      .children(Array.from({ length: STEPS }, (_, i) => div().w_full().flex_1().bg(t.surface).opacity(top ? (STEPS - i) / STEPS : (i + 1) / STEPS)));
+    const edges = () => [above, below];
+    return v_flex().flex_1().min_h(0).relative()
+      .child(v_flex().id("ag-list").size_full().px(8).overflow_y_scroll().track_scroll(this.scrollHandle)
+        .on_size_change((size, cx) => { const was = edges(); this.viewH = size.height; this.refade(was, cx); })
+        .on_scroll_wheel((e, cx) => {
+          const was = edges(), room = Math.max(0, this.rowsH - this.viewH);
+          this.scrollY = Math.min(room, Math.max(0, this.scrollY - (e.delta?.y ?? 0)));
+          this.refade(was, cx);
+        })
+        .on_hover((on, cx) => {
+          if (!on && (this.drag || this.mdrag)) { this.drag = null; this.drop = null; this.mdrag = null; this.mdrop = null; cx.notify(); }
+          if (!on && spaceDrag.shown) { spaceDrag.cancel(cx); spaceMachine = null; }
+        })
+        .on_mouse_up("left", (_e, cx) => {
+          const d = spaceDrag.release(cx);
+          this.spaceDragged = Boolean(d);
+          spaceMachine = null;
+          if (d) {
+            const dragged = spaces().find((s) => s.id === d.id);
+            if (dragged) {
+              const mine = spaces().filter((s) => (s.machine ?? "") === (dragged.machine ?? ""));
+              const to = dropPlace(mine, d);
+              if (to >= 0) run("space.move", { id: d.id, index: mine[to].index });
+            }
+          }
+          if (this.drag || this.mdrag) { this.drag = null; this.drop = null; this.mdrag = null; this.mdrop = null; cx.notify(); }
+        })
+        .child(div().w_full().h(0).flex_none())
+        .child(v_flex().w_full().flex_none()
+          .on_size_change((size, cx) => { const was = edges(); this.rowsH = size.height; this.refade(was, cx); })
+          .children(rows)))
+      .when(above, el => el.child(fade(true)))
+      .when(below, el => el.child(fade(false)));
+  }
+
+  /** Redraws only when a fade comes or goes. */
+  refade(was, cx) {
+    const max = Math.max(0, this.rowsH - this.viewH);
+    const now = [this.scrollY > 1, this.scrollY < max - 1];
+    if (now[0] !== was[0] || now[1] !== was[1]) cx.notify();
+  }
+}
