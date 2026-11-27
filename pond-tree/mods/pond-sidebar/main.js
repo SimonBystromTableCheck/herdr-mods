@@ -351,9 +351,11 @@ export default class Agents extends View {
           try {
             const r = await exec("git", ["status", "--porcelain=v2", "--branch"], { cwd, on: machine, timeout: 8000 });
             if (r.code === 0) {
-              info = { branch: null, upstream: null, ahead: 0, behind: 0, changed: 0 };
+              info = { branch: null, upstream: null, ahead: 0, behind: 0, changed: 0, untracked: 0 };
               for (const line of r.stdout.split("\n")) {
                 if (!line) continue;
+                // Untracked ("? path") apart from changes: a dim mark, not the yellow "files changed" one.
+                if (line.startsWith("? ")) { info.untracked++; continue; }
                 if (!line.startsWith("#")) { info.changed++; continue; }
                 const [, field, ...value] = line.split(" ");
                 if (field === "branch.head") info.branch = value[0] === "(detached)" ? null : value[0];
@@ -402,7 +404,7 @@ export default class Agents extends View {
   }
 
   /**
-   * A branch line: the glyph, the branch (truncated first), then small marks: files changed (yellow ●3), commits not
+   * A branch line: the glyph, the branch (truncated first), then small marks: files changed (yellow ●3), untracked (dim ?2), commits not
    * pushed (green ↑2), behind (dim ↓1), and an open PR (blue #136; magenta once merged). Each mark says what it means.
    */
   branchLine(t, branch, g, id) {
@@ -415,6 +417,7 @@ export default class Agents extends View {
       .when(g?.changed > 0, el => el.child(mark("changed", h_flex().gap(2).items_center()
         .child(div().size(5).flex_none().rounded_full().bg(t.ansi3 ?? t.working)).child(String(g.changed)),
         t.ansi3 ?? t.working, `${plural(g.changed, "file")} changed`)))
+      .when(g?.untracked > 0, el => el.child(mark("untracked", `?${g.untracked}`, t.dim, `${plural(g.untracked, "untracked file")} (not in git yet)`)))
       .when(g?.ahead > 0, el => el.child(mark("ahead", `↑${g.ahead}`, t.ansi2 ?? t.done, `${plural(g.ahead, "commit")} not pushed`)))
       .when(g?.behind > 0, el => el.child(mark("behind", `↓${g.behind}`, t.dim, `${plural(g.behind, "commit")} behind ${g.upstream ?? "upstream"}`)))
       .when(Boolean(pr), el => el.child(mark("pr", `#${pr.number}`, pr.state === "MERGED" ? t.ansi5 ?? t.accent : t.ansi4 ?? t.accent,

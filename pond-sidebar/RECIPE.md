@@ -28,7 +28,7 @@ https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/pond-sidebar". Wh
 There are no props for layout copies. The mod opens three copies of itself with props (`newMenu`,
 `newSpace`, `loginBar`) as popups and dialogs; never place those in a layout.
 
-**Version:** 1.2.0 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.2.1 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** no update pill. Tell your Herdr agent "update my herdr mods" (or "update pond mods"); it
 follows `UPDATE.md` in the mod folder, which checks this repo's `versions.json` and backs up what it
@@ -155,6 +155,10 @@ machines as a dash / spinner / cross, `+` for New space. Space rows are dropped 
 - New space opens the dialog and starts the chosen agent in the chosen folder.
 
 ## Changes
+
+### 1.2.1 (2026-11-27)
+
+- Branch marks: untracked files get their own dim `?n` mark ("not in git yet"); the yellow `●n` is only uncommitted changes to tracked files.
 
 ### 1.2.0 (2026-11-27)
 

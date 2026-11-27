@@ -15,7 +15,7 @@ import { sendToVault, offerNotes } from "./notes.js";
 import { modelList, fetchModels } from "./models.js";
 import { isHeader, terminalHeader } from "./header.js";
 import { designPx, zoomProbe } from "./measure.js";
-import { ChatList } from "./components/chat-list.js";
+import { ChatList, NAV_LANE } from "./components/chat-list.js";
 import { QuestionCard } from "./components/question-card.js";
 import { Composer } from "./components/composer.js";
 import { GitActions } from "./components/git-actions.js";
@@ -877,14 +877,18 @@ export default class HerdrChat extends View {
     const empty = rows.length === 0 || (rows.length === 1 && rows[0].kind === "note" && !this.reader.session.messages.length);
     keyRows(rows);
     rows.splice(0, rows.length, ...rows.flatMap(r => r.kind === "tools" && this.reader.session.open[r.key] ? [r, ...stepRows(r)] : [r]));
-    const inner = Math.min(COLUMN, Math.max(280, Math.floor(this.width) - 50));
+    // The navigator (chat-list.js) floats 14 px in from the right and is 34 px wide. Once the centred column's side margin
+    // can't hold it, the column keeps a lane on the right for it, always (not only while it shows), so rows never reflow.
+    const width = Math.floor(this.width);
+    const gutter = (width - Math.min(COLUMN, width - 50)) / 2 < NAV_LANE + 14 ? NAV_LANE : 0;
+    const inner = Math.min(COLUMN, Math.max(280, width - 50 - gutter));
     this.backdropShown = Boolean(this.backdrop) && shared("herdr-chat.animation") !== false;
     if (this.backdropShown && this.backdropSlow !== !empty) {
       this.backdropSlow = !empty;
       cx.timer.after(0, () => this.backdrop.set_props(this.backdropProps()));
     }
     const { body, measure } = this.list.render(cx, {
-      rows, empty, t, inner, zoom: this.zoom, beforeScroll: () => this.noticeVisit(),
+      rows, empty, t, inner, gutter, zoom: this.zoom, beforeScroll: () => this.noticeVisit(),
       heightKey: m => `${m.key}${this.reader.session.open[m.key] ? ":open" : ""}${m.kind === "diagram" ? `:${diagramFor(m.text, t).state}` : ""}`,
       waitsFor: m => m.kind === "diagram" && diagramFor(m.text, t).state === "queued",
       row: m => row(m, { t, open: this.reader.session.open, width: this.width, sent: this.composer.sent, machine: target()?.machine, copied: this.copied, notesSent: this.sentNote,

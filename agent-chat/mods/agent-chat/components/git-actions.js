@@ -64,11 +64,14 @@ export class GitActions {
     const on = t.machine || undefined, cwd = t.cwd;
     const r = await exec("git", ["status", "--porcelain=v2", "--branch"], { cwd, on, timeout: 8000 });
     if (r.code !== 0) return null;
-    const s = { cwd, machine: t.machine, branch: "", upstream: "", ahead: 0, behind: 0, changed: 0, base: "" };
+    const s = { cwd, machine: t.machine, branch: "", upstream: "", ahead: 0, behind: 0, changed: 0, untracked: 0, base: "" };
     for (const line of r.stdout.split("\n")) {
       if (line.startsWith("# branch.head ")) s.branch = line.slice(14).trim();
       else if (line.startsWith("# branch.upstream ")) s.upstream = line.slice(18).trim();
       else if (line.startsWith("# branch.ab ")) { const m = line.match(/\+(\d+) -(\d+)/); if (m) { s.ahead = +m[1]; s.behind = +m[2]; } }
+      // Untracked files ("? path") aren't changes git would commit: counted apart, so a folder of scratch files
+      // doesn't offer Commit on a branch that is otherwise clean and pushed.
+      else if (line.startsWith("? ")) s.untracked++;
       else if (line && !line.startsWith("#")) s.changed++;
     }
     if (!this.repos.has(cwd)) {

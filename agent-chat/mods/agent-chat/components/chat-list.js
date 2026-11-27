@@ -18,6 +18,8 @@ function fade(color, down) {
     .children(Array.from({ length: STEPS }, (_, i) => div().w_full().flex_1().bg(color).opacity(down ? (i + 1) / STEPS : (STEPS - i) / STEPS)));
 }
 const TURN_GAP = 32;
+/** Room kept right of a narrow column for the navigator: its 34 px plus a gap (main.js decides when). */
+export const NAV_LANE = 40;
 
 /** One of the person's own messages (a bubble). */
 const mine = m => m?.kind === "message" && m.role === "user";
@@ -174,7 +176,7 @@ export class ChatList {
   }
 
   /** The list's body and its off-screen measurer (null when nothing needs measuring). */
-  render(cx, { rows, empty, t, inner, zoom, heightKey, waitsFor, row, onItemClick, canJump, beforeScroll }) {
+  render(cx, { rows, empty, t, inner, gutter = 0, zoom, heightKey, waitsFor, row, onItemClick, canJump, beforeScroll }) {
     this.isEmpty = empty;
     if (rows !== this.rows) { this.rows = rows; if (this.searching) this.findHits(); }
     // Never leave the conversation hidden: settling normally ends in about a second, but a measure or a scroll that
@@ -222,7 +224,7 @@ export class ChatList {
         const out = [];
         for (let i = range.start; i < range.end; i++)
           out.push(i < rows.length
-            ? h_flex().w_full().justify_center().px(24).pt(gapBefore(rows[i])).child(div().w_full().max_w(COLUMN).child(row(rows[i])))
+            ? h_flex().w_full().justify_center().pl(24).pr(24 + gutter).pt(gapBefore(rows[i])).child(div().w_full().max_w(COLUMN).child(row(rows[i])))
             : div().w_full().h(TAIL));
         return out;
       }).track_scroll(this.scroll).on_item_click(onItemClick).size_full())
