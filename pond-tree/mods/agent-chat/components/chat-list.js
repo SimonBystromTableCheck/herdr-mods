@@ -7,6 +7,7 @@ import { designPx, designHeight } from "../measure.js";
 const FADE = 32;
 const TAIL = FADE;
 const MEASURE_AT_ONCE = 12;
+const SETTLE_AT_ONCE = 16;
 
 /**
  * A fade as tall as FADE from clear to the page's `color`, towards the bottom edge (`down`) or the top one: a step per
@@ -192,7 +193,16 @@ export class ChatList {
     if (measuredAt !== this.measuredAt) { this.heights = {}; this.changedAt = {}; this.lastHeight = {}; this.measuredAt = measuredAt; }
     const unmeasured = rows.filter(m => !(heightKey(m) in this.heights)).slice(-MEASURE_AT_ONCE);
     const now = Date.now();
-    const settling = rows.filter(m => { const k = heightKey(m); return k in this.heights && now - (this.changedAt[k] ?? 0) < 2000; });
+    // Rows measured in the last 2 s are measured again, as their height can still change (an image loading, text
+    // reflowing), but only those on or near the screen and at most SETTLE_AT_ONCE: after a resize or a switch every row
+    // was just measured, and re-drawing them all off screen on every frame overran the view's time limit ("This view
+    // could not be re-rendered"). A row further away gets measured again when it changes or the width does.
+    const from = Math.max(0, this.visibleStart - 4), to = Math.min(rows.length, Math.max(this.visibleEnd, from + 1) + 4);
+    const settling = [];
+    for (let i = to - 1; i >= from && settling.length < SETTLE_AT_ONCE; i--) {
+      const k = heightKey(rows[i]);
+      if (k in this.heights && now - (this.changedAt[k] ?? 0) < 2000) settling.push(rows[i]);
+    }
     const pending = [...settling, ...unmeasured];
     const sizes = rows.map(m => (this.heights[heightKey(m)] ?? this.lastHeight[m.key] ?? 40) + gapBefore(m));
     let bottom = rows.length;

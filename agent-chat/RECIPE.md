@@ -25,7 +25,7 @@ https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/agent-chat". What
    (and `"lone": true` so a single pane gets it too). The ids must be exactly these: the mod switches
    with `layout.select {stack: "chat-view", child}`. On `pond-tree` (this repo) it already is.
 
-**Version:** 1.2.1 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.2.2 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** tell your Herdr agent "update my herdr mods". It follows `UPDATE.md` from this repo, which
 checks `versions.json` and offers every newer version of the mods and layouts you have from here, with
@@ -170,6 +170,10 @@ copy. Shared state (drafts, views, read positions) lives outside the mod folder 
 - A Codex, Pi or OpenCode tab also shows its conversation.
 
 ## Changes
+
+### 1.2.2 (2026-11-27)
+
+- Takes in Anthony Chapé's fix from herdr-pond (c48172c): after a resize or a switch, only rows on or near the screen are measured again (at most 16 per frame), instead of every row, which could overrun the view's time limit ("This view could not be re-rendered").
 
 ### 1.2.1 (2026-11-27)
 
