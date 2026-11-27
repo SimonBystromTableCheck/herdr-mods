@@ -34,7 +34,7 @@ You don't need the `pond` layout. What the agent does:
 Without changing the tab bar, it also opens beside a terminal:
 `herdr-app do pane.split --direction right --mod todos` (`q` closes that pane).
 
-**Version:** 1.2.1 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.2.2 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** from 1.1.0, an "Update available" pill appears in its header when this repo publishes a newer version; click it, confirm, and a new Claude tab updates just this mod (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/todos/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept (your pages in `~/.config/herdr-app/todos/`); edits you made inside the mod folder are not.
 
@@ -149,6 +149,10 @@ One rounded card (radius 10, `background`, 1px `border`; the border turns
 - On a fresh copy of Herdr's `main` with `pond-tabs` as its tab bar, installing the mod adds a Todos button next to Files and Changes that opens it in the right-hand column.
 
 ## Changes
+
+### 1.2.2 (2026-11-27)
+
+- The mouse wheel (and trackpad) scrolls the page list and a page's todos, one row per notch; the selection moves along when it would scroll out of view.
 
 ### 1.2.1 (2026-11-27)
 

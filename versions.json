@@ -18,7 +18,7 @@
       "path": "leader/mods/leader"
     },
     "todos": {
-      "version": "1.2.1",
+      "version": "1.2.2",
       "item": "todos",
       "path": "todos/mods/todos"
     },
@@ -110,7 +110,7 @@
   },
   "layouts": {
     "pond": {
-      "version": "1.13.1",
+      "version": "1.13.2",
       "item": "pond",
       "path": "pond/layouts/pond.json",
       "mods": [
@@ -130,7 +130,7 @@
       ]
     },
     "pond-tree": {
-      "version": "1.1.5",
+      "version": "1.1.6",
       "item": "pond-tree",
       "path": "pond-tree/layouts/pond-tree.json",
       "mods": [

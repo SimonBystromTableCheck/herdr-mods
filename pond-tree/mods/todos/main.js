@@ -516,12 +516,29 @@ export default class Todos extends View {
       .child(svg(icon).size(13)).when(Boolean(label), el => el.child(label));
   }
 
+  // The wheel moves the shown window of rows one row per notch (trackpads: per `step` px), dragging
+  // the selection along when it would fall out. `which`: "pages" or "page"; `win`: the last window.
+  wheel(e, which, win, n, step, cx) {
+    this.wheelAcc = (this.wheelAcc ?? 0) + e.delta.y;
+    const rows = Math.trunc(this.wheelAcc / step);
+    if (!rows) return;
+    this.wheelAcc -= rows * step;
+    const shown = Math.max(1, win.end - win.start);
+    const top = Math.max(0, Math.min(n - shown, win.start - rows)); // positive delta: towards the start
+    if (top === win.start) return;
+    this.top[which] = top;
+    const key = which === "pages" ? "pageSel" : "sel";
+    this[key] = Math.max(top, Math.min(top + shown - 1, this[key]));
+    cx.notify();
+  }
+
   pagesView(t, space) {
     if (!this.pages.length) return v_flex().flex_1().p(16).gap(10).items_center().text_color(t.dim)
       .child("No pages yet").child(this.iconButton("first-page", `${ICON}/plus.svg`, cx => this.newPage(cx), t, "New page"));
     const { start, end } = windowOf(this.pages.length, PAGE_ROW, this.pageSel, space, this.top.pages ?? 0);
     this.top.pages = start;
-    return v_flex().flex_1().min_h(0).overflow_hidden().p(6).children(this.pages.slice(start, end).map((p, j) => {
+    return v_flex().id("pages-list").flex_1().min_h(0).overflow_hidden().p(6)
+      .on_scroll_wheel((e, cx) => this.wheel(e, "pages", { start, end }, this.pages.length, PAGE_ROW, cx)).children(this.pages.slice(start, end).map((p, j) => {
       const i = start + j, on = i === this.pageSel;
       return h_flex().id(`page-${p.path}`).h(PAGE_ROW).flex_none().px(10).gap(10).items_center().rounded(8).cursor_pointer()
         .when(on, e => e.bg(this.hadKeys ? t.selected : t.hover)).hover(s => s.bg(on && this.hadKeys ? t.selected : t.hover))
@@ -576,7 +593,8 @@ export default class Todos extends View {
     const box = (depth) => div().pt(4).pl(depth * 20).on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .child(Input.new(this.input.state).h(28).px(8).rounded(6).border_1().border_color(t.accent).bg(t.background).text_size(12.5));
     const inline = at && vis.slice(start, end).some(k => p.todos[k].line === at.line);
-    return v_flex().flex_1().min_h(0).overflow_hidden().p(6)
+    return v_flex().id("todo-list").flex_1().min_h(0).overflow_hidden().p(6)
+      .on_scroll_wheel((e, cx) => this.wheel(e, "page", { start, end }, vis.length, ROW, cx))
       .children(vis.slice(start, end).flatMap((k, j) => {
         const row = this.todoRow(p.todos[k], start + j, t, k, nested);
         return inline && p.todos[k].line === at.line ? [row, box(at.depth)] : [row];

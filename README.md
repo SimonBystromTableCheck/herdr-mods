@@ -39,8 +39,8 @@ Which version you have: `"version"` in `~/.config/herdr-app/mods/<name>/mod.json
 
 | Layout | Version | |
 | --- | --- | --- |
-| [pond](pond/) | 1.13.1 | Herdr's main layout with my own tabs, agents and files panels, and git, skills, todos, servers, remote-checker, Claude profiles, Find (workbench) and Notes panels on the right |
-| [pond-tree](pond-tree/) | 1.1.5 | Pond with one machine → space → agent tree in the sidebar, pinned panel cards, usage cards, a Chat / Terminal view of each agent and the panels in a hamburger menu. Built on [Anthony Chapé's herdr-pond](https://github.com/anthonychape-tc/herdr-pond) and [azaeldrm's Harness](https://github.com/azaeldrm/harns-layout) |
+| [pond](pond/) | 1.13.2 | Herdr's main layout with my own tabs, agents and files panels, and git, skills, todos, servers, remote-checker, Claude profiles, Find (workbench) and Notes panels on the right |
+| [pond-tree](pond-tree/) | 1.1.6 | Pond with one machine → space → agent tree in the sidebar, pinned panel cards, usage cards, a Chat / Terminal view of each agent and the panels in a hamburger menu. Built on [Anthony Chapé's herdr-pond](https://github.com/anthonychape-tc/herdr-pond) and [azaeldrm's Harness](https://github.com/azaeldrm/harns-layout) |
 
 ## Mods
 
@@ -48,7 +48,7 @@ Which version you have: `"version"` in `~/.config/herdr-app/mods/<name>/mod.json
 | --- | --- | --- |
 | [git](git/) | 2.0.0 | a Workbench-style git panel: branches (local / remote / stashes), history, files and diff side by side, first-class mouse (drag commits to reorder or squash, drag branches to merge) and full vim keys, squash / amend / reword, pull / push / prune, hook failures and conflicts handed to an agent, plus a Conflicts pane with a lazygit-style chunk picker |
 | [leader](leader/) | 2.3.0 | a tmux-style prefix: `ctrl-a`, then a key, with a popup of the bindings |
-| [todos](todos/) | 1.2.1 | todo pages as Markdown files in `~/.config/herdr-app/todos` |
+| [todos](todos/) | 1.2.2 | todo pages as Markdown files in `~/.config/herdr-app/todos` |
 | [servers](servers/) | 1.3.1 | local dev servers as labelled herdr-core terminals that survive restarts, with Open and Edit buttons |
 | [remote-checker](remote-checker/) | 1.4.2 | the focused branch's GitHub pull request (CI checks, reviewers, comments, diff size and commits, refetched every 10s), Mine / Review / Search lists, a GitHub account per space, and gh setup |
 | [skills](skills/) | 1.2.1 | Claude skills (personal and the repo's): run, edit, scaffold |
