@@ -6,7 +6,7 @@ import { target, inputBox, interruptAgent, sendMessage, pressKeys, readScreen } 
 import { keyRows, splitCode, withCopyRows, stepRows, stepHasBody, withoutRetracted } from "./model/transcript.js";
 import { replyFromScreen } from "./model/screen-reply.js";
 import { runsWith, switchCommand, tokens, sameModel } from "./model/runs-with.js";
-import { row, duration, TOOL_BUTTON, TOOL_GAP, NOTES_BUTTON, NOTES_GAP } from "./ui/rows.js";
+import { row, duration, TOOL_BUTTON, TOOL_GAP, NOTES_BUTTON, NOTES_SENT, NOTES_GAP } from "./ui/rows.js";
 import { COLUMN, programIcon, paneButtons, statusBadge, viewToggle, clock, icon } from "./ui/primitives.js";
 import { diagramFor, renderQueuedDiagrams, hasQueuedDiagrams } from "./diagrams.js";
 import { splitDiagrams, copyDiagramImage } from "./diagram-copy.js";
@@ -18,6 +18,7 @@ import { designPx, zoomProbe } from "./measure.js";
 import { ChatList } from "./components/chat-list.js";
 import { QuestionCard } from "./components/question-card.js";
 import { Composer } from "./components/composer.js";
+import { GitActions } from "./components/git-actions.js";
 import { SessionReader } from "./components/session-reader.js";
 import { isDiagramViewer, openDiagram, DiagramViewer } from "./components/diagram-viewer.js";
 import { BackdropView } from "./backdrop/view.js";
@@ -73,6 +74,7 @@ export default class HerdrChat extends View {
         cx.notify();
       }
     });
+    this.git = new GitActions(this);
     this.width = 900; this.zoom = 1; this.rootPx = 0;
     if (props()?.backdrop) this.backdrop = cx.new(BackdropView, { dim: BACKDROP_DIM, sceneKey: BACKDROP_SCENE });
     this.stirAt = 0;
@@ -89,6 +91,7 @@ export default class HerdrChat extends View {
       const t = target();
       if (t && chatKey(t) === this.key) this.composer.takeInbox(t, cx);
       this.composer.noticeHint(t, cx);
+      this.git.tick(t, cx);
       // Fall back to the moment this view saw the shown agent start working.
       const k = t ? chatKey(t) : "";
       if (t?.status === "working") {
@@ -457,13 +460,13 @@ export default class HerdrChat extends View {
 
   /**
    * Whether a click at `x` (design px across the list) is on a response's Send to Notes button: its copy button (24 px)
-   * and NOTES_GAP come first, then the button.
+   * and NOTES_GAP come first, then the button, narrower while it reads "Sent".
    */
-  notesButtonAt(x) {
+  notesButtonAt(x, sent = false) {
     if (!Number.isFinite(x)) return false;
     const column = Math.min(COLUMN, Math.max(280, Math.floor(this.width) - 48)), left = (this.width - column) / 2;
     const start = left + 24 + NOTES_GAP;
-    return x >= start && x <= start + NOTES_BUTTON;
+    return x >= start && x <= start + (sent ? NOTES_SENT : NOTES_BUTTON);
   }
 
   /**
@@ -885,10 +888,11 @@ export default class HerdrChat extends View {
       heightKey: m => `${m.key}${this.reader.session.open[m.key] ? ":open" : ""}${m.kind === "diagram" ? `:${diagramFor(m.text, t).state}` : ""}`,
       waitsFor: m => m.kind === "diagram" && diagramFor(m.text, t).state === "queued",
       row: m => row(m, { t, open: this.reader.session.open, width: this.width, sent: this.composer.sent, machine: target()?.machine, copied: this.copied, notesSent: this.sentNote,
+        repo: this.git.repoFor(target()?.cwd),
         sendQueued: this.composer.canSendQueued() ? cx => this.composer.sendQueued(cx) : null }),
       onItemClick: (key, cx) => {
         const row = rows.find(r => r.key === key);
-        if (row?.kind === "copy" && !row.prompt && this.notesButtonAt(this.list.pointerX)) { this.sendToNotes(row, cx); return; }
+        if (row?.kind === "copy" && !row.prompt && this.notesButtonAt(this.list.pointerX, this.sentNote === row.key)) { this.sendToNotes(row, cx); return; }
         if (row?.kind === "code" || row?.kind === "copy") {
           cx.write_to_clipboard(row.text);
           this.copied = key; cx.notify();
@@ -907,6 +911,8 @@ export default class HerdrChat extends View {
       canJump: !this.card.showing && active?.status !== "blocked",
     });
     const status = this.status(t, active);
+    // The question card takes the whole line; otherwise the git buttons share it with the status, at its right.
+    const gitButtons = this.card.showing ? null : this.git.render(t, active);
     return v_flex().id("herdr-chat-root").relative().size_full().min_h(0).rounded(10).border_1().border_color(t.border)
       .bg(t.background).text_color(t.foreground)
       .when(this.backdropShown, el => el.child(this.backdrop))
@@ -926,8 +932,9 @@ export default class HerdrChat extends View {
       .when(Boolean(measure), el => el.child(measure))
       .child(v_flex().w_full().flex_none().items_center().px(24).pt(12).pb(14).gap(6)
         .when(this.backdropShown && !empty, el => el.bg(t.background).rounded_b(10))
-        .when(Boolean(status), el => el.child(status))
-        .when(!status, el => el.child(div().w_full().h(24).flex_none()))
+        .child(h_flex().w_full().max_w(COLUMN).min_h(24).gap(8).items_center()
+          .child(div().flex_1().min_w(0).child(status ?? div().w_full().h(24)))
+          .when(Boolean(gitButtons), el => el.child(gitButtons)))
         .child(this.composer.render(t, active, this.sessionLine(t, active, this.modelChip(t, active)))));
   }
 }

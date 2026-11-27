@@ -1,5 +1,5 @@
 import { div, svg } from "gpui-kit";
-import { v_flex, h_flex, VirtualListScrollHandle, v_virtual_list } from "gpui-base";
+import { v_flex, h_flex, VirtualListScrollHandle, v_virtual_list, InputState, Input } from "gpui-base";
 import { ICONS } from "../common.js";
 import { COLUMN } from "../ui/primitives.js";
 import { designPx, designHeight } from "../measure.js";
@@ -18,6 +18,17 @@ function fade(color, down) {
     .children(Array.from({ length: STEPS }, (_, i) => div().w_full().flex_1().bg(color).opacity(down ? (i + 1) / STEPS : (STEPS - i) / STEPS)));
 }
 const TURN_GAP = 32;
+
+/** One of the person's own messages (a bubble). */
+const mine = m => m?.kind === "message" && m.role === "user";
+
+/** What a row says, for searching: a message's text, a command group's commands and files. */
+function rowText(m) {
+  if (m.text) return m.text;
+  if (m.calls) return m.calls.map(c => `${c.d ?? ""} ${c.k === "think" ? c.o ?? "" : ""}`).join("\n");
+  if (m.call) return `${m.call.d ?? ""}\n${m.call.o ?? ""}`;
+  return "";
+}
 const gapBefore = m => m.turnGap ? TURN_GAP : m.kind === "copy" || m.kind === "diagram-tools" ? 4 : m.kind === "step" ? 0 : 10;
 
 export class ChatList {
@@ -29,6 +40,95 @@ export class ChatList {
     this.pendingCount = -1; this.settling = true; this.isEmpty = true; this.settleAt = 0;
     this.heights = {}; this.changedAt = {}; this.lastHeight = {}; this.measuredAt = "";
     this.listH = 0; this.sig = ""; this.settledSig = "";
+    this.searching = false; this.query = ""; this.hit = -1; this.hits = []; this.rows = [];
+  }
+
+  /** Scrolls row `i` into view and stops following the newest message. */
+  show(i, cx, strategy = "top") {
+    this.following = false; this.needsScroll = false;
+    this.scroll.scroll_to_item(i, strategy);
+    cx.notify();
+  }
+
+  /** To the previous (dir -1) or next (+1) of the person's own messages, from the top of what's on screen. */
+  jumpMine(dir, cx) {
+    const at = this.visibleStart, rows = this.rows;
+    let i = at + dir;
+    // The top row is usually cut off: "previous" from a bubble partly shown should still go to the one above it.
+    while (i >= 0 && i < rows.length && !mine(rows[i])) i += dir;
+    if (i >= 0 && i < rows.length) this.show(i, cx);
+    else if (dir > 0) { this.follow(); cx.notify(); }
+  }
+
+  /** Opens the search bar (Cmd-F, or the magnifier), with what was searched last selected. */
+  openSearch(cx) {
+    this.searchInput ??= InputState.new({ placeholder: "Search this chat" });
+    if (!this.searchWired) {
+      this.searchWired = true;
+      this.searchInput.on("change", (_e, cx) => { this.query = this.searchInput.value(); this.findHits(); this.hit = -1; this.step(-1, cx); });
+      this.searchInput.on("submit", (_e, cx) => this.step(-1, cx));
+    }
+    this.searching = true;
+    this.searchInput.focus();
+    cx.notify();
+  }
+
+  closeSearch(cx) {
+    this.searching = false; this.hits = []; this.hit = -1;
+    this.searchInput?.blur();
+    cx.notify();
+  }
+
+  findHits() {
+    const q = this.query.trim().toLowerCase();
+    this.hits = q ? this.rows.map((m, i) => (rowText(m).toLowerCase().includes(q) ? i : -1)).filter(i => i >= 0) : [];
+  }
+
+  /** The next match up (-1, newest first, as Enter does) or down (+1, Shift-Enter). */
+  step(dir, cx) {
+    if (!this.hits.length) { cx.notify(); return; }
+    this.hit = this.hit < 0 ? this.hits.length - 1 : (this.hit + dir + this.hits.length) % this.hits.length;
+    this.show(this.hits[this.hit], cx, "center");
+  }
+
+  /** The search bar over the top of the list: the query, "3 of 7", up, down and close. */
+  searchBar(t) {
+    const btn = (id, glyph, tip, go) => div().id(id).size(24).flex().items_center().justify_center().rounded(6).cursor_pointer()
+      .hover(s => s.bg(t.hover)).tooltip(tip).on_click((_e, cx) => go(cx)).child(svg(`${ICONS}/${glyph}.svg`).size(13).text_color(t.muted));
+    const count = !this.query.trim() ? "" : this.hits.length ? `${this.hit + 1 || this.hits.length} of ${this.hits.length}` : "No matches";
+    return h_flex().absolute().top(8).left(0).right(0).justify_center().px(24).child(
+      h_flex().id("chat-search").w_full().max_w(420).h(36).pl(10).pr(4).gap(6).items_center().rounded(10)
+        .bg(t.popover ?? t.surface).border_1().border_color(t.border).shadow_md()
+        .on_key_down((e, cx) => {
+          if (e.key === "escape") { cx.stop_propagation(); this.closeSearch(cx); }
+          else if (e.key === "enter" && e.modifiers.shift) { cx.stop_propagation(); this.step(1, cx); }
+        })
+        .child(svg(`${ICONS}/search.svg`).size(13).text_color(t.dim))
+        .child(div().flex_1().min_w(0).text_size(13).child(Input.new(this.searchInput)))
+        .child(div().flex_none().text_size(11.5).text_color(t.dim).child(count))
+        .child(btn("search-up", "chevron-up", "Earlier match (Enter)", cx => this.step(-1, cx)))
+        .child(btn("search-down", "chevron-down", "Later match (Shift-Enter)", cx => this.step(1, cx)))
+        .child(btn("search-close", "x", "Close (Esc)", cx => this.closeSearch(cx))));
+  }
+
+  /**
+   * The buttons at the list's bottom right, out of the text's way: the previous and next of the person's own messages,
+   * search, and back to the newest message (only while scrolled up).
+   */
+  navigator(t, canJump) {
+    const btn = (id, glyph, tip, go) => div().id(id).size(28).flex().items_center().justify_center().rounded(14).cursor_pointer()
+      .text_color(t.muted).hover(s => s.bg(t.hover).text_color(t.foreground)).tooltip(tip)
+      .on_click((_e, cx) => go(cx)).child(svg(`${ICONS}/${glyph}.svg`).size(14));
+    const anyMine = this.rows.some(mine), down = !this.following && !this.needsScroll && canJump;
+    return h_flex().absolute().bottom(10).right(14).child(
+      v_flex().p(3).gap(2).rounded(17).bg(t.popover ?? t.surface).border_1().border_color(t.border).shadow_md()
+        .when(anyMine, el => el.child(btn("mine-prev", "chevron-up", "Your previous message", cx => this.jumpMine(-1, cx)))
+          .child(btn("mine-next", "chevron-down", "Your next message", cx => this.jumpMine(1, cx))))
+        .child(btn("chat-search-open", "search", "Search this chat (⌘F)", cx => this.openSearch(cx)))
+        .when(down, el => el.child(div().id("jump-bottom").size(28).flex().items_center().justify_center().rounded(14).cursor_pointer()
+          .bg(t.foreground).text_color(t.background).hover(s => s.opacity(0.85)).tooltip("Back to the newest message")
+          .on_click((_e, cx) => { this.follow(); cx.notify(); })
+          .child(svg(`${ICONS}/arrow-down.svg`).size(14)))));
   }
 
   /** Keeps the chat at its newest message. */
@@ -76,6 +176,7 @@ export class ChatList {
   /** The list's body and its off-screen measurer (null when nothing needs measuring). */
   render(cx, { rows, empty, t, inner, zoom, heightKey, waitsFor, row, onItemClick, canJump, beforeScroll }) {
     this.isEmpty = empty;
+    if (rows !== this.rows) { this.rows = rows; if (this.searching) this.findHits(); }
     // Never leave the conversation hidden: settling normally ends in about a second, but a measure or a scroll that
     // never reports must not leave the body invisible for good.
     if (this.settling) {
@@ -127,12 +228,8 @@ export class ChatList {
       }).track_scroll(this.scroll).on_item_click(onItemClick).size_full())
       .when(this.above, el => el.child(fade(t.background, false)))
       .child(fade(t.background, true))
-      .when(!this.following && !this.needsScroll && canJump, el => el.child(h_flex().absolute().bottom(12).left(0).right(0).justify_center()
-        .child(div().id("jump-bottom").size(34).flex().items_center().justify_center().rounded(17).cursor_pointer()
-          .bg(t.popover ?? t.surface).border_1().border_color(t.border).shadow_md().text_color(t.foreground)
-          .hover(s => s.bg(t.hover))
-          .on_click((_e, cx) => { this.follow(); cx.notify(); })
-          .child(svg(`${ICONS}/chevron-down.svg`).size(16)))));
+      .when(!empty && (this.above || !this.following || this.searching), el => el.child(this.navigator(t, canJump)))
+      .when(this.searching, el => el.child(this.searchBar(t)));
     const measure = pending.length === 0 ? null : v_flex().id("herdr-chat-measure").absolute().top(0).left(-20000).w(inner)
       .children(pending.map(m => {
         const k = heightKey(m);

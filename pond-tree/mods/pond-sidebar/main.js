@@ -1,6 +1,6 @@
 import { View, div, image, svg } from "gpui-kit";
 import { v_flex, h_flex, Popup, ScrollHandle } from "gpui-base";
-import { machines, agents, terminals, panes, focused, spaces, run, theme, shared, setShared, setAgentOrder, nextCommand, openOverlay, closeOverlay, props, layout, hc, notify, home, watchFolder, exec, knownAgents, pickFolder, readTextFile } from "herdr";
+import { machines, agents, terminals, panes, focused, spaces, run, theme, shared, setShared, setAgentOrder, nextCommand, openOverlay, closeOverlay, props, layout, hc, notify, home, watchFolder, exec, knownAgents, pickFolder, readTextFile, checking, window } from "herdr";
 
 import { machineMetrics } from "./machine-metrics.js";
 import { refreshContext } from "./context.js";
@@ -207,6 +207,33 @@ function hopParts(t, badge, box, top, [a, b], scale, hop) {
 
 const READ_AFTER = [1000, 4000];
 
+/** A working agent's clock: "45s", "3m 12s", "1h 4m". */
+function clock(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000)), m = Math.floor(s / 60), h = Math.floor(m / 60);
+  return h ? `${h}h ${m % 60}m` : m ? `${m}m ${String(s % 60).padStart(2, "0")}s` : `${s}s`;
+}
+const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+const machineOfAddress = x => x?.includes("/") ? x.split("/")[0] : null;
+/** Where git runs for a folder: its machine (null here) and the folder, as one key. */
+const gitKey = (machine, cwd) => `${machine ?? ""}|${cwd}`;
+const GIT_EVERY = 10000, PR_EVERY = 120000;
+
+/**
+ * A space's own branch: the one most of its terminals are on (ties go to the one Herdr names for the space), with a
+ * folder on it for git, and the branch each tab's panes are on.
+ */
+function spaceBranch(sp, all) {
+  const ids = new Set(sp.tabs.map(tb => tb.id));
+  const mine = all.filter(p => p.terminal && ids.has(p.tab) && p.branch);
+  const count = new Map();
+  for (const p of mine) count.set(p.branch, (count.get(p.branch) ?? 0) + 1);
+  let branch = null;
+  for (const [b, n] of count) if (!branch || n > count.get(branch) || (n === count.get(branch) && b === sp.branch)) branch = b;
+  branch ??= sp.branch ?? null;
+  const at = mine.find(p => p.branch === branch);
+  return { branch, cwd: at?.cwd ?? null, machine: machineOfAddress(at?.terminal) ?? sp.machine ?? null };
+}
+
 export default class Agents extends View {
   init(_props, cx) {
     if (props()?.loginBar) return;
@@ -272,6 +299,12 @@ export default class Agents extends View {
     });
     this.noticeTurns(cx);
     this.watchLocalContext(cx);
+    // Git state of each folder a terminal is in, and pull requests per folder and branch (see pollGit).
+    this.git = {}; this.prs = {}; this.gitDefault = {};
+    if (!checking()) {
+      this.pollGit(cx);
+      cx.timer.every(GIT_EVERY, (cx) => this.pollGit(cx));
+    }
     cx.spawn(async () => {
       for (;;) {
         const c = await nextCommand();
@@ -295,6 +328,97 @@ export default class Agents extends View {
       try { setShared("usage.tokens", await collectUsage(list, host => readMachineUsage(exec, host), state)); }
       finally { this.usageBusy = false; cx.notify(); }
     });
+  }
+
+  /**
+   * Every 10 s while the window shows, one folder after another: each terminal folder's branch, upstream, commits
+   * ahead and behind, and files changed (`git status --porcelain=v2 --branch`, on its machine). For a pushed branch
+   * that isn't the repo's default, its pull request (`gh pr view`), at most every 2 minutes; without `gh`, or when it
+   * fails, there's just no PR mark. A folder that isn't a repo reads as null.
+   */
+  pollGit(cx) {
+    if (this.gitBusy || !window()?.visible) return;
+    const folders = new Map();
+    for (const p of panes()) if (p.terminal && p.cwd) {
+      const machine = machineOfAddress(p.terminal);
+      folders.set(gitKey(machine, p.cwd), { machine, cwd: p.cwd });
+    }
+    this.gitBusy = true;
+    cx.spawn(async (cx) => {
+      try {
+        for (const [key, { machine, cwd }] of folders) {
+          let info = null;
+          try {
+            const r = await exec("git", ["status", "--porcelain=v2", "--branch"], { cwd, on: machine, timeout: 8000 });
+            if (r.code === 0) {
+              info = { branch: null, upstream: null, ahead: 0, behind: 0, changed: 0 };
+              for (const line of r.stdout.split("\n")) {
+                if (!line) continue;
+                if (!line.startsWith("#")) { info.changed++; continue; }
+                const [, field, ...value] = line.split(" ");
+                if (field === "branch.head") info.branch = value[0] === "(detached)" ? null : value[0];
+                else if (field === "branch.upstream") info.upstream = value[0];
+                else if (field === "branch.ab") { info.ahead = Math.abs(parseInt(value[0], 10)) || 0; info.behind = Math.abs(parseInt(value[1], 10)) || 0; }
+              }
+            }
+          } catch {}
+          const was = JSON.stringify(this.git[key]);
+          this.git[key] = info;
+          if (JSON.stringify(info) !== was) cx.notify();
+          if (info?.branch && info.upstream) await this.pollPr(key, machine, cwd, info.branch, cx);
+        }
+        for (const key of Object.keys(this.git)) if (!folders.has(key)) delete this.git[key];
+      } finally { this.gitBusy = false; }
+    });
+  }
+
+  /** The folder's pull request for `branch`, unless asked in the last 2 minutes or it's the repo's default branch. */
+  async pollPr(key, machine, cwd, branch, cx) {
+    const prKey = `${key}|${branch}`;
+    if (Date.now() - (this.prs[prKey]?.at ?? 0) < PR_EVERY) return;
+    if (!(key in this.gitDefault)) {
+      try {
+        const r = await exec("git", ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], { cwd, on: machine, timeout: 5000 });
+        this.gitDefault[key] = r.code === 0 ? r.stdout.trim().replace(/^[^/]+\//, "") : null;
+      } catch { this.gitDefault[key] = null; }
+    }
+    const fallback = ["main", "master", "trunk", "develop"];
+    if (this.gitDefault[key] ? branch === this.gitDefault[key] : fallback.includes(branch)) return;
+    let pr = null;
+    try {
+      const r = await exec("gh", ["pr", "view", "--json", "number,url,state"], { cwd, on: machine, timeout: 15000 });
+      if (r.code === 0) { const j = JSON.parse(r.stdout); if (Number.isFinite(j?.number)) pr = { number: j.number, url: j.url, state: j.state }; }
+    } catch {}
+    const was = JSON.stringify(this.prs[prKey]?.pr ?? null);
+    this.prs[prKey] = { pr, at: Date.now() };
+    if (JSON.stringify(pr) !== was) cx.notify();
+  }
+
+  /** What git knows of a folder, if it's on `branch` (so a mark never belongs to another branch), with its PR. */
+  gitFor(machine, cwd, branch) {
+    if (!cwd || !branch) return null;
+    const key = gitKey(machine, cwd), g = this.git?.[key];
+    return g && g.branch === branch ? { ...g, pr: this.prs?.[`${key}|${branch}`]?.pr ?? null } : null;
+  }
+
+  /**
+   * A branch line: the glyph, the branch (truncated first), then small marks: files changed (yellow ●3), commits not
+   * pushed (green ↑2), behind (dim ↓1), and an open PR (blue #136; magenta once merged). Each mark says what it means.
+   */
+  branchLine(t, branch, g, id) {
+    const mark = (key, text, color, tip) => div().id(`${id}-${key}`).flex_none().text_color(color).tooltip(tip).child(text);
+    const pr = g?.pr && (g.pr.state === "OPEN" || g.pr.state === "MERGED") ? g.pr : null;
+    return h_flex().flex_1().min_w(0).gap(4).items_center()
+      .child(svg("mods/pond-sidebar/icons/branch.svg").size(10).flex_none().text_color(t.accent))
+      .child(div().min_w(0).truncate().text_color(t.muted).child(branch))
+      // A drawn dot: the font's ● comes out heavier than the arrows beside it.
+      .when(g?.changed > 0, el => el.child(mark("changed", h_flex().gap(2).items_center()
+        .child(div().size(5).flex_none().rounded_full().bg(t.ansi3 ?? t.working)).child(String(g.changed)),
+        t.ansi3 ?? t.working, `${plural(g.changed, "file")} changed`)))
+      .when(g?.ahead > 0, el => el.child(mark("ahead", `↑${g.ahead}`, t.ansi2 ?? t.done, `${plural(g.ahead, "commit")} not pushed`)))
+      .when(g?.behind > 0, el => el.child(mark("behind", `↓${g.behind}`, t.dim, `${plural(g.behind, "commit")} behind ${g.upstream ?? "upstream"}`)))
+      .when(Boolean(pr), el => el.child(mark("pr", `#${pr.number}`, pr.state === "MERGED" ? t.ansi5 ?? t.accent : t.ansi4 ?? t.accent,
+        `PR #${pr.number} ${pr.state === "MERGED" ? "merged" : "open"}`)));
   }
 
   /**
@@ -888,26 +1012,47 @@ export default class Agents extends View {
    * the pane and shows the Terminal view, as a shell has no chat. In Classic their count is in the machine's header. On
    * the rail (compact) just the icon, centred as the agents' are, with the rest in its tooltip.
    */
+  /**
+   * Right-click on a row: the tab's menu (rename, close, ...), the same shipped `menu` the tab bar opens, at the
+   * pointer. A row without a tab of its own (a sub-agent) gets nothing.
+   */
+  tabMenu(tabId, spaceId, cx) {
+    cx.stop_propagation();
+    this.drag = null; this.drop = null;
+    const space = spaceId ?? spaces().find(s => (s.tabs ?? []).some(x => x.id === tabId))?.id;
+    if (!tabId || !space) return;
+    openOverlay({ mod: "menu", kind: "popup", width: 200, props: { tab: "tab", target: { id: tabId, space } } });
+  }
+
   terminalRows(t, machine, compact = false, keep = null) {
     const shown = focused()?.pane;
     return this.plainTerminals(machine).filter((p) => !keep || keep(p)).map((p) => {
       const on = p.pane === shown, name = p.program?.name || p.title || "shell", where = folderName(p.cwd);
       // Pond: a Claude terminal (an agent whose status stopped reporting, a resumed session) gets the duck, as its tab does.
       const claude = p.program?.agent && /claude/i.test(p.program?.name ?? "");
-      const pic = claude ? duck(p.status, 16, 0)
-        : icon(p.program, 16, on ? t.accent : t.muted) ?? svg("mods/pond-sidebar/icons/terminal.svg").size(15).flex_none().text_color(on ? t.accent : t.muted);
+      // Anything else sits in a small rounded tile, the size of a duck: a prompt glyph for a shell, else its program's icon.
+      const glyph = on ? t.accent : t.muted;
+      const inner = !p.program?.shell && icon(p.program, 12, glyph)
+        || svg("mods/pond-sidebar/icons/terminal.svg").size(12).flex_none().text_color(glyph);
+      const pic = claude ? duck(p.status, compact ? 16 : FIG_H, 0)
+        : h_flex().size(compact ? 16 : 18).flex_none().items_center().justify_center().rounded(5).border_1()
+          .border_color(on ? t.accent : t.border).bg(on ? t.selected : t.raised).child(inner);
       const open = () => {
         run("pane.focus", { pane: p.pane });
         if (find(layout(), "chat-view")) run("layout.select", { stack: "chat-view", child: "terminal-panel" });
       };
-      const box = h_flex().id(`term-${p.pane}`).h(28).flex_none().items_center().rounded(6).border_l(2)
+      const box = h_flex().id(`term-${p.pane}`).h(compact ? 28 : 30).flex_none().items_center().rounded(6).border_l(2)
         .border_color(on && compact ? t.accent : t.surface).when(on, (el) => el.bg(compact ? t.selected : t.raised))
         .hover((s) => s.bg(t.hover)).cursor_pointer()
         .tooltip([name, p.title && p.title !== name ? p.title : "", p.cwd].filter(Boolean).join(" · "))
-        .on_click(open);
+        .on_click(open)
+        .on_mouse_down("right", (_e, cx) => this.tabMenu(p.tab, null, cx));
       if (compact) return box.justify_center().pr(2).child(h_flex().w(16).flex_none().justify_center().child(pic));
-      return box.pl(8).pr(8).gap(10).text_size(12.5)
-        .child(h_flex().size(16).flex_none().items_center().justify_center().child(pic))
+      // The agent cards' spacing (px 8, figure slot ml -2 mr 2, gap 8), so icon and name line up with the ducks above.
+      return box.px(8).gap(8).text_size(13)
+        // A duck figure keeps knife room on its left, so its body sits right of centre: line the tile up under the body.
+        .child(h_flex().w(classic() ? 16 : FIG_W).flex_none().ml(-2).mr(2).items_center()
+          .when(claude || classic(), (el) => el.justify_center()).when(!claude && !classic(), (el) => el.justify_end().pr(1)).child(pic))
         .child(div().flex_none().text_color(on ? t.foreground : t.muted).child(name))
         .when(Boolean(where), (el) => el.child(div().flex_1().min_w(0).truncate().text_size(11.5).text_color(t.dim).child(where)));
     });
@@ -1030,6 +1175,9 @@ export default class Agents extends View {
     };
 
     const tabs = spaces().flatMap(s => s.tabs);
+    const allPanes = panes();
+    // Each space's own branch, shown once on its header; a tab row shows its branch only where it differs.
+    const branchOf = new Map(spaces().map(sp => [sp.id, spaceBranch(sp, allPanes)]));
     const label = (a) => {
       const tab = tabs.find(tab => tab.id === a.tab);
       const pane = tab ? lead(tab) : null;
@@ -1081,11 +1229,20 @@ export default class Agents extends View {
       const tab = tabs.find(x => x.id === a.tab);
       // Only the branch: the space (its name, its folder) is already the row the card hangs from.
       const branch = paneBranch(a);
+      // Pinned rows sit away from their space's header, so they keep their branch.
+      const ownBranch = branch && (isPinned || branch !== branchOf.get(a.space)?.branch) ? branch : "";
       const where = [
-        [branch, "branch", t.accent],
+        [ownBranch, "branch", t.accent],
+        [full && a.space_name !== name ? a.space_name : "", "layers", t.dim],
       ].filter(([text]) => text);
       const context = (shared("agents.context") ?? {})[a.address];
       const used = Number.isFinite(context?.percent) ? Math.max(0, Math.min(100, context.percent)) : null;
+      // Working: for how long (the 1 s timer in init redraws it) and the step it reported, if any.
+      const term = a.status === "working" ? all.find(x => x.address === a.address) : null;
+      const workingSince = a.status === "working" ? tab?.working_since ?? term?.status_ms ?? (this.since(a) || null) : null;
+      const step = clean(term?.report?.msg ?? term?.status?.msg ?? "");
+      const busy = a.status === "working" && (workingSince || step)
+        ? [workingSince ? clock(now - workingSince) : "", step].filter(Boolean).join(" \u00b7 ") : "";
       const barWidth = pic ? 14 : 36;
       const bar = used == null ? null : contextBar(t, used, barWidth).tooltip(`Context: ${contextText(used)}`);
       const machineOf = x => x.includes("/") ? x.split("/")[0] : "";
@@ -1136,6 +1293,7 @@ export default class Agents extends View {
           if (this.dragged) { this.dragged = false; return; }
           run("pane.focus", { pane: a.pane });
         })
+        .when(Boolean(a.pane && a.tab), el => el.on_mouse_down("right", (_e, cx) => this.tabMenu(a.tab, a.space, cx)))
         .when(dropHere, el => el.child(div().absolute().left(6).right(6).h(2).rounded_full().bg(t.accent).when(this.drop.after, d => d.bottom(-1)).when(!this.drop.after, d => d.top(-1))));
       if (collapsed) {
         return card.pr(2)
@@ -1155,14 +1313,18 @@ export default class Agents extends View {
               this.folded.has(a.address) ? this.folded.delete(a.address) : this.folded.add(a.address);
               cx.notify();
             })).child(pic)))
-          .child(div().flex_1().min_w(0).truncate().text_color(idle ? t.muted : t.foreground).child(name))
+          // Working: the clock and step follow the name on its own line (dim, cut first), never a line of their own.
+          .child(div().when(!busy, el => el.flex_1()).flex_shrink(0).max_w(busy ? 150 : 1000).min_w(0).truncate().text_color(idle ? t.muted : t.foreground).child(name))
+          .when(Boolean(busy), el => el.child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).child(busy)))
           .when(Boolean(badge), el => el.child(badge))
           .when(subs.length > 0, el => el.child(fold(a, subs)))
           .child(this.hovered === a.address ? pin : hops || finished || asks ? div().size(14).flex_none() : this.status(t, a)))
         .child(h_flex().w_full().gap(8).items_center().text_size(10.5).text_color(t.dim)
           .when(Boolean(pic), el => el.child(h_flex().w(classic() ? 16 : FIG_W).flex_none().ml(-2).mr(2).justify_center().when(Boolean(bar), c => c.child(bar))))
           .child(h_flex().flex_1().min_w(0).gap(6).items_center().overflow_hidden()
-            .children(where.map(([text, glyph, color]) => h_flex().gap(4).items_center()
+            .children(where.map(([text, glyph, color]) => glyph === "branch"
+              ? this.branchLine(t, text, this.gitFor(machineOfAddress(a.address), allPanes.find(p => p.pane === a.pane)?.cwd, text), `ag-git-${a.address}`)
+              : h_flex().gap(4).items_center()
               .when(glyph === "folder", el => el.flex_none())
               .when(glyph === "branch", el => el.flex_1().min_w(0))
               .when(glyph !== "folder" && glyph !== "branch", el => el.min_w(0))
@@ -1297,7 +1459,13 @@ export default class Agents extends View {
     const folderHeader = (sp, members, nTerms) => {
       const key = `space-${sp.id}`, open = !this.folded.has(key);
       const top = members.reduce((m, a) => ((RANK[a.status] ?? 0) > (RANK[m] ?? 0) ? a.status : m), null);
-      return h_flex().id(key).h(28).flex_none().relative().pl(8).pr(4).gap(7).items_center().rounded(6).cursor_pointer()
+      // Its branch once, under its name, with the git marks; the tree's line runs on past it from the folder icon.
+      const sb = branchOf.get(sp.id);
+      const branchRow = sb?.branch ? h_flex().h(14).flex_none().pl(29).pr(8).mt(-4).mb(4).items_center().text_size(10.5)
+        .child(this.branchLine(t, sb.branch, this.gitFor(sb.machine, sb.cwd, sb.branch), `space-git-${sp.id}`)) : null;
+      const line = branchRow && open && members.length + nTerms > 0
+        ? div().absolute().left(15).top(22).bottom(0).w(1).bg(treeColor(t)) : null;
+      return v_flex().id(key).flex_none().relative().rounded(6).cursor_pointer()
         .text_size(12.5).hover((st) => st.bg(t.hover))
         .when(spaceDrag.shown?.id === sp.id, (el) => el.opacity(0.45))
         .on_hover((on, cx) => {
@@ -1313,6 +1481,8 @@ export default class Agents extends View {
         })
         .when(spaceDrag.shown?.target?.id === sp.id, (el) => el.child(div().absolute().left(6).right(6).h(2).rounded(1).bg(t.accent)
           .when(spaceDrag.shown.target.after, (d) => d.bottom(-1)).when(!spaceDrag.shown.target.after, (d) => d.top(-1))))
+        .when(Boolean(line), (el) => el.child(line))
+        .child(h_flex().h(28).flex_none().pl(8).pr(4).gap(7).items_center()
         .child(spaceMark(t, sp))
         .child(div().flex_1().min_w(0).truncate().font_medium().text_color(sp.active ? t.foreground : t.muted).child(sp.name || "folder"))
         .when(!open, (el) => el
@@ -1345,7 +1515,8 @@ export default class Agents extends View {
           .hover((st) => st.bg(t.hover).text_color(t.foreground))
           .tooltip(`New tab in ${sp.name || "this space"}`)
           .on_click((_e, cx) => { cx.stop_propagation(); run("tab.new", { space: sp.id }); })
-          .child(svg("mods/pond-sidebar/icons/plus.svg").size(11)));
+          .child(svg("mods/pond-sidebar/icons/plus.svg").size(11))))
+        .when(Boolean(branchRow), (el) => el.child(branchRow));
     };
     /** Pond: a machine's agents and terminals, by space (folder), each hung from the machine's line. */
     const byFolder = (g, machineWrap = true) => {

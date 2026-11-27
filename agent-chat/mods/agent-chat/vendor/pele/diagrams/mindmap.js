@@ -1,2 +1,1 @@
-// Stub: the pele build this mod vendors is not published with Pond (see vendor/pele/core.js).
-export default {};
+import{a}from"../chunks/7HRHJMFR.js";import"../chunks/S63OEDPG.js";import"../chunks/NT5JY5WP.js";import"../chunks/6PIGVMFT.js";import"../chunks/DKTLEL5E.js";import"../chunks/BGW36YJW.js";import"../chunks/STHDNR4A.js";export{a as default};

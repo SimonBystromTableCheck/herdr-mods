@@ -26,11 +26,48 @@ export function summary(steps) {
   const parts = order.map(k => {
     const kind = KINDS[k] ?? KINDS.other, n = k === "edit" ? Math.max(1, files.edit.size) : counts[k];
     if (!kind.one) return kind.label;
+    if (k === "shell") {
+      const names = [...new Set(calls.filter(c => c.k === "shell").flatMap(c => commandNames(c.d)))];
+      if (names.length) return `${kind.label} ${names.slice(0, 3).join(", ")}${names.length > 3 ? ` +${names.length - 3}` : ""}`;
+    }
     if (n === 1 && calls.length === 1 && calls[0].d && k !== "shell") return `${kind.label} ${calls[0].d}`;
     return `${kind.label} ${n} ${n === 1 ? kind.one : kind.many}`;
   });
   const text = parts.join(", ");
   return parts.length ? text[0].toUpperCase() + text.slice(1).replace(/, (\w)/g, (_m, c) => `, ${c.toLowerCase()}`) : "";
+}
+
+// Words after a program that name what it did: `git push`, `gh pr create`, `npm run build`, `cargo test`.
+const SUBCOMMANDS = /^(git|gh|npm|pnpm|yarn|bun|cargo|go|docker|kubectl|hc|herdr-app|todo|brew|make|uv|pip|poetry|terraform|aws)$/;
+// Programs that only look at or move things: left out of the title while something else ran.
+const SKIP = /^(cd|echo|printf|true|false|sleep|export|set|test|\[|for|while|until|if|fi|done|esac|case|then|else|do)$/;
+const QUIET = /^(ls|cat|head|tail|wc|grep|rg|sed|awk|tr|sort|uniq|cut|xargs|tee|test|\[|mkdir|rm|cp|mv|which|pwd|python3?|node|jq|find)$/;
+
+/** The programs a shell command ran, as a title says them: "git commit", "gh pr create", "npm test". */
+export function commandNames(cmd) {
+  const out = [], quiet = [];
+  // Only the command's first line counts (a heredoc's body isn't commands), split at && || ; |.
+  // Only the command itself counts, not a heredoc's body (the reader may have joined its lines with spaces).
+  const head = String(cmd || "").split(/\n/)[0].split(/<<-?\s*['"]?\w+['"]?/)[0];
+  for (let part of head.split(/&&|\|\||;|\|/)) {
+    // `X=$(mktemp -d)` ran mktemp: what's inside a command substitution counts, the assignment doesn't.
+    part = part.trim().replace(/^\w+=["']?\$\(/, "").replace(/^\$\(/, "").replace(/^\(+/, "").replace(/^(?:\w+=\S*\s+)+/, "").replace(/^(?:(?:do|then|else|sudo|env|time|command|exec)\s+)+/, "");
+    const words = part.match(/"[^"]*"|'[^']*'|\S+/g) ?? [];
+    if (!words.length) continue;
+    const prog = words[0].split("/").pop();
+    if (!/^[\w.+-]+$/.test(prog) || prog.startsWith("-")) continue;
+    let name = prog;
+    if (SUBCOMMANDS.test(prog)) {
+      const rest = words.slice(1).filter((w, i, a) => !w.startsWith("-") && !(i > 0 && /^-[Cc]$/.test(a[i - 1])));
+      if (rest[0] && /^[a-z][\w-]*$/.test(rest[0])) {
+        name += ` ${rest[0]}`;
+        if ((prog === "gh" || prog === "npm" && rest[0] === "run" || prog === "hc" && rest[0] === "machine") && rest[1] && /^[a-z][\w:-]*$/.test(rest[1])) name += ` ${rest[1]}`;
+      }
+    }
+    if (SKIP.test(prog)) continue;
+    (QUIET.test(prog) || name === "git add" ? quiet : out).push(name);
+  }
+  return out.length ? out : quiet.slice(0, 1);
 }
 
 /** The rows without the message the agent handed back (Claude Code, stopped before answering). */
@@ -113,7 +150,7 @@ function callDigest(c) {
 function digest(m) {
   let d = DIGESTS.get(m);
   if (d === undefined) {
-    d = m.text != null ? hash(sample(m.text) + (m.images ?? []).join("|") + (m.stats ? JSON.stringify(m.stats) : "")) : hash((m.calls ?? []).map(callDigest).join("|"));
+    d = m.text != null ? hash(sample(m.text) + (m.images ?? []).join("|") + (m.stats ? JSON.stringify(m.stats) : "") + (m.at ? `@${m.at}` : "")) : hash((m.calls ?? []).map(callDigest).join("|"));
     DIGESTS.set(m, d);
   }
   return d;
@@ -165,7 +202,7 @@ export function withCopyRows(rows, working) {
     if (m.kind === "stats") { stats = { secs: m.secs, out: m.out, tps: m.tps }; continue; }
     if (m.kind === "message" && m.role === "user") {
       close(false); out.push(m);
-      if (m.text?.trim()) out.push({ kind: "copy", text: m.text.trim(), prompt: true });
+      if (m.text?.trim()) out.push({ kind: "copy", text: m.text.trim(), prompt: true, ...(m.at ? { at: m.at } : {}) });
       continue;
     }
     if (m.kind === "message" && m.text?.trim()) texts.push(m.text.trim());

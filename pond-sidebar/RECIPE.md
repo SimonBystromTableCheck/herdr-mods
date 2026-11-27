@@ -28,7 +28,7 @@ https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/pond-sidebar". Wh
 There are no props for layout copies. The mod opens three copies of itself with props (`newMenu`,
 `newSpace`, `loginBar`) as popups and dialogs; never place those in a layout.
 
-**Version:** 1.1.0 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.2.0 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** no update pill. Tell your Herdr agent "update my herdr mods" (or "update pond mods"); it
 follows `UPDATE.md` in the mod folder, which checks this repo's `versions.json` and backs up what it
@@ -155,6 +155,11 @@ machines as a dash / spinner / cross, `+` for New space. Space rows are dropped 
 - New space opens the dialog and starts the chosen agent in the chosen folder.
 
 ## Changes
+
+### 1.2.0 (2026-11-27)
+
+- Takes in the newer changes from Anthony Chapé's herdr-pond (github.com/anthonychape-tc/herdr-pond): each space's branch once under its name with git marks (ahead / behind, changes), terminal rows lined up with the ducks, and a working agent's timer and step after its name.
+- Agent cards show their branch only when it differs from their space's (pinned cards always), plus the space name on pinned cards. Kept from 1.1.0: Edit space icons, account badges and the model at the right end.
 
 ### 1.1.0 (2026-11-27)
 

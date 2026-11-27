@@ -333,7 +333,7 @@ export class Composer {
   dropFiles(paths, cx) {
     const images = paths.filter(p => IMAGE_FILE.test(p));
     const docs = paths.filter(p => DOC_FILE.test(p));
-    if (!images.length && !docs.length) { this.host.note = "Only images and documents can be attached (png, jpg, gif, webp, pdf, md, txt, xlsx, xls, docx)."; cx.notify(); return; }
+    if (!images.length && !docs.length) { this.host.note = "Only images and documents can be attached (png, jpg, gif, webp, pdf, md, txt, xlsx, xls, docx, csv)."; cx.notify(); return; }
     const owner = this.host.key;
     cx.spawn(async cx => {
       for (const source of docs) this.attach(source, source.split(/[\\/]/).pop(), cx, owner, false);
@@ -401,14 +401,21 @@ export class Composer {
     this.send(cx);
   }
 
-  send(cx) {
-    const t = target(), typed = this.input.value().trim(), attached = this.attachments.slice();
+  /** Sends `text` as a message of its own (a quick-action button), leaving whatever is typed in the box alone. */
+  sendPreset(text, cx) {
+    this.send(cx, text);
+  }
+
+  send(cx, preset = null) {
+    const t = target(), typed = preset ?? this.input.value().trim(), attached = preset ? [] : this.attachments.slice();
     if (!t || (!typed && !attached.length) || this.host.sending) return;
     this.host.sending = true;
     this.hint = ""; this.hintToken++;
-    this.input.set_value("");
-    this.attachments = this.attachments.filter(a => !attached.includes(a));
-    this.keepDraft(cx);
+    if (!preset) {
+      this.input.set_value("");
+      this.attachments = this.attachments.filter(a => !attached.includes(a));
+      this.keepDraft(cx);
+    }
     cx.notify();
     const owner = this.host.key;
     if (typed && t.status !== "blocked" && !typed.startsWith("/")) this.host.showPending(owner, typed);
@@ -420,6 +427,7 @@ export class Composer {
         storeDraft(owner, this.drafts.get(owner));
         return;
       }
+      if (preset) return;
       if (!this.input.value().trim()) this.input.set_value(typed);
       this.attachments = [...attached.filter(a => !this.attachments.includes(a)), ...this.attachments];
       storeDraft(owner, { text: this.input.value(), attachments: this.attachments });
@@ -517,6 +525,7 @@ export class Composer {
             this.chordAt = 0;
             const paste = e.key === "v" && (e.modifiers.control || e.modifiers.platform) && !e.modifiers.alt;
             if (paste && cx.read_from_clipboard() === undefined) { cx.stop_propagation(); this.imagePasteAt = Date.now(); this.pasteImage(cx); return; }
+            if (e.key === "f" && (e.modifiers.platform || e.modifiers.control && e.modifiers.shift) && !e.modifiers.alt) { cx.stop_propagation(); this.host.list.openSearch(cx); return; }
             if (e.key === "tab" && !e.modifiers.shift && this.menu.accept(target(), cx)) { cx.stop_propagation(); return; }
             if (e.key !== "enter" || e.modifiers.shift || e.modifiers.alt) return;
             cx.stop_propagation();
@@ -527,7 +536,7 @@ export class Composer {
           ? div().id("stop").size(32).flex_none().flex().items_center().justify_center().rounded(16)
             .bg(t.foreground).text_color(t.background).tooltip("Stop (Esc)")
             .when(!this.host.stopping, el => el.cursor_pointer().hover(s => s.opacity(0.85)).on_click((_e, cx) => this.host.stop(cx)))
-            .child(svg(`${ICONS}/stop-filled.svg`).size(14))
+            .child(svg(`${ICONS}/stop-filled.svg`).size(20))
           : div().id("send").size(32).flex_none().flex().items_center().justify_center().rounded(16)
             .bg(ready ? t.accent : t.raised).text_color(ready ? t.accent_foreground : t.dim)
             .when(ready, el => el.cursor_pointer().hover(s => s.opacity(0.88)).on_click((_e, cx) => this.send(cx)))

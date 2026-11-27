@@ -4,7 +4,7 @@ import { onWindows, python, modFile } from "./platform.js";
 
 export const IMAGE_FILE = /\.(png|jpe?g|gif|webp)$/i;
 // Documents attached as they are (no preview copy): placed beside the terminal and mentioned by path.
-export const DOC_FILE = /\.(pdf|md|markdown|txt|text|xlsx|xls|docx)$/i;
+export const DOC_FILE = /\.(pdf|md|markdown|txt|text|xlsx|xls|docx|csv)$/i;
 export const ATTACH_DIR = "cache/agent-chat";
 export function attachDir() { return onWindows() ? `${appHome()}\\cache\\agent-chat` : `${appHome()}/${ATTACH_DIR}`; }
 export const SENT_DIR = `${ATTACH_DIR}/sent`;

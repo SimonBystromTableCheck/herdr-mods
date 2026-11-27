@@ -80,8 +80,8 @@ def set_output(cid, text):
     if cid: entries.append({"kind": "out", "id": cid, "text": clip(text)})
 
 PLACED = r'herdr-core[\\/][^\\/"\s]+[\\/]files[\\/]'
-PLACED_PATH = r'[^"\s]*' + PLACED + r'[^"\s]*\.(?:png|jpe?g|gif|webp|pdf|md|markdown|txt|text|xlsx|xls|docx)'
-PLACED_QUOTED = r'[^"]*' + PLACED + r'[^"]*\.(?:png|jpe?g|gif|webp|pdf|md|markdown|txt|text|xlsx|xls|docx)'
+PLACED_PATH = r'[^"\s]*' + PLACED + r'[^"\s]*\.(?:png|jpe?g|gif|webp|pdf|md|markdown|txt|text|xlsx|xls|docx|csv)'
+PLACED_QUOTED = r'[^"]*' + PLACED + r'[^"]*\.(?:png|jpe?g|gif|webp|pdf|md|markdown|txt|text|xlsx|xls|docx|csv)'
 PLACED_IMAGE = re.compile(r'<image\s+name=(\[Image #\d+\])\s+path="(%s)">(?:\s*</image>)?|@?"(%s)"|@?(%s)' % (PLACED_QUOTED, PLACED_QUOTED, PLACED_PATH), re.I)
 
 def unwrap_hc(text):

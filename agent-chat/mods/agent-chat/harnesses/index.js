@@ -47,7 +47,8 @@ export function withImages(h, paths, text) {
   const style = imageStyle(h);
   if (style === "paste") return text;
   const refs = paths.map(p => style === "mention" ? mention(p) : p);
-  return [refs.join(" "), text].filter(Boolean).join(" ");
+  // Images alone: a trailing space closes the last `@` mention, or the harness's file menu takes the Enter.
+  return text ? `${refs.join(" ")} ${text}` : `${refs.join(" ")} `;
 }
 
 /** The chat's draft as the harness's own box shows it. */

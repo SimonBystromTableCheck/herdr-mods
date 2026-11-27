@@ -103,7 +103,13 @@ export function applyRead(s, r) {
 function shapeRows(raw) {
   const shaped = [], turn = new TurnClock();
   for (const e of raw) {
-    if (e.kind === "tick") { turn.tick(e); continue; }
+    if (e.kind === "tick") {
+      turn.tick(e);
+      // A prompt's time comes right after it: it goes on the message, for the time under its bubble.
+      const last = shaped[shaped.length - 1];
+      if (e.p && last?.kind === "message" && last.role === "user" && last.at == null) shaped[shaped.length - 1] = { ...last, at: e.at };
+      continue;
+    }
     if (e.kind === "message" && e.role === "user") turn.end(shaped);
     if (e.kind !== "call") { shaped.push(e); continue; }
     const last = shaped[shaped.length - 1];

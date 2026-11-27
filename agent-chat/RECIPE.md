@@ -25,7 +25,7 @@ https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/agent-chat". What
    (and `"lone": true` so a single pane gets it too). The ids must be exactly these: the mod switches
    with `layout.select {stack: "chat-view", child}`. On `pond-tree` (this repo) it already is.
 
-**Version:** 1.1.0 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.2.0 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** tell your Herdr agent "update my herdr mods". It follows `UPDATE.md` from this repo, which
 checks `versions.json` and offers every newer version of the mods and layouts you have from here, with
@@ -170,6 +170,12 @@ copy. Shared state (drafts, views, read positions) lives outside the mod folder 
 - A Codex, Pi or OpenCode tab also shows its conversation.
 
 ## Changes
+
+### 1.2.0 (2026-11-27)
+
+- Takes in the newer changes from Anthony Chapé's herdr-pond (github.com/anthonychape-tc/herdr-pond): send an image with no text; git chips and buttons in the chat (commit, push, merge, tags: `components/git-actions.js`, `model/git.js`), commit and PR references linked to the repo, search and message times.
+- Vendored Pele updated to his build (1.13.0, split into `vendor/pele/chunks/`), and the ascii-sharks backdrop with `species.js`.
+- Your local behaviour is kept: the chat box retaking focus, screen-read replies and HTML shown as text in messages.
 
 ### 1.1.0 (2026-11-27)
 

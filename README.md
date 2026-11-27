@@ -40,7 +40,7 @@ Which version you have: `"version"` in `~/.config/herdr-app/mods/<name>/mod.json
 | Layout | Version | |
 | --- | --- | --- |
 | [pond](pond/) | 1.13.0 | Herdr's main layout with my own tabs, agents and files panels, and git, skills, todos, servers, remote-checker, Claude profiles, Find (workbench) and Notes panels on the right |
-| [pond-tree](pond-tree/) | 1.1.0 | Pond with one machine → space → agent tree in the sidebar, pinned panel cards, usage cards, a Chat / Terminal view of each agent and the panels in a hamburger menu. Built on [Anthony Chapé's herdr-pond](https://github.com/anthonychape-tc/herdr-pond) and [azaeldrm's Harness](https://github.com/azaeldrm/harns-layout) |
+| [pond-tree](pond-tree/) | 1.1.1 | Pond with one machine → space → agent tree in the sidebar, pinned panel cards, usage cards, a Chat / Terminal view of each agent and the panels in a hamburger menu. Built on [Anthony Chapé's herdr-pond](https://github.com/anthonychape-tc/herdr-pond) and [azaeldrm's Harness](https://github.com/azaeldrm/harns-layout) |
 
 ## Mods
 
@@ -61,9 +61,9 @@ Which version you have: `"version"` in `~/.config/herdr-app/mods/<name>/mod.json
 | [pond-settings](pond-settings/) | 1.0.0 | every layout and mod you have from here in one dialog: installed vs latest, update one or all, and install other layouts to try |
 | [pond-pins](pond-pins/) | 1.0.0 | pinned panels as small cards in a carousel above the agents (`pond-tree`; pin them from pond-tabs' dropdown) |
 | [pond-chrome](pond-chrome/) | 1.1.0 | the sidebar's header (logo, session history, search, fold to a rail) and footer (Settings, Add machine, Pond settings, token usage); from herdr-pond / Harness |
-| [pond-sidebar](pond-sidebar/) | 1.1.0 | one machine → space → agent tree with Pond figures, context bars, Claude account and model, machine stats and token usage; from herdr-pond / Harness |
+| [pond-sidebar](pond-sidebar/) | 1.2.0 | one machine → space → agent tree with Pond figures, context bars, Claude account and model, machine stats and token usage; from herdr-pond / Harness |
 | [pond-usage](pond-usage/) | 1.0.0 | usage cards at the bottom of the sidebar for the Claude accounts you pin in the Claude panel (needs pond-profiles) |
-| [agent-chat](agent-chat/) | 1.1.0 | a chat view of an agent's terminal (Claude Code, Codex, OpenCode, Pi): messages, steps, diagrams, a composer, a Chat / Terminal switch and Send to Notes; from herdr-pond / Harness |
+| [agent-chat](agent-chat/) | 1.2.0 | a chat view of an agent's terminal (Claude Code, Codex, OpenCode, Pi): messages, steps, diagrams, a composer, a Chat / Terminal switch and Send to Notes; from herdr-pond / Harness |
 | [pond-history](pond-history/) | 1.0.0 | Session history: every Claude Code session by project, filter and search, resume or fork it in a new tab, vim keys; by [Anthony Chapé](https://github.com/anthonychape-tc/herdr-pond), published with his permission |
 | [space-editor](space-editor/) | 1.0.0 | Edit space: rename a space and give it a theme colour and an icon (Lucide symbols or program logos), shown in pond-sidebar's tree |
 

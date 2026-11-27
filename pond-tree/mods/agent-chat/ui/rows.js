@@ -1,10 +1,11 @@
 import { div, image } from "gpui-kit";
 import { v_flex, h_flex, TextView } from "gpui-base";
-import { COLUMN, icon, mono, disclosure, bubble } from "./primitives.js";
+import { COLUMN, icon, mono, disclosure, bubble, clock } from "./primitives.js";
 import { tokens } from "../model/runs-with.js";
 import { SENT_DIR, previewFile } from "../images.js";
 import { KINDS, STEP, summary, stepText } from "../model/transcript.js";
 import { diagramFor } from "../diagrams.js";
+import { gitEvents } from "../model/git.js";
 
 /**
  * A code block in a box titled with its language; with `copied` set (true once copied), a copy icon sits at the top
@@ -46,21 +47,24 @@ function toolButton(t, id, glyph, done, busy, tip, bordered = true, size = 28) {
  * At a response's left end, after its copy button, "Send to Notes": clicking it saves the response as a note in its
  * space's notes folder (main.js's sendToNotes; the list reports the row, so the button is found by its x). The person's
  * own messages don't get one. The button hugs its icon and label (the chips' 6 px, as the copy button's own padding):
- * its width is fixed rather than measured, since a size observer inside a list row breaks the list's layout.
+ * its width is fixed rather than measured, since a size observer inside a list row breaks the list's layout. Once
+ * pressed it reads "Sent" and narrows to fit that (NOTES_SENT).
  */
-export const NOTES_BUTTON = 112, NOTES_GAP = 8;
+export const NOTES_BUTTON = 112, NOTES_SENT = 58, NOTES_GAP = 8;
 
 function copyRow(m, { t, copied, notesSent }) {
   const done = copied === m.key, saved = notesSent === m.key, s = m.stats;
   const stat = (glyph, text, tip) => h_flex().id(`st-${glyph}-${m.key}`).gap(5).items_center().tooltip(tip)
     .child(icon(glyph, 12, t.dim)).child(div().text_size(11.5).text_color(t.dim).child(text));
-  const send = h_flex().id(`notes-${m.key}`).w(NOTES_BUTTON).h(24).flex_none().gap(5).items_center().justify_center().rounded(6)
+  const send = h_flex().id(`notes-${m.key}`).w(saved ? NOTES_SENT : NOTES_BUTTON).h(24).flex_none().gap(5).items_center().justify_center().rounded(6)
     .cursor_pointer().hover(el => el.bg(t.hover))
     .tooltip(saved ? "Saved in the branch's note in your vault" : "Save this message to the branch's note in your vault")
     .child(icon(saved ? "check" : "notes", 12, saved ? t.foreground : t.muted))
     .child(div().truncate().text_size(11.5).text_color(saved ? t.foreground : t.muted).child(saved ? "Sent" : "Send to Notes"));
   const copy = toolButton(t, `copy-${m.key}`, "copy", done, false, m.prompt ? "Copy your message" : "Copy the response", false, 24);
-  if (m.prompt) return h_flex().id(`copy-row-${m.key}`).w_full().h(24).gap(12).items_center().justify_end().child(copy);
+  if (m.prompt) return h_flex().id(`copy-row-${m.key}`).w_full().h(24).gap(8).items_center().justify_end()
+    .when(Boolean(m.at), el => el.child(div().id(`at-${m.key}`).text_size(11.5).text_color(t.dim).tooltip(new Date(m.at * 1000).toLocaleString()).child(sentAt(m.at))))
+    .child(copy);
   // NOTES_GAP between the copy button and the chip, and the chip and the turn numbers (which keep 12 among themselves).
   return h_flex().id(`copy-row-${m.key}`).w_full().h(24).gap(NOTES_GAP).items_center().justify_start()
     .child(copy)
@@ -72,6 +76,18 @@ function copyRow(m, { t, copied, notesSent }) {
       .when(s?.tps != null, e => e.child(stat("circle-gauge", `${Math.round(s.tps)}tk/s`, "Tokens per second while the agent was writing (tool time left out)")))));
 }
 
+/** When a message was sent: "2:14 PM" today, "Yesterday 2:14 PM", else "Nov 24, 2:14 PM". */
+function sentAt(secs) {
+  const d = new Date(secs * 1000), now = new Date();
+  const day = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((day(now) - day(d)) / 86400000);
+  const time = clock(d.getTime());
+  if (days === 0) return time;
+  if (days === 1) return `Yesterday ${time}`;
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${months[d.getMonth()]} ${d.getDate()}${d.getFullYear() !== now.getFullYear() ? ` ${d.getFullYear()}` : ""}, ${time}`;
+}
+
 /** "8s", "42s", "3m 05s", "1h 02m". */
 export function duration(secs) {
   const n = Math.round(secs);
@@ -80,15 +96,16 @@ export function duration(secs) {
   return `${Math.floor(n / 3600)}h ${String(Math.floor(n % 3600 / 60)).padStart(2, "0")}m`;
 }
 
-/** Markdown with each fenced code block in a titled box of its own, and each table drawn as a clean grid. */
-function markdown(id, source, t) {
+/** Markdown with each fenced code block in a titled box of its own, and each table drawn as a clean grid.
+ * The Notes preview (mods/notes/main.js, noteMarkdown) draws the same blocks: change both together. */
+function markdown(id, source, t, repo = "") {
   const lines = source.split("\n");
   const blocks = [];
   let buf = [];
   const flush = () => {
     const text = buf.join("\n").trim();
     buf = [];
-    if (text) blocks.push(TextView.markdown(`${id}-t${blocks.length}`, text).raw_html(false).selectable(true));
+    if (text) blocks.push(TextView.markdown(`${id}-t${blocks.length}${repo ? "-gh" : ""}`, repo ? linkGit(text, repo) : text).raw_html(false).selectable(true));
   };
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -98,6 +115,11 @@ function markdown(id, source, t) {
       const code = [];
       for (i++; i < lines.length && !/^```/.test(lines[i]); i++) code.push(lines[i]);
       blocks.push(codeBox(`${id}-c${blocks.length}`, lang, code.join("\n"), t));
+    } else if (isRule(line) && !(buf.length && buf[buf.length - 1].trim())) {
+      // A thematic break as a hairline in the theme's border colour, not the
+      // renderer's bright full-weight rule. "---" right under text stays a heading.
+      flush();
+      blocks.push(div().w_full().py(4).child(div().w_full().h(1).bg(t.border)));
     } else if (isTableStart(lines, i)) {
       flush();
       const rows = [lines[i], lines[i + 1]];
@@ -112,6 +134,28 @@ function markdown(id, source, t) {
   if (blocks.length === 1) return blocks[0];
   return v_flex().w_full().gap(12).children(blocks);
 }
+
+/**
+ * Commit hashes and pull request numbers in a reply as links to GitHub: `6d4b4c0` (in backticks or bare, with digits and
+ * letters both), #136, and owner/repo#12 for another repo. Code spans of anything else, links and URLs stay as they are.
+ */
+const SHA = /^(?=[0-9a-f]*[a-f])(?=[0-9a-f]*\d)[0-9a-f]{7,40}$/;
+export function linkGit(text, repo) {
+  const gh = `https://github.com/${repo}`;
+  return text.split(/(`[^`\n]*`|\[[^\]\n]*\]\([^)\n]*\)|<?https?:\/\/[^\s)>]+>?)/).map((part, i) => {
+    if (i % 2 === 1) {
+      const code = part.match(/^`([0-9a-f]{7,40})`$/);
+      return code && SHA.test(code[1]) ? `[${part}](${gh}/commit/${code[1]})` : part;
+    }
+    return part
+      .replace(/(^|[\s(])([\w.-]+\/[\w.-]+)#(\d{1,6})\b/g, (_m, pre, other, n) => `${pre}[${other}#${n}](https://github.com/${other}/pull/${n})`)
+      .replace(/(^|[\s(,])#(\d{1,6})\b(?![\w-])/g, (_m, pre, n) => `${pre}[#${n}](${gh}/pull/${n})`)
+      .replace(/(^|[\s(,])([0-9a-f]{7,40})\b(?![\w/-])/g, (m, pre, sha) => (SHA.test(sha) ? `${pre}[${sha}](${gh}/commit/${sha})` : m));
+  }).join("");
+}
+
+// "---", "***", "_ _ _": a markdown thematic break.
+const isRule = (line) => /^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/.test(line);
 
 // A table's cells on one line, without the outer pipes.
 const tableCells = (line) => line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((s) => s.trim());
@@ -182,12 +226,44 @@ function tableBox(id, lines, t) {
     .children(body.map((cells, r) => row(cells, r, r === body.length - 1)));
 }
 
-/** A group's title line; opened, its steps follow as rows of their own (stepRows). */
+/** A git/GitHub action's colour and icon, by gitEvents' `type`. */
+const GIT_LOOK = {
+  branch:  { color: t => t.ansi6, glyph: "branch" },
+  commit:  { color: t => t.ansi3, glyph: "git-commit" },
+  push:    { color: t => t.ansi2, glyph: "cloud-upload" },
+  pr:      { color: t => t.ansi4, glyph: "git-pull-request" },
+  merged:  { color: t => t.ansi5, glyph: "git-merge" },
+  tag:     { color: t => t.ansi3, glyph: "tag" },
+  deleted: { color: t => t.ansi1, glyph: "x" },
+  failed:  { color: t => t.ansi1, glyph: "x" },
+  muted:   { color: t => t.muted, glyph: "check" },
+};
+
+/**
+ * Git actions as a wrapping strip of chips, each tinted by kind: cyan branches, yellow commits, green pushes, blue pull
+ * requests, magenta merges, red failures. Hovering one shows its full message, repo or link.
+ */
+function gitChips(t, id, events) {
+  return h_flex().w_full().flex_wrap().gap(6).children(events.map((e, i) => {
+    const look = GIT_LOOK[e.type] ?? GIT_LOOK.muted, col = look.color(t) || t.muted;
+    return h_flex().id(`${id}-g${i}`).h(22).px(8).gap(5).items_center().min_w(0).max_w(520).rounded(6)
+      .bg(alpha(col, 0.12)).border_1().border_color(alpha(col, 0.35))
+      .when(Boolean(e.tip), el => el.tooltip(e.tip))
+      .child(icon(look.glyph, 12, col))
+      .child(div().flex_none().text_size(12).font_semibold().text_color(col).child(e.verb))
+      .when(Boolean(e.detail), el => el.child(div().min_w(0).truncate().font_family(mono()).text_size(11.5)
+        .text_color(e.type === "muted" ? t.muted : t.foreground).child(e.detail)));
+  }));
+}
+
+/** A group's title line, then its git actions as chips (shown open or closed); opened, its steps follow as rows of their own (stepRows). */
 function toolsRow(m, { t, open }) {
   const kinds = [...new Set(m.calls.map(c => c.k).filter(k => k !== "think"))];
   const glyph = !kinds.length ? "brain" : kinds.length === 1 ? (KINDS[kinds[0]] ?? KINDS.other).icon : "layers";
+  const git = m.calls.flatMap(gitEvents);
   // items_start: a v_flex centres its children across its width, which would put the group's title in the middle.
-  return v_flex().w_full().items_start().child(disclosure(t, glyph, summary(m.calls), Boolean(open[m.key])));
+  return v_flex().w_full().items_start().child(disclosure(t, glyph, summary(m.calls), Boolean(open[m.key])))
+    .when(git.length > 0, el => el.child(div().w_full().pl(22).pb(4).child(gitChips(t, `git-${m.key}`, git))));
 }
 
 const DIFF_CAP = 200; // lines of an edit a card draws before saying how many are left
@@ -271,8 +347,10 @@ function stepRow(m, { t, open: opened, width }) {
       .child(icon(open ? "chevron-down" : "chevron-right", 12, t.dim))));
   // A v_flex centres its children across its width (as an h_flex does down it): without items_stretch the card and its
   // body shrink to their content, wrapping every diff line.
+  const git = gitEvents(c);
   const box = c.k === "think" ? v_flex().w_full().items_stretch().child(head).when(Boolean(body), el => el.child(body))
     : v_flex().w(col - 22).items_stretch().rounded(8).border_1().border_color(t.border).bg(t.surface).overflow_hidden().child(head)
+      .when(git.length > 0, el => el.child(div().w_full().px(10).pb(8).child(gitChips(t, `git-${i}`, git))))
       .when(Boolean(body), el => el.child(div().w_full().border_t_1().border_color(t.border).child(body)));
   return v_flex().w(col).items_stretch().ml(6).pl(16).border_l(1).border_color(t.border).pb(m.last ? 6 : 4).child(box);
 }
@@ -289,7 +367,7 @@ function sentImage(t, id, path, sent, machine) {
 
 
 /** A message: the person's in a bubble (its images above it), the agent's as plain markdown across the column. */
-function messageRow(m, { t, width, sent, machine, sendQueued }) {
+function messageRow(m, { t, width, sent, machine, sendQueued, repo }) {
   if (m.role === "user") {
     const room = Math.min(620, Math.round(Math.min(COLUMN, (width ?? COLUMN) - 48) * 0.85));
     const text = m.text ? bubble(t, room, markdown(`body-${m.key}`, m.text, t)) : null;
@@ -309,7 +387,7 @@ function messageRow(m, { t, width, sent, machine, sendQueued }) {
       .child(h_flex().w_full().justify_end().flex_wrap().gap(8).children(m.images.map((p, i) => sentImage(t, `img-${m.key}-${i}`, p, sent, machine))))
       .when(Boolean(text), el => el.child(text));
   }
-  const body = div().w_full().text_size(15).text_color(t.foreground).child(markdown(`body-${m.key}`, m.text, t));
+  const body = div().w_full().text_size(15).text_color(t.foreground).child(markdown(`body-${m.key}`, m.text, t, repo));
   // Read off the screen while a question waits (Claude Code logs the reply once it's answered): said under it.
   if (m.phase === "screen") return v_flex().w_full().gap(6)
     .when(Boolean(m.partial), el => el.child(div().text_size(11.5).text_color(t.dim).child("… the start is above the terminal's screen")))
@@ -334,6 +412,7 @@ function diagramRow(m, { t, width }) {
 }
 
 export const TOOL_BUTTON = 30, TOOL_GAP = 6;
+
 
 function diagramToolsRow(m, { t, copied }) {
   const button = (which, glyph, tip) => toolButton(t, `dt-${which}-${m.key}`, glyph, copied === `${m.key}:${which}`, copied === `${m.key}:${which}:busy`, tip);
