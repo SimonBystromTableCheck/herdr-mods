@@ -14,7 +14,7 @@ button: the Git panel's Files section reviews and stages changes.
 (and the `mod` names in the layout), run `herdr-app check ~/.config/herdr-app/mods/<name>` on
 each, then `herdr-app do layout.switch --name pond`.
 
-**Version:** 1.13.0 (see Changes at the end; also `"version"` in `layouts/pond.json`, and each mod's own in its `mod.json`).
+**Version:** 1.13.1 (see Changes at the end; also `"version"` in `layouts/pond.json`, and each mod's own in its `mod.json`).
 
 **Update:** from 1.6.0, a "Pond ↑ x.y.z" pill appears in the tab bar when a newer layout is published; click it, confirm, and a new Claude tab updates the layout and offers its mods (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `layouts/pond.json` and each folder in `mods/` with this folder's copies (asking an agent to *install* again adds second copies instead). Sizes and panels you clicked are kept (Herdr keeps them in `layouts/.state/`), and so are the mods' settings and data; edits you made inside `pond.json` or the mod folders are not. From 1.10.0 the layout has no `changes` slot; a gitview you installed for it can be removed (its `gitview*` mod folders).
 
@@ -121,6 +121,10 @@ Programs the panels run: `git`, `sh`, `hc`, `nvim` (git and skills), `mv` (todos
 - Settings → Look lists **Pond** with its preview picture, and picking it shows the same window.
 
 ## Changes
+
+### 1.13.1 (2026-11-27)
+
+- Mods: pond-tabs 1.6.1 (clicking a panel button focuses the panel). Layout file unchanged.
 
 ### 1.13.0 (2026-11-26)
 

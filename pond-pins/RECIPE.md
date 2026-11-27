@@ -16,7 +16,7 @@ https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/pond-pins". What 
    in any other layout, nothing happens: the mod sits unused and harms nothing. The `pond-tree`
    layout already has the block.
 
-**Version:** 1.0.0 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.0.1 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** this mod has no update pill of its own. Open Pond settings (command palette, or the duck
 in pond-tree's sidebar footer) and click Update, or tell your Herdr agent "update my herdr mods". It
@@ -101,6 +101,10 @@ outside the mod folder (`~/.config/herdr-app/pond-pins.json`) and are kept.
 - Starting a server shows a green `1` on the Servers card.
 
 ## Changes
+
+### 1.0.1 (2026-11-27)
+
+- Clicking a pinned card now gives that panel the keyboard, as leader + its key does. New file `enter.js` (same copy in pond-tabs).
 
 ### 1.0.0 (2026-11-26)
 

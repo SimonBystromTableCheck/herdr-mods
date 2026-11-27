@@ -48,7 +48,7 @@
       "path": "pond-files/mods/pond-files"
     },
     "pond-tabs": {
-      "version": "1.6.0",
+      "version": "1.6.1",
       "item": "pond-tabs",
       "path": "pond-tabs/mods/pond-tabs"
     },
@@ -73,7 +73,7 @@
       "path": "pond-settings/mods/pond-settings"
     },
     "pond-pins": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "item": "pond-pins",
       "path": "pond-pins/mods/pond-pins"
     },
@@ -110,7 +110,7 @@
   },
   "layouts": {
     "pond": {
-      "version": "1.13.0",
+      "version": "1.13.1",
       "item": "pond",
       "path": "pond/layouts/pond.json",
       "mods": [
@@ -130,7 +130,7 @@
       ]
     },
     "pond-tree": {
-      "version": "1.1.4",
+      "version": "1.1.5",
       "item": "pond-tree",
       "path": "pond-tree/layouts/pond-tree.json",
       "mods": [

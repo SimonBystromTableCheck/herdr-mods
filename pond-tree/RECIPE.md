@@ -24,7 +24,7 @@ then runs `herdr-app check` on each. It's an alternative to `pond`, never a repl
 installed. Installing doesn't switch layouts; pick it in Settings → Look or cycle with ctrl-shift-L
 (`layout.switch --name pond-tree`).
 
-**Version:** 1.1.4 (see Changes at the end; also `"version"` in `layouts/pond-tree.json`, and each
+**Version:** 1.1.5 (see Changes at the end; also `"version"` in `layouts/pond-tree.json`, and each
 mod's own in its `mod.json`).
 
 **Update:** Pond settings (the duck in the footer, or "Pond settings" in the palette) shows the layout
@@ -125,6 +125,10 @@ the `dock`), `pond-agents` (the sidebar draws its figures from `pond-agents.json
 - ctrl-shift-L cycles back to the previous layout, unchanged.
 
 ## Changes
+
+### 1.1.5 (2026-11-27)
+
+- Mods: pond-tabs 1.6.1, pond-pins 1.0.1 (clicking a panel button, dropdown row or pinned card focuses the panel). Layout file unchanged.
 
 ### 1.1.4 (2026-11-27)
 

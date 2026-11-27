@@ -3,6 +3,7 @@ import { h_flex } from "gpui-base";
 import { spaces, panes, run, openOverlay, closeOverlay, props, theme, window, shared, setShared, layout, settings, terminals, readTextFile, home, appHome } from "herdr";
 import * as fs from "fs/promises";
 import { SelfUpdate } from "./update.js";
+import { openPanel } from "./enter.js";
 import { pins as pinned, load as loadPins, save as savePins } from "./pins.js";
 
 function find(node, id) {
@@ -178,11 +179,10 @@ export default class Tabs extends View {
               setShared(ORDER, ids);
             }
           })
-          .on_click(() => {
+          .on_click((_e, cx) => {
             if (this.dragPanel && this.dragPanel !== b.id) return;
-            closeOverlay(overlay);
-            if (on) run("layout.hide", { id: "panel" });
-            else { run("layout.select", { stack: "panel-body", child: b.id }); run("layout.show", { id: "panel" }); }
+            if (on) { closeOverlay(overlay); run("layout.hide", { id: "panel" }); }
+            else openPanel(cx, b.id, b.mod, () => closeOverlay(overlay));
           })
           .child(svg(b.icon).size(14).flex_none())
           .child(div().flex_1().min_w(0).truncate().child(b.title))
@@ -272,9 +272,9 @@ export default class Tabs extends View {
         .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.dragPanel = id; cx.notify(); })
         .on_hover((h, cx) => { if (h) this.overPanel = id; else if (this.overPanel === id) this.overPanel = null; if (this.dragPanel) cx.notify(); })
         .on_mouse_up("left", () => { const from = this.dragPanel; if (from && from !== id) movePanel(from, id); })
-        .on_click(() => {
+        .on_click((_e, cx) => {
           if (on) run("layout.hide", { id: "panel" });
-          else { run("layout.select", { stack: "panel-body", child: id }); run("layout.show", { id: "panel" }); }
+          else openPanel(cx, id, buttons.find(b => b.id === id)?.mod);
         }).child(svg(icon).size(14)).child(label)
         .when(Boolean(dot), el => el.child(div().size(6).flex_none().rounded_full().bg(dot)))
         .when(badge > 0, el => el.child(div().h(16).min_w(16).px(4).flex().items_center().justify_center().rounded_full()

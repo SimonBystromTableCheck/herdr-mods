@@ -2,6 +2,7 @@ import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex, ScrollHandle } from "gpui-base";
 import { run, theme, layout, terminals, readTextFile, appHome, settings } from "herdr";
 import { pins as pinned, load, save } from "./pins.js";
+import { openPanel } from "./enter.js";
 
 // Square shortcut cards for the panels pinned from pond-tabs' hamburger dropdown (shared "pond-pins":
 // [panel-body child ids], in pin order; saved in ~/.config/herdr-app/pond-pins.json, see pins.js), in one carousel row: cards that don't fit scroll sideways in
@@ -111,10 +112,10 @@ export default class Pins extends View {
           const after = e.local_position.x >= CARD / 2;
           if (this.slot?.id !== p.id || this.slot.after !== after) { this.slot = { id: p.id, after }; cx.notify(); }
         })
-        .on_click(() => {
+        .on_click((_e, cx) => {
           if (this.overArrow) return;
           if (on) run("layout.hide", { id: "panel" });
-          else { run("layout.select", { stack: "panel-body", child: p.id }); run("layout.show", { id: "panel" }); }
+          else openPanel(cx, p.id, p.mod);
         })
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); save(pinned().filter(x => x !== p.id)); })
         .child(svg(p.icon).size(18))

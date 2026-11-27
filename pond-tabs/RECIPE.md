@@ -23,7 +23,7 @@ https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/pond-tabs". What 
 
 Panel mods from this repo point here for their button; their install does steps 1–2 if needed.
 
-**Version:** 1.6.0 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.6.1 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** from 1.2.0, a small "Tabs ↑ x.y.z" pill appears before + when this repo publishes a newer version (and "Pond ↑ x.y.z" for the shown layout, which updates the layout and offers its mods); click it, confirm, and a new Claude tab updates just this mod (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/pond-tabs/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept; edits you made inside the mod folder are not.
 
@@ -143,6 +143,10 @@ padding, 3px gaps), left to right:
 - Dragging Todos onto Files puts Todos first; the order survives a restart.
 
 ## Changes
+
+### 1.6.1 (2026-11-27)
+
+- Clicking a panel (tab-bar button or hamburger dropdown row) now gives it the keyboard, as leader + its key does: j/k, `q` and the other panel keys work at once, and cmd-alt-left leaves it. In Chat mode the panel gets `focus` directly. New file `enter.js` (same copy in pond-pins).
 
 ### 1.6.0 (2026-11-26)
 

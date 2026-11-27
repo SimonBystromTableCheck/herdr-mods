@@ -39,8 +39,8 @@ Which version you have: `"version"` in `~/.config/herdr-app/mods/<name>/mod.json
 
 | Layout | Version | |
 | --- | --- | --- |
-| [pond](pond/) | 1.13.0 | Herdr's main layout with my own tabs, agents and files panels, and git, skills, todos, servers, remote-checker, Claude profiles, Find (workbench) and Notes panels on the right |
-| [pond-tree](pond-tree/) | 1.1.4 | Pond with one machine → space → agent tree in the sidebar, pinned panel cards, usage cards, a Chat / Terminal view of each agent and the panels in a hamburger menu. Built on [Anthony Chapé's herdr-pond](https://github.com/anthonychape-tc/herdr-pond) and [azaeldrm's Harness](https://github.com/azaeldrm/harns-layout) |
+| [pond](pond/) | 1.13.1 | Herdr's main layout with my own tabs, agents and files panels, and git, skills, todos, servers, remote-checker, Claude profiles, Find (workbench) and Notes panels on the right |
+| [pond-tree](pond-tree/) | 1.1.5 | Pond with one machine → space → agent tree in the sidebar, pinned panel cards, usage cards, a Chat / Terminal view of each agent and the panels in a hamburger menu. Built on [Anthony Chapé's herdr-pond](https://github.com/anthonychape-tc/herdr-pond) and [azaeldrm's Harness](https://github.com/azaeldrm/harns-layout) |
 
 ## Mods
 
@@ -54,12 +54,12 @@ Which version you have: `"version"` in `~/.config/herdr-app/mods/<name>/mod.json
 | [skills](skills/) | 1.2.1 | Claude skills (personal and the repo's): run, edit, scaffold |
 | [pond-agents](pond-agents/) | 1.4.0 | Herdr's agents list with a pixel duck per agent that acts out its status, grouped by space with each space's color, plus the Claude context bar and model; swap figures per space (emoji, your pictures) |
 | [pond-files](pond-files/) | 1.1.3 | Herdr's Files panel with focus, vim keys and a key bar |
-| [pond-tabs](pond-tabs/) | 1.6.0 | Herdr's tab bar with Git, Skills, Todos, Servers, GH, Claude account and Find panel buttons, reorderable by drag (needs those mods), or all in a hamburger dropdown |
+| [pond-tabs](pond-tabs/) | 1.6.1 | Herdr's tab bar with Git, Skills, Todos, Servers, GH, Claude account and Find panel buttons, reorderable by drag (needs those mods), or all in a hamburger dropdown |
 | [pond-profiles](pond-profiles/) | 1.5.1 | Claude Code accounts (claude.ai or a gateway) and versions via cvm/cvp: switch, pin per folder, usage limits, updates, agent-router models; with a setup wizard and a one-click update of the panel itself |
 | [workbench](workbench/) | 1.0.1 | an IDE-style Find panel: search across files, mass find & replace with a preview, go to file, format with the repo's own tools (commit hooks, VS Code settings, installed formatters) and delete duplicate lines, with an editable file view |
 | [notes](notes/) | 1.1.0 | an Obsidian vault panel: a note per repo and branch with its todos, find by name or text, links and backlinks, edit in nvim, a `feature-todo` helper for agents, and a setup screen that installs Obsidian / ripgrep and picks or creates the vault |
 | [pond-settings](pond-settings/) | 1.0.0 | every layout and mod you have from here in one dialog: installed vs latest, update one or all, and install other layouts to try |
-| [pond-pins](pond-pins/) | 1.0.0 | pinned panels as small cards in a carousel above the agents (`pond-tree`; pin them from pond-tabs' dropdown) |
+| [pond-pins](pond-pins/) | 1.0.1 | pinned panels as small cards in a carousel above the agents (`pond-tree`; pin them from pond-tabs' dropdown) |
 | [pond-chrome](pond-chrome/) | 1.1.0 | the sidebar's header (logo, session history, search, fold to a rail) and footer (Settings, Add machine, Pond settings, token usage); from herdr-pond / Harness |
 | [pond-sidebar](pond-sidebar/) | 1.2.2 | one machine → space → agent tree with Pond figures, context bars, Claude account and model, machine stats and token usage; from herdr-pond / Harness |
 | [pond-usage](pond-usage/) | 1.0.0 | usage cards at the bottom of the sidebar for the Claude accounts you pin in the Claude panel (needs pond-profiles) |
