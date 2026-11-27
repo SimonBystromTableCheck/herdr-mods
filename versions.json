@@ -3,7 +3,7 @@
   "update": "tools/UPDATE.md",
   "mods": {
     "git": {
-      "version": "1.5.0",
+      "version": "2.0.0",
       "item": "git",
       "path": "git/mods/git"
     },
@@ -13,27 +13,27 @@
       "path": "git/mods/git-conflicts"
     },
     "leader": {
-      "version": "2.2.0",
+      "version": "2.3.0",
       "item": "leader",
       "path": "leader/mods/leader"
     },
     "todos": {
-      "version": "1.2.0",
+      "version": "1.2.1",
       "item": "todos",
       "path": "todos/mods/todos"
     },
     "servers": {
-      "version": "1.3.0",
+      "version": "1.3.1",
       "item": "servers",
       "path": "servers/mods/servers"
     },
     "remote-checker": {
-      "version": "1.4.1",
+      "version": "1.4.2",
       "item": "remote-checker",
       "path": "remote-checker/mods/remote-checker"
     },
     "skills": {
-      "version": "1.2.0",
+      "version": "1.2.1",
       "item": "skills",
       "path": "skills/mods/skills"
     },
@@ -43,7 +43,7 @@
       "path": "pond-agents/mods/pond-agents"
     },
     "pond-files": {
-      "version": "1.1.2",
+      "version": "1.1.3",
       "item": "pond-files",
       "path": "pond-files/mods/pond-files"
     },
@@ -53,17 +53,17 @@
       "path": "pond-tabs/mods/pond-tabs"
     },
     "pond-profiles": {
-      "version": "1.5.0",
+      "version": "1.5.1",
       "item": "pond-profiles",
       "path": "pond-profiles/mods/pond-profiles"
     },
     "workbench": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "item": "workbench",
       "path": "workbench/mods/workbench"
     },
     "notes": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "item": "notes",
       "path": "notes/mods/notes"
     },
@@ -78,12 +78,12 @@
       "path": "pond-pins/mods/pond-pins"
     },
     "pond-chrome": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "item": "pond-chrome",
       "path": "pond-chrome/mods/pond-chrome"
     },
     "pond-sidebar": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "item": "pond-sidebar",
       "path": "pond-sidebar/mods/pond-sidebar"
     },
@@ -93,9 +93,19 @@
       "path": "pond-usage/mods/pond-usage"
     },
     "agent-chat": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "item": "agent-chat",
       "path": "agent-chat/mods/agent-chat"
+    },
+    "pond-history": {
+      "version": "1.0.0",
+      "item": "pond-history",
+      "path": "pond-history/mods/pond-history"
+    },
+    "space-editor": {
+      "version": "1.0.0",
+      "item": "space-editor",
+      "path": "space-editor/mods/space-editor"
     }
   },
   "layouts": {
@@ -120,12 +130,14 @@
       ]
     },
     "pond-tree": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "item": "pond-tree",
       "path": "pond-tree/layouts/pond-tree.json",
       "mods": [
         "pond-chrome",
+        "pond-history",
         "pond-sidebar",
+        "space-editor",
         "pond-usage",
         "agent-chat",
         "pond-pins",
@@ -274,6 +286,20 @@
         "agent-chat"
       ]
     },
+    "pond-history": {
+      "kind": "mod",
+      "recipe": "pond-history/RECIPE.md",
+      "mods": [
+        "pond-history"
+      ]
+    },
+    "space-editor": {
+      "kind": "mod",
+      "recipe": "space-editor/RECIPE.md",
+      "mods": [
+        "space-editor"
+      ]
+    },
     "pond": {
       "kind": "layout",
       "recipe": "pond/RECIPE.md",
@@ -301,7 +327,9 @@
       "recipe": "pond-tree/RECIPE.md",
       "mods": [
         "pond-chrome",
+        "pond-history",
         "pond-sidebar",
+        "space-editor",
         "pond-usage",
         "agent-chat",
         "pond-pins",

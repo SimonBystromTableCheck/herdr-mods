@@ -8,6 +8,7 @@ const CLAUDE_FALLBACK = {
   modes: { default: "Ask before edits", acceptEdits: "Accept edits", plan: "Plan mode", auto: "Auto mode", bypassPermissions: "Bypass permissions", dontAsk: "Don't ask" },
   models: [], efforts: ["low", "medium", "high", "xhigh", "max"],
   switching: { model: "/model {model}", effort: "/effort {effort}", nextMode: ["shift+tab"] },
+  sendQueued: ["ctrl+x", "ctrl+s"],
   box: { style: "mark", mark: "❯", stopAtBlank: false },
   skills: { triggers: ["/"], invoke: "/", user: ["~/.claude/skills"], project: [".claude/skills"], skip: ["synced"] },
   reader: "claude-code",

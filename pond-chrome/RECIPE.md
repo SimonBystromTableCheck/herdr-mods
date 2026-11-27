@@ -1,7 +1,7 @@
 # Pond Chrome
 
 The top and bottom of Pond's sidebar, from one mod used twice. At the top, the brand bar: a small
-pixel duck and "Pond", a search button and a button that folds the sidebar to a narrow rail. At
+pixel duck and "Pond", a Session history button (opens [`pond-history`](../pond-history/), Anthony Chapé's mod: install it too), a search button and a button that folds the sidebar to a narrow rail. At
 the bottom, the footer: Settings, Add machine and a duck button that opens Pond settings, with an
 optional seven-day token sparkline at its right end. Folded to the rail, the top becomes one expand
 button and the footer one gear that opens a small menu. Cloned from `harns-chrome` in azaeldrm's
@@ -24,7 +24,7 @@ https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/pond-chrome". Wha
    On `pond-tree` (this repo) both blocks are already there.
 3. Install `pond-settings` from this repo too: the footer's duck opens it.
 
-**Version:** 1.0.0 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.1.0 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** no update pill of its own. Tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/pond-chrome/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept; edits you made inside the mod folder are not.
 
@@ -115,6 +115,10 @@ Both blocks fill their slot with the theme's `surface`.
   seven-day sparkline and hovering it opens the two-week card.
 
 ## Changes
+
+### 1.1.0 (2026-11-27)
+
+- A Session history button left of search in the brand bar: opens [`pond-history`](../pond-history/) (Anthony Chapé's session history mod). Ships `icons/history.svg`, `history-names.js` and `live.js`, which record session names every few seconds for that list.
 
 ### 1.0.0 (2026-11-26)
 

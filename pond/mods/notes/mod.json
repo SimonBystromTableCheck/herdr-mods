@@ -1,1 +1,1 @@
-{ "place": "none", "title": "Notes", "version": "1.0.0", "source": {"repo": "https://github.com/SimonBystromTableCheck/herdr-mods", "item": "notes", "mod": "notes"}, "focusable": true, "panel": {"title": "Notes", "icon": "notes.svg", "leader": "N"} }
+{ "place": "none", "title": "Notes", "version": "1.1.0", "source": {"repo": "https://github.com/SimonBystromTableCheck/herdr-mods", "item": "notes", "mod": "notes"}, "focusable": true, "panel": {"title": "Notes", "icon": "notes.svg", "leader": "N"} }

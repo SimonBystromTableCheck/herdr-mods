@@ -8,7 +8,7 @@ REPO = sys.argv[1]
 URL = "https://github.com/SimonBystromTableCheck/herdr-mods"
 # Mods my own layouts use that aren't published (third-party, with local patches):
 # their blocks are cut from the published layouts. Each recipe says how to add them back.
-PRIVATE = {"sysstat", "brew"}
+PRIVATE = {"sysstat", "pond-sysstat", "brew"}
 # Blocks I removed from my own layout but the published one keeps: {layout: [(stack id, index, block, make active)]}.
 # Put back into the published copy (only if missing), so hiding a panel for myself doesn't hide it for everyone.
 RESTORE = {layout: [("panel-body", 0, {"id": "files", "type": "block", "content": {"mod": "pond-files"}}, True)] for layout in ("pond", "pond-tree")}

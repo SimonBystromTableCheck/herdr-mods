@@ -180,8 +180,25 @@ def claude_branch(recs, known):
     if any(flag == "v" for _, flag in known[at + 1:]): return path, None
     return path, known[:at + 1]
 
+def claude_queued(lines):
+    """The prompts the person has queued in Claude Code and not yet delivered, oldest first (its queue-operation lines:
+    an enqueue is pending until a remove or dequeue; task notifications are the harness's, not the person's)."""
+    pending = []
+    for line in lines:
+        if '"queue-operation"' not in line: continue
+        o = loads(line) or {}
+        text = o.get("content")
+        if o.get("operation") == "enqueue":
+            if isinstance(text, str) and text.strip() and not text.lstrip().startswith("<task-notification>"): pending.append(text)
+        elif o.get("operation") == "remove" and isinstance(text, str):
+            if text in pending: pending.remove(text)
+        elif o.get("operation") == "dequeue" and pending:
+            pending.pop(0)
+    return pending
+
 def parse_claude(path):
     lines = read_tail(path)
+    emit("Q|" + esc(json.dumps(claude_queued(lines))))
     claude_runs_with(lines)
     known = [k.rsplit(".", 1) for k in A.leaf.split(",") if "." in k]
     recs = claude_records(lines)

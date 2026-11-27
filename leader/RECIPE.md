@@ -18,7 +18,7 @@ replacing an existing `ctrl-a`). This takes `ctrl-a` from terminal programs:
 readline/shell beginning-of-line and a tmux prefix; leader `ctrl-a` gives it
 back once. The mod is `"place": "none"`: it only ever opens as this popup.
 
-**Version:** 2.2.0 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 2.3.0 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/leader/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept; edits you made inside the mod folder are not. If its `keys.json` changed, merge it again.
 
@@ -191,6 +191,11 @@ Bindings (aliases in brackets, not shown):
   `UPDATE.md`.
 
 ## Changes
+
+### 2.3.0 (2026-11-27)
+
+- Moving between the agent chat and the panels: with the Chat view shown, leader + a panel's key (or leader+l) gives that panel the keyboard directly, and leader+h from a panel focuses the chat box again.
+- Ships the updated shared `panel.js` (`focusTab`).
 
 ### 2.2.0 (2026-11-24)
 

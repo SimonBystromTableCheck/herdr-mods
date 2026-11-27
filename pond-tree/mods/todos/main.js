@@ -5,7 +5,7 @@ import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { keybar, keysCard } from "./keybar.js";
 import { exec, run, theme, settings, appHome, home, readTextFile, writeTextFile, watchFolder, nextCommand, setShared, focused } from "herdr";
 import { SelfUpdate } from "./update.js";
-import { closePanel } from "./panel.js";
+import { closePanel, focusTab } from "./panel.js";
 
 const ICON = "mods/todos";
 const ROW = 30, PAGE_ROW = 46;
@@ -416,7 +416,7 @@ export default class Todos extends View {
   go(dir) {
     this.focusToken = (this.focusToken ?? 0) + 1; // cancel a pending focus retry
     const pane = focused()?.pane;
-    if (dir === "left" && pane) return run("pane.focus", { pane });
+    if (dir === "left" && pane) return focusTab();
     this.handle.focus();
     run("pane.go", { direction: dir });
   }

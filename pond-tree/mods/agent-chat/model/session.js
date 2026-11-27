@@ -45,6 +45,7 @@ function parseTagged(r, line) {
   else if (tag === "OFFSET") r.offset = Number(rest) || 0;
   else if (tag === "LEAF") r.leaf = decodeURIComponent(rest);
   else if (tag === "META") { try { r.meta = JSON.parse(decodeURIComponent(rest)); } catch {} }
+  else if (tag === "Q") { try { r.queued = JSON.parse(decodeURIComponent(rest)); } catch {} }
   else if (tag === "RESET") r.reset = true;
   else if (tag === "NEED") r.need = true;
   else if (tag === "S") r.added.push({ kind: "tick", ...JSON.parse(decodeURIComponent(rest)) });
@@ -78,6 +79,8 @@ export function applyRead(s, r) {
   const path = r.path ?? s.path;
   const changed = Boolean(r.reset) || path !== s.path || r.added.length > 0;
   const meta = JSON.stringify(s.meta ?? {});
+  const queued = JSON.stringify(s.queued ?? []);
+  if (Array.isArray(r.queued)) s.queued = r.queued;
   if (r.reset || path !== s.path) { s.raw = []; s.calls = new Map(); s.meta = {}; }
   if (r.meta) s.meta = { ...(s.meta ?? {}), ...r.meta };
   s.path = path;
@@ -93,7 +96,7 @@ export function applyRead(s, r) {
     s.clipped = Boolean(r.note?.startsWith("Showing the recent part"));
     s.note = s.clipped ? "" : (r.note ?? "");
   } else if (s.note && s.messages.length) s.note = "";
-  return changed || s.note !== note || JSON.stringify(s.meta ?? {}) !== meta;
+  return changed || s.note !== note || JSON.stringify(s.meta ?? {}) !== meta || JSON.stringify(s.queued ?? []) !== queued;
 }
 
 /** The session's entries as rows: each run of tool calls one "tools" row, then activity folded. */

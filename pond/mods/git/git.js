@@ -117,6 +117,20 @@ export async function loadCommits(ctx, target, base, limit = 400) {
   }));
 }
 
+// Lines added / removed per path, unstaged and staged together: Map path → {a, d}.
+export async function numstat(ctx) {
+  const map = new Map();
+  for (const args of [["diff", "--numstat"], ["diff", "--cached", "--numstat"]]) {
+    for (const l of (await out(ctx, args)).split("\n")) {
+      const [a, d, ...rest] = l.split("\t"), path = rest.join("\t");
+      if (!path || a === "-") continue;
+      const n = map.get(path) ?? { a: 0, d: 0 };
+      n.a += +a; n.d += +d; map.set(path, n);
+    }
+  }
+  return map;
+}
+
 export async function loadStash(ctx) {
   const text = await out(ctx, ["stash", "list", "--format=%gd%x1f%cr%x1f%gs"]);
   return text.split("\n").filter(Boolean).map(l => { const [ref, date, message] = l.split(US); return { ref, date, message }; });

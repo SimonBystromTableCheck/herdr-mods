@@ -43,6 +43,31 @@ function parse(text, side, rows, hunks, files = false) {
   }
 }
 
+// The files a commit (or stash) changed, against `parent` (a commit's first parent, a stash's base),
+// or as `git show` lists them for a root commit: [{path, x}] with x the status letter (M A D R C T).
+export async function loadRevFiles(ctx, rev, parent) {
+  const args = parent ? ["diff", "--name-status", "--find-renames", "--no-color", parent, rev] : ["show", "--format=", "--name-status", "--find-renames", "--no-color", rev];
+  const r = await git(ctx, args).catch(() => null);
+  if (r?.code !== 0) return [];
+  const st = await git(ctx, parent ? ["diff", "--numstat", "--no-renames", parent, rev] : ["show", "--format=", "--numstat", "--no-renames", rev]).catch(() => null);
+  const stats = new Map((st?.code === 0 ? st.stdout : "").split("\n").filter(Boolean).map(l => { const [a, d, ...p] = l.split("\t"); return [p.join("\t"), a === "-" ? null : { a: +a, d: +d }]; }));
+  return r.stdout.split("\n").filter(Boolean).map(l => {
+    const parts = l.split("\t"), path = parts[parts.length - 1];
+    return { path, from: parts.length > 2 ? parts[1] : null, x: parts[0][0], y: ".", committed: true, stat: stats.get(path) ?? null };
+  });
+}
+
+// One file's committed change (read-only rows, side "commit"): `parent`..`rev`, or the root commit's `git show`.
+export async function loadRevFileDiff(ctx, rev, f, parent) {
+  const rows = [], hunks = [], paths = f.from ? [f.from, f.path] : [f.path];
+  const args = parent ? [...DIFF, "--find-renames", parent, rev, "--", ...paths] : ["show", "--format=", ...DIFF.slice(1), rev, "--", ...paths];
+  const r = await git(ctx, args).catch(e => ({ code: -1, stdout: "", stderr: String(e) }));
+  if (r.code !== 0) rows.push({ kind: "meta", text: (r.stderr || "git diff failed").trim(), side: "commit" });
+  else if (!r.stdout.trim()) rows.push({ kind: "meta", text: "No textual changes (mode change or binary)", side: "commit" });
+  else parse(r.stdout, "commit", rows, hunks);
+  return { rows, hunks };
+}
+
 // The diff rows for a status file: {rows, hunks}. `side`: "unstaged", "staged" or
 // "conflict" (a merge's combined diff: shown, never staged by hunk).
 export async function loadFileDiff(ctx, f) {

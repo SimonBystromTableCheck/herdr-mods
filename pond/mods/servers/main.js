@@ -5,7 +5,7 @@ import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { exec, hc, home, appHome, readTextFile, writeTextFile, terminals, theme, settings, run, nextCommand, focused, setShared, pickFolder } from "herdr";
 import { keybar, keysCard } from "./keybar.js";
 import { SelfUpdate } from "./update.js";
-import { closePanel } from "./panel.js";
+import { closePanel, focusTab } from "./panel.js";
 
 const ICON = "mods/servers", CHROME = "mods/workspace-chrome";
 const LABEL = "herdr.server";
@@ -138,7 +138,7 @@ export default class Servers extends View {
   go(dir) {
     this.focusToken = (this.focusToken ?? 0) + 1; // cancel a pending focus retry
     const pane = focused()?.pane;
-    if (dir === "left" && pane) return run("pane.focus", { pane });
+    if (dir === "left" && pane) return focusTab();
     this.handle.focus();
     run("pane.go", { direction: dir });
   }

@@ -27,7 +27,7 @@ next to Herdr's Files and Changes. You don't need the `pond` layout. What the ag
 Without changing the tab bar, it also opens beside a terminal:
 `herdr-app do pane.split --direction right --mod servers` (`q` closes that pane).
 
-**Version:** 1.3.0 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.3.1 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** from 1.1.0, its header has a "Check for updates" pill that turns into "Update to x.y.z" when this repo publishes a newer version; click it, confirm, and a new Claude tab updates just this mod (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods" (or "update pond mods"). It follows `UPDATE.md`, installed in the mod folder, which checks this repo's `versions.json` and offers every newer version of the mods and layouts you have from here, with a backup of each. By hand: replace `mods/servers/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). Your settings and data live outside the mod folder and are kept (your servers in `servers.json`); edits you made inside the mod folder are not.
 
@@ -91,6 +91,10 @@ Panel: theme `background`, text 13px, rounded 10 with a 1px border (`accent` whi
 - Edit → change the name, start command or address → Save: the card shows the new name, and Open goes to the new address.
 
 ## Changes
+
+### 1.3.1 (2026-11-27)
+
+- Back to the chat: leader+h (or Esc / h at the left edge) now gives the keyboard to agent-chat's chat box when the Chat view shows, not just to the hidden terminal (`focusTab()` in the shared `panel.js`).
 
 ### 1.3.0 (2026-11-17)
 

@@ -88,7 +88,7 @@ function markdown(id, source, t) {
   const flush = () => {
     const text = buf.join("\n").trim();
     buf = [];
-    if (text) blocks.push(TextView.markdown(`${id}-t${blocks.length}`, text).selectable(true));
+    if (text) blocks.push(TextView.markdown(`${id}-t${blocks.length}`, text).raw_html(false).selectable(true));
   };
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -155,7 +155,7 @@ function tableBox(id, lines, t) {
       .when(a === "right", (el) => el.text_right())
       .when(a === "center", (el) => el.text_center())
       .child(
-        TextView.markdown(`${id}-${key}-${cellKey(text)}`, text || " ")
+        TextView.markdown(`${id}-${key}-${cellKey(text)}`, text || " ").raw_html(false)
           .selectable(true)
           .text_size(header ? 11.5 : 12.5)
           .text_color(header ? t.muted : t.foreground),
@@ -253,7 +253,7 @@ function stepRow(m, { t, open: opened, width }) {
   const diff = c.k === "edit" ? editDiff(c) : null, hasDiff = Boolean(diff?.lines.length);
   const toggle = open || shown.more || hasDiff;
   const body = c.k === "think"
-    ? (shown.text ? div().w_full().pb(4).child(TextView.markdown(`think-${i}`, shown.text).selectable(true).text_size(13).text_color(t.muted)) : null)
+    ? (shown.text ? div().w_full().pb(4).child(TextView.markdown(`think-${i}`, shown.text).raw_html(false).selectable(true).text_size(13).text_color(t.muted)) : null)
     : hasDiff ? (open ? diffBody(t, i, diff) : null)
     : shown.text ? v_flex().w_full().px(10).py(7).font_family(mono()).text_size(12).text_color(t.muted)
       .children(shown.text.split("\n").map((l, k) => div().id(`o-${i}-${k}`).w_full().min_h(18).child(l || " ")))
@@ -289,16 +289,33 @@ function sentImage(t, id, path, sent, machine) {
 
 
 /** A message: the person's in a bubble (its images above it), the agent's as plain markdown across the column. */
-function messageRow(m, { t, width, sent, machine }) {
+function messageRow(m, { t, width, sent, machine, sendQueued }) {
   if (m.role === "user") {
     const room = Math.min(620, Math.round(Math.min(COLUMN, (width ?? COLUMN) - 48) * 0.85));
     const text = m.text ? bubble(t, room, markdown(`body-${m.key}`, m.text, t)) : null;
+    // Queued in the agent, not yet delivered: dimmed, with a caption, until the log has it as a message. Where the
+    // agent has a chord for it (Claude Code: ctrl+x ctrl+s), "Send now" presses it.
+    if (m.phase === "queued") return v_flex().w_full().gap(2)
+      .child(h_flex().w_full().justify_end().opacity(0.6).child(text))
+      .child(h_flex().w_full().justify_end().gap(6).items_center().text_size(11).text_color(t.dim)
+        .child(div().opacity(0.6).child("Queued · sends when the agent gets to it"))
+        .when(Boolean(sendQueued), el => el.child(h_flex().id(`send-now-${m.key}`).gap(5).items_center().px(6).h(20).rounded(5)
+          .cursor_pointer().text_color(t.muted).hover(s => s.bg(t.hover).text_color(t.foreground))
+          .tooltip("Send queued messages now (⌃X ⌃S)")
+          .on_click((_e, cx) => sendQueued(cx))
+          .child("Send now").child(div().text_color(t.dim).child("⌃X ⌃S")))));
     if (!m.images?.length) return text;
     return v_flex().w_full().gap(8)
       .child(h_flex().w_full().justify_end().flex_wrap().gap(8).children(m.images.map((p, i) => sentImage(t, `img-${m.key}-${i}`, p, sent, machine))))
       .when(Boolean(text), el => el.child(text));
   }
-  return div().w_full().text_size(15).text_color(t.foreground).child(markdown(`body-${m.key}`, m.text, t));
+  const body = div().w_full().text_size(15).text_color(t.foreground).child(markdown(`body-${m.key}`, m.text, t));
+  // Read off the screen while a question waits (Claude Code logs the reply once it's answered): said under it.
+  if (m.phase === "screen") return v_flex().w_full().gap(6)
+    .when(Boolean(m.partial), el => el.child(div().text_size(11.5).text_color(t.dim).child("… the start is above the terminal's screen")))
+    .child(body)
+    .child(div().text_size(11.5).text_color(t.dim).child("From the terminal · the full reply arrives once you answer"));
+  return body;
 }
 
 /**

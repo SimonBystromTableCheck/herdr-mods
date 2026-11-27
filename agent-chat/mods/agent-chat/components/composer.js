@@ -1,6 +1,6 @@
 import { div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Textarea, TextareaState } from "gpui-base";
-import { shared, hc, exec } from "herdr";
+import { shared, setShared, run, hc, exec } from "herdr";
 import { ICONS, sessionOf, chatKey } from "../common.js";
 import { onWindows, modFile, removeFiles, pruneOld } from "../platform.js";
 import { target, sendMessage, pressKeys, inputBox, inputHint } from "../terminal-fix3.js";
@@ -15,6 +15,9 @@ import { passKey, passKeys, passAction, bindComposerKeys } from "../keys.js";
 import { skillToken } from "../model/skills.js";
 
 const DRAFT_PAUSE = 400;
+// Text other mods hand an agent (see takeInbox), and how long a hand-off waits for the view to settle first.
+const INBOX_KEY = "herdr-chat.inbox";
+const INBOX_SETTLE = 250;
 const SENT_PRUNE_EVERY = 3600000;
 
 export class Composer {
@@ -29,6 +32,9 @@ export class Composer {
     this.input.set_soft_wrap(true);
     this.input.set_auto_grow(1, 4);
     this.input.on("submit", (e, cx) => { if (!e?.shift) this.enter(cx); });
+    // Whether the box has the keyboard: drawn as a ring, and read by the leader's way back (agent-chat.focus).
+    this.input.on("focus", (_e, cx) => { this.focused = true; cx.notify(); });
+    this.input.on("blur", (_e, cx) => { this.focused = false; cx.notify(); });
     this.input.on("change", (_e, cx) => {
       if (Date.now() - (this.enterAt ?? 0) < 400) {
         const v = this.input.value(), s = v.replace(/\r?\n$/, "");
@@ -163,6 +169,47 @@ export class Composer {
       this.mirror = { ...(m ?? { session, images: [], paths: [], pasted: "", textBox: "" }), session, sig, box, foreign: false };
       this.keepDraft(cx);
       cx.notify();
+    });
+  }
+
+  /**
+   * Text another mod handed this agent (shared "herdr-chat.inbox" = { id, address, text, at }, e.g. the Notes panel's
+   * Send): in Chat it joins the box, unsent; in Terminal it is pasted into the agent's own input, as a paste would be.
+   * Taken once the view has had a moment to settle on the agent's session, and only by the copy showing that agent.
+   */
+  /** Whether the shown agent has queued prompts and a key chord that sends them now (Claude Code: ctrl+x ctrl+s). */
+  canSendQueued() {
+    return Boolean(target()?.harness?.sendQueued?.length && this.host.reader.session.queued?.length);
+  }
+
+  /** Presses the agent's send-queued chord in its terminal, so its queued prompts go in now. */
+  sendQueued(cx) {
+    const t = target(), keys = t?.harness?.sendQueued;
+    if (!keys?.length) return;
+    cx.spawn(async () => { await pressKeys(t, keys); });
+  }
+
+  takeInbox(t, cx) {
+    const box = shared(INBOX_KEY);
+    if (!box?.id || box.address !== t.address || this.pendingDraft || Date.now() - (box.at ?? 0) < INBOX_SETTLE) return;
+    setShared(INBOX_KEY, null);
+    const text = String(box.text ?? "");
+    if (!text) return;
+    if (shared("herdr-chat.mode") === "chat") {
+      const v = this.input.value();
+      this.input.set_value(!v ? text : /\s$/.test(v) ? v + text : `${v} ${text}`);
+      this.input.focus();
+      this.keepDraft(cx);
+      cx.notify();
+      return;
+    }
+    const old = cx.read_from_clipboard();
+    cx.write_to_clipboard(text);
+    run("pane.focus", { terminal: t.address });
+    run("terminal.paste");
+    cx.spawn(async cx => {
+      await cx.sleep(400);
+      if (old !== undefined && cx.read_from_clipboard() === text) cx.write_to_clipboard(old);
     });
   }
 
@@ -442,7 +489,7 @@ export class Composer {
     const menu = this.menu.render(t, active);
     return v_flex().w_full().max_w(COLUMN).gap(6).relative()
       .when(Boolean(menu), el => el.child(menu))
-      .child(h_flex().id("composer-box").w_full().pl(16).pr(8).py(8).gap(8).items_end().rounded(18).border_1().border_color(t.input)
+      .child(h_flex().id("composer-box").w_full().pl(16).pr(8).py(8).gap(8).items_end().rounded(18).border_1().border_color(this.focused ? t.accent : t.input)
         .bg(this.host.backdropShown ? `${t.surface.slice(0, 7)}a6` : t.surface)
         .child(v_flex().flex_1().min_w(0)
           .when(this.attachments.length > 0, el => el.child(this.attachmentStrip(t)))
@@ -460,6 +507,14 @@ export class Composer {
           .when(true, el => passKeys().reduce((acc, k) => acc.on_action(passAction(k), () => passKey(k)), el))
           .on_action("herdr_chat::Stop", (_e, cx) => { if (!this.menu.dismiss(target(), cx)) this.host.stop(cx); })
           .on_key_down((e, cx) => {
+            // ctrl+x then ctrl+s, as in the agent's own terminal: its queued prompts go in now. Armed only while
+            // something is queued, so ctrl+x keeps its usual meaning otherwise.
+            const ctrlOnly = e.modifiers.control && !e.modifiers.platform && !e.modifiers.alt && !e.modifiers.shift;
+            if (ctrlOnly && e.key === "x" && this.canSendQueued()) { cx.stop_propagation(); this.chordAt = Date.now(); return; }
+            if (this.chordAt && Date.now() - this.chordAt < 1500 && ctrlOnly && e.key === "s") {
+              cx.stop_propagation(); this.chordAt = 0; this.sendQueued(cx); return;
+            }
+            this.chordAt = 0;
             const paste = e.key === "v" && (e.modifiers.control || e.modifiers.platform) && !e.modifiers.alt;
             if (paste && cx.read_from_clipboard() === undefined) { cx.stop_propagation(); this.imagePasteAt = Date.now(); this.pasteImage(cx); return; }
             if (e.key === "tab" && !e.modifiers.shift && this.menu.accept(target(), cx)) { cx.stop_propagation(); return; }

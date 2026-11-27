@@ -4,8 +4,8 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, ScrollHandle, TextView } from "gpui-base";
 import { keybar, keysCard } from "./keybar.js";
-import { closePanel } from "./panel.js";
-import { exec, run, theme, spaces, agents, focused, readTextFile, writeTextFile, watchFolder, nextCommand, setShared, shared, checking } from "herdr";
+import { closePanel, focusTab } from "./panel.js";
+import { exec, run, theme, spaces, agents, focused, layout, window, readTextFile, writeTextFile, watchFolder, nextCommand, setShared, shared, checking } from "herdr";
 import * as V from "./vault.js";
 import { openSetup, setupView } from "./setup.js";
 import { SelfUpdate } from "./update.js";
@@ -14,6 +14,25 @@ const ICON = "mods/notes";
 const TODO = /^(\s*[-*] \[)([ xX])(\] ?)(.*)$/;
 const LINK = "https://herdr-note.invalid/";
 const q = s => `'${String(s).replace(/'/g, `'\\''`)}'`;
+// agent-chat's hand-off for text meant for an agent's prompt (its composer takes it; see takeInbox there).
+const INBOX = "herdr-chat.inbox";
+/** Whether the shown layout has agent-chat's Chat/Terminal stack and chats are on. */
+function chatShown() {
+  if (shared("herdr-chat.chat") === false) return false;
+  const find = node => node?.id === "chat-view" ? node : (node?.children ?? []).map(find).find(Boolean);
+  const has = node => node?.content?.mod === "agent-chat" || (node?.children ?? []).some(has);
+  return has(find(layout()));
+}
+/** The text into the focused terminal's prompt as one paste (nothing submits), then the clipboard back. */
+function paste(text, cx) {
+  const old = cx.read_from_clipboard();
+  cx.write_to_clipboard(text);
+  run("terminal.paste");
+  cx.spawn(async cx => {
+    await cx.sleep?.(400);
+    if (old !== undefined && cx.read_from_clipboard() === text) cx.write_to_clipboard(old);
+  });
+}
 const SCOPES = ["feature", "repo", "vault"];
 
 const KEYS = {
@@ -104,6 +123,7 @@ export default class Notes extends View {
         cx.notify();
       }
     });
+    cx.timer.every(2500, cx => { cx.spawn(async cx => { if (await this.poll()) cx.notify(); }); });
     cx.timer.every(300, cx => {
       const k = this.keyboard();
       if (k !== this.sharedKeys) { this.sharedKeys = k; setShared("notes.hasKeys", k); }
@@ -125,19 +145,44 @@ export default class Notes extends View {
     }
     await this.reload();
     cx.notify();
-    // Changes from nvim, Obsidian or a sync show up here. .obsidian churns constantly: ignore it.
-    // A new start (another vault) ends the old loop.
+    // Changes from nvim, Obsidian, agents or a sync show up here. .obsidian churns constantly: ignore it.
+    // A new start (another vault) ends the old loop. The next watch starts before the reload reads, so a write
+    // landing during the reload wakes it again; a rejected or reclaimed watch (Herdr keeps at most 64) is retried
+    // after a pause instead of ending the loop. The poll below catches anything a watch still misses.
     const root = this.cfg.root, token = this.watchToken = (this.watchToken ?? 0) + 1;
     this.watch?.cancel?.();
+    let watch = watchFolder(root);
+    this.watch = watch;
     for (;;) {
-      this.watch = watchFolder(root);
-      const changed = await this.watch.catch(() => null);
-      if (!changed || token !== this.watchToken) break;
-      if (!changed.length || changed.every(p => /\/\.(obsidian|trash|git)\//.test(p))) continue;
-      await cx.sleep(300);
+      const changed = await watch.catch(() => null);
+      if (token !== this.watchToken) break;
+      if (changed?.length && changed.every(p => /\/\.(obsidian|trash|git)\//.test(p))) { watch = this.watch = watchFolder(root); continue; }
+      await cx.sleep(changed ? 300 : 2000);
+      if (token !== this.watchToken) break;
+      watch = this.watch = watchFolder(root);
       await this.reload();
       cx.notify();
     }
+  }
+
+  // The fallback: while the window shows, the shown note is read every few seconds and reloaded when it changed on
+  // disk; in the feature section with no note yet, the branch's note is looked for (something may have made it).
+  async poll() {
+    if (!this.cfg || this.pending || this.polling || window()?.visible === false) return false;
+    this.polling = true;
+    try {
+      if (this.note) {
+        const raw = await readTextFile(V.abs(this.cfg, this.note.rel)).catch(() => null);
+        if (raw === this.note.raw || this.pending) return false;
+        await this.reload();
+        return true;
+      }
+      if (this.scope !== "feature" || !this.featureRel()) return false;
+      const raw = await readTextFile(V.abs(this.cfg, this.featureRel())).catch(() => null);
+      if (raw === null) return false;
+      await this.reload();
+      return true;
+    } finally { this.polling = false; }
   }
 
   closeSetup(cx) {
@@ -149,6 +194,8 @@ export default class Notes extends View {
     if (!this.cfg) return;
     this.notes = await V.listNotes(this.cfg);
     if (this.note && !this.pending) await this.load(this.note.rel, true);
+    // The feature section waiting for this branch's note: it may just have been made (an agent, Send to Notes).
+    else if (!this.note && this.scope === "feature" && !this.pending) await this.openFeature(false);
   }
 
   // Loads a note into the view (keeping the selection when it's the same note).
@@ -352,19 +399,24 @@ export default class Notes extends View {
   }
 
   // Puts a pointer to the note in the agent's prompt, unsent: one paste, so nothing submits.
+  // Where agent-chat shows agents (its Chat/Terminal stack), the text goes through its inbox, so it lands in the chat
+  // box when the agent shows as a chat (a paste would go to the hidden terminal); if nothing takes it, it is pasted.
   send(rel, cx) {
     const a = this.agent();
     if (!a || !rel) return this.flash("No agent to send to: click into one first");
     const text = `My note "${V.nameOf(rel)}" is at ${V.abs(this.cfg, rel)} (Obsidian vault ${this.cfg.root}; [[links]] are other notes there). `;
-    const old = cx.read_from_clipboard();
-    cx.write_to_clipboard(text);
     run("pane.focus", { terminal: a.address });
-    run("terminal.paste");
-    cx.spawn(async cx => {
-      await cx.sleep?.(400);
-      if (old !== undefined && cx.read_from_clipboard() === text) cx.write_to_clipboard(old);
-    });
     this.flash(`Sent to ${a.program?.name ?? a.title}`);
+    if (!chatShown()) return paste(text, cx);
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setShared(INBOX, { id, address: a.address, text, at: Date.now() });
+    cx.spawn(async cx => {
+      await cx.sleep?.(2000);
+      if (shared(INBOX)?.id !== id) return;
+      setShared(INBOX, null);
+      run("pane.focus", { terminal: a.address });
+      paste(text, cx);
+    });
   }
 
   // ---- Find ------------------------------------------------------------------------
@@ -424,7 +476,7 @@ export default class Notes extends View {
   go(dir) {
     this.focusToken = (this.focusToken ?? 0) + 1;
     const pane = focused()?.pane;
-    if (dir === "left" && pane) return run("pane.focus", { pane });
+    if (dir === "left" && pane) return focusTab();
     this.handle.focus();
     run("pane.go", { direction: dir });
   }

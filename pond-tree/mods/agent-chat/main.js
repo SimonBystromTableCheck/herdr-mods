@@ -1,9 +1,10 @@
 import { View, div, image } from "gpui-kit";
 import { set_theme, v_flex, h_flex, Popup } from "gpui-base";
-import { panes, focused, props, hc, theme, shared, setShared, spaces, appHome, readTextFile, window as appWindow } from "herdr";
+import { panes, focused, props, hc, theme, shared, setShared, spaces, appHome, readTextFile, window as appWindow, nextCommand } from "herdr";
 import { switchTo, showView, shownView, adoptView, preferredView, sessionOf, chatKey, chatOn } from "./common.js";
 import { target, inputBox, interruptAgent, sendMessage, pressKeys, readScreen } from "./terminal-fix3.js";
 import { keyRows, splitCode, withCopyRows, stepRows, stepHasBody, withoutRetracted } from "./model/transcript.js";
+import { replyFromScreen } from "./model/screen-reply.js";
 import { runsWith, switchCommand, tokens, sameModel } from "./model/runs-with.js";
 import { row, duration, TOOL_BUTTON, TOOL_GAP, NOTES_BUTTON, NOTES_GAP } from "./ui/rows.js";
 import { COLUMN, programIcon, paneButtons, statusBadge, viewToggle, clock, icon } from "./ui/primitives.js";
@@ -59,6 +60,19 @@ export default class HerdrChat extends View {
     this.reader = new SessionReader(this);
     this.card = new QuestionCard(this);
     this.composer = new Composer(this, cx);
+    // agent-chat.focus (the leader's way back from a right-hand panel): the reply box takes the keyboard. The panel
+    // being left focuses the tab's (hidden) terminal at about the same moment, so try again until the box has it.
+    cx.spawn(async cx => {
+      for (;;) {
+        if (await nextCommand() !== "focus") continue;
+        // The panel's own pane.focus and the leader popup closing both land a few frames later, in no fixed order:
+        // keep taking it back for a moment instead of racing them once.
+        const take = () => { if (!this.composer.focused) this.composer.input.focus(); };
+        take();
+        for (const ms of [80, 160, 280, 450, 700, 950]) cx.timer.after(ms, take);
+        cx.notify();
+      }
+    });
     this.width = 900; this.zoom = 1; this.rootPx = 0;
     if (props()?.backdrop) this.backdrop = cx.new(BackdropView, { dim: BACKDROP_DIM, sceneKey: BACKDROP_SCENE });
     this.stirAt = 0;
@@ -73,6 +87,7 @@ export default class HerdrChat extends View {
       this.composer.mirrorOnSwitch(cx);
       this.noticeActivity();
       const t = target();
+      if (t && chatKey(t) === this.key) this.composer.takeInbox(t, cx);
       this.composer.noticeHint(t, cx);
       // Fall back to the moment this view saw the shown agent start working.
       const k = t ? chatKey(t) : "";
@@ -369,10 +384,29 @@ export default class HerdrChat extends View {
     if (!p || p.key !== this.key) return messages;
     const last = [...messages].reverse().find(m => m.kind === "message" && m.role === "user") ?? null;
     if (last !== p.after || Date.now() - p.at > 60000) { this.pending = null; return messages; }
+    // Sent while the agent was busy: the agent queued it, and the queued row (dimmed, at the end) is that message.
+    const norm = s => String(s ?? "").replace(/\s+/g, " ").trim();
+    if ((this.reader.session.queued ?? []).some(q => norm(q) === norm(p.text))) { this.pending = null; return messages; }
     const c = this.pendingRows;
     if (c?.messages === messages && c.pending === p) return c.rows;
     const rows = [...messages, { kind: "message", role: "user", phase: "", text: p.text }];
     this.pendingRows = { messages, pending: p, rows };
+    return rows;
+  }
+
+  /**
+   * The messages with the reply a question is waiting on at the end, read off the screen (Claude Code logs it only once
+   * the question is answered), until the log has it. The same array while nothing changes, so its rows are reused.
+   */
+  withScreenReply(messages) {
+    const screen = this.card.screenForReply();
+    if (!screen) return messages;
+    const c = this.screenRows;
+    if (c?.messages === messages && c.screen === screen) return c.rows;
+    const logged = messages.filter(m => m.kind === "message" && m.role !== "user").map(m => m.text);
+    const reply = replyFromScreen(screen, logged);
+    const rows = reply ? [...messages, { kind: "message", role: "assistant", phase: "screen", text: reply.text, partial: reply.partial }] : messages;
+    this.screenRows = { messages, screen, rows };
     return rows;
   }
 
@@ -833,7 +867,9 @@ export default class HerdrChat extends View {
     if (chatKey(active) !== this.key) this.switchSession(active, chatKey(active));
     const shown = withoutRetracted(this.reader.session.messages, this.retracted?.key === this.key ? this.retracted.text : null);
     if (!shown.retracted && this.retracted?.key === this.key) this.retracted = null;
-    const rows = [...this.splitRows(this.withPending(shown.rows), active?.status === "working")];
+    // Prompts queued in the agent and not yet delivered: shown at the end, dimmed, until the log delivers them.
+    const queuedRows = (this.reader.session.queued ?? []).map(text => ({ kind: "message", role: "user", phase: "queued", text }));
+    const rows = [...this.splitRows([...this.withPending(this.withScreenReply(shown.rows)), ...queuedRows], active?.status === "working")];
     if (this.note) rows.push({ kind: "note", text: this.note });
     const empty = rows.length === 0 || (rows.length === 1 && rows[0].kind === "note" && !this.reader.session.messages.length);
     keyRows(rows);
@@ -848,7 +884,8 @@ export default class HerdrChat extends View {
       rows, empty, t, inner, zoom: this.zoom, beforeScroll: () => this.noticeVisit(),
       heightKey: m => `${m.key}${this.reader.session.open[m.key] ? ":open" : ""}${m.kind === "diagram" ? `:${diagramFor(m.text, t).state}` : ""}`,
       waitsFor: m => m.kind === "diagram" && diagramFor(m.text, t).state === "queued",
-      row: m => row(m, { t, open: this.reader.session.open, width: this.width, sent: this.composer.sent, machine: target()?.machine, copied: this.copied, notesSent: this.sentNote }),
+      row: m => row(m, { t, open: this.reader.session.open, width: this.width, sent: this.composer.sent, machine: target()?.machine, copied: this.copied, notesSent: this.sentNote,
+        sendQueued: this.composer.canSendQueued() ? cx => this.composer.sendQueued(cx) : null }),
       onItemClick: (key, cx) => {
         const row = rows.find(r => r.key === key);
         if (row?.kind === "copy" && !row.prompt && this.notesButtonAt(this.list.pointerX)) { this.sendToNotes(row, cx); return; }

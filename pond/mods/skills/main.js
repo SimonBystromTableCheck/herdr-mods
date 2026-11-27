@@ -5,7 +5,7 @@ import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { keybar, keysCard } from "./keybar.js";
 import { spaces, panes, focused, agents, knownAgents, exec, hc, run, theme, settings, home, readTextFile, writeTextFile, watchFolder, nextCommand, setShared } from "herdr";
 import { SelfUpdate } from "./update.js";
-import { closePanel } from "./panel.js";
+import { closePanel, focusTab } from "./panel.js";
 
 const ICON = "mods/skills";
 const CARD = 90, GROUP = 26, GAP = 6;
@@ -231,7 +231,7 @@ export default class Skills extends View {
   go(dir) {
     this.focusToken = (this.focusToken ?? 0) + 1; // cancel a pending focus retry
     const pane = focused()?.pane;
-    if (dir === "left" && pane) return run("pane.focus", { pane });
+    if (dir === "left" && pane) return focusTab();
     this.handle.focus();
     run("pane.go", { direction: dir });
   }

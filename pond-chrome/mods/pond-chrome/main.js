@@ -1,10 +1,11 @@
 import { View, div, image, svg } from "gpui-kit";
 import { h_flex, v_flex, Popup, Popover } from "gpui-base";
-import { theme, run, props, window, shared, setShared, updates, layout, agents, openOverlay } from "herdr";
+import { theme, run, props, window, shared, setShared, updates, layout, agents, openOverlay, checking } from "herdr";
 import { find, narrow } from "./layout.js";
 import { usageDays, usagePlace } from "./token-usage.js";
 import { usageDetails, usageSpark } from "./usage-card.js";
 import { duckMood } from "./duck.js";
+import { recordSessionNames } from "./history-names.js";
 
 const logoSrc = () => agents().some(a => a.status === "working")
   ? "mods/pond-chrome/harness-logo-fade.webp"
@@ -21,6 +22,13 @@ function toggleSidebar() {
 }
 
 export default class WorkspaceChrome extends View {
+  init(_props, cx) {
+    // The header copy remembers renamed Claude sessions for the History window (pond-history).
+    if (props()?.footer || checking()) return;
+    recordSessionNames();
+    cx.timer.every(5000, () => recordSessionNames());
+  }
+
   button(id, label, action, size = 26, tip = null) {
     const t = theme();
     return div().id(id).size(size).flex_none().flex().items_center().justify_center().rounded(6).text_color(t.muted).hover(s => s.bg(t.hover).text_color(t.foreground))
@@ -112,6 +120,7 @@ export default class WorkspaceChrome extends View {
             .child(div().absolute().left(-7).top(0).child(duckMood("content", 14, { still: true })))))
         .child(div().text_size(14).font_bold().text_color(t.foreground).child("Pond"))))
       .when(!collapsed, el => el.child(div().flex_1()))
+      .when(!collapsed, el => el.child(this.button("history", svg("mods/pond-chrome/icons/history.svg").size(15), () => run("mod.open", { name: "pond-history" }), 26, "Session history")))
       .when(!collapsed, el => el.child(this.button("search", svg("mods/pond-chrome/icons/search.svg").size(15), () => run("mod.open", { name: "picker" }))))
       .when(!collapsed, el => el.child(this.button("sidebar-toggle", svg("mods/pond-chrome/icons/sidebar.svg").size(15), toggleSidebar)));
   }

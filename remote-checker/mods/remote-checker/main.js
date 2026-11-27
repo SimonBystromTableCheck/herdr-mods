@@ -6,7 +6,7 @@ import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { exec, theme, settings, run, nextCommand, focused, panes, spaces, setShared, home, appHome, readTextFile, writeTextFile } from "herdr";
 import { keybar, keysCard } from "./keybar.js";
 import { SelfUpdate } from "./update.js";
-import { closePanel, panelOnScreen } from "./panel.js";
+import { closePanel, panelOnScreen, focusTab } from "./panel.js";
 import { gh, checkAuth, fetchName, installGh, avatar, setupView, accountMenu } from "./accounts.js";
 
 const ICON = "mods/remote-checker", CHROME = "mods/workspace-chrome";
@@ -635,7 +635,7 @@ export default class RemoteChecker extends View {
   go(dir) {
     this.leave();
     const pane = focused()?.pane;
-    if (dir === "left" && pane) return run("pane.focus", { pane });
+    if (dir === "left" && pane) return focusTab();
     this.handle.focus();
     run("pane.go", { direction: dir });
   }
@@ -698,7 +698,7 @@ export default class RemoteChecker extends View {
       }
       case "r": this.refetch(cx); return true;
       // Escape gives the keyboard back to the terminal; q also closes the panel.
-      case "escape": this.leave(); if (focused()?.pane) run("pane.focus", { pane: focused().pane }); return true;
+      case "escape": this.leave(); focusTab(); return true;
       case "q":
         this.leave();
         closePanel("remote-checker");

@@ -39,7 +39,7 @@ need the `pond` layout. What the agent does:
 Without changing the tab bar, it also opens beside a terminal:
 `herdr-app do pane.split --direction right --mod notes` (`q` closes that pane).
 
-**Version:** 1.0.0 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.1.0 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** an "Update available" pill appears in its header when this repo publishes a newer
 version; click it, confirm, and a new Claude tab updates just this mod (following `UPDATE.md`). Or
@@ -167,6 +167,12 @@ the mod folder and are kept; if you installed `feature-todo`, reinstall it from 
   repo it exits 2.
 
 ## Changes
+
+### 1.1.0 (2026-11-27)
+
+- Text meant for an agent goes to agent-chat's chat box when the Chat view shows (its inbox), else is pasted into the focused terminal's prompt without submitting.
+- Changes on disk show up more reliably: the folder watch restarts after a reclaimed or rejected watch, and while the window shows the open note is re-read every few seconds as a fallback.
+- Back to the chat: leader+h (or Esc / h at the left edge) now gives the keyboard to agent-chat's chat box when the Chat view shows, not just to the hidden terminal (`focusTab()` in the shared `panel.js`).
 
 ### 1.0.0 (2026-11-17)
 

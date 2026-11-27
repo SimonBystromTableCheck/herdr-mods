@@ -27,5 +27,22 @@ elsif ($mode eq 'move') {
   else { die "commit $cb isn't next to the block in the rebase todo\n"; }
   $todo = join '', @lines;
 }
+elsif ($mode eq 'onto') {
+  # HERDR_A: commits (comma separated) moved, in their own order, to right after HERDR_B in the todo
+  # (just above it in the history); HERDR_OP: squash / fixup into it, or pick (a plain move).
+  my @lines = split /(?<=\n)/, $todo;
+  my @want = split /,/, $ca;
+  my (@block, @rest);
+  for my $l (@lines) {
+    my ($h) = $l =~ /^pick (\w+)/;
+    if (defined $h && grep { $h =~ /^$_/ } @want) { push @block, $l } else { push @rest, $l }
+  }
+  die "not every commit is in the rebase todo\n" unless @block == @want;
+  my ($t) = grep { $rest[$_] =~ /^pick $cb/ } 0 .. $#rest;
+  die "commit $cb is not in the rebase todo\n" unless defined $t;
+  if ($op && $op ne 'pick') { s/^pick /$op / for @block; }
+  splice(@rest, $t + 1, 0, @block);
+  $todo = join '', @rest;
+}
 else { die "unknown HERDR_MODE '$mode'\n"; }
 open my $out, '>', $file or die "$!\n"; print $out $todo; close $out;

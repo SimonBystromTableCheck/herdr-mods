@@ -2,7 +2,7 @@ import { div } from "gpui-kit";
 import { v_flex, h_flex, Textarea, TextareaState } from "gpui-base";
 import { switchTo, sessionOf, chatKey } from "../common.js";
 import { onWindows } from "../platform.js";
-import { target, readPrompt, pressKeys, sendMessage, inputBox } from "../terminal-fix3.js";
+import { target, readPrompt, readScreen, pressKeys, sendMessage, inputBox } from "../terminal-fix3.js";
 import { parsePrompt, looksLikePrompt, keysFor, typedAnswer, sameOption, previewKey, fullPreview } from "../model/prompts.js";
 import { askDaemon } from "./session-reader.js";
 import { shared } from "herdr";
@@ -18,6 +18,7 @@ const ROW_PAUSE = 500;
 const SCROLL_TRIES = 12;
 const ROW_SETTLE = 3000;
 const DAEMON_SKIP = 30000;
+const REPLY_KEPT = 20000;
 
 /** Whether an option's description needs a line of its own. */
 function stacked(o) {
@@ -90,7 +91,7 @@ export class QuestionCard {
 
   /** Forgets the question: another conversation is shown. */
   clear() {
-    this.screen = ""; this.choices = null; this.unread = false;
+    this.screen = ""; this.choices = null; this.unread = false; this.replyScreen = null;
     this.previews = new Map();
   }
 
@@ -412,6 +413,7 @@ export class QuestionCard {
   /** Reads the agent's screen for a question while it works or is blocked (Pi asks while working). */
   read(cx, t) {
     if (t.status !== "blocked" && t.status !== "working") {
+      if (this.replyScreen && !this.replyScreen.goneAt) this.replyScreen = { ...this.replyScreen, goneAt: Date.now() };
       if (this.screen) { this.screen = ""; this.choices = null; this.unread = false; cx.notify(); }
       return;
     }
@@ -426,6 +428,7 @@ export class QuestionCard {
         }
         const text = (await readPrompt(t)) ?? "";
         if (text !== this.screen) {
+          await this.readReply(t, text);
           this.screen = text; this.choices = parsePrompt(t.harness, text);
           this.showPreview(cx, t);
           this.unread = !this.choices && looksLikePrompt(text);
@@ -438,6 +441,29 @@ export class QuestionCard {
         if (this.screenAgain) { this.screenAgain = false; const now = target(); if (now && chatKey(now) === this.host.key) this.read(cx, now); }
       }
     });
+  }
+
+  /**
+   * Keeps the whole screen while Claude Code asks: the reply above the question isn't in its log until the question is
+   * answered, so the chat shows it from here (replyFromScreen). Once the prompt goes, the screen stays a little while,
+   * until the log has the reply.
+   */
+  async readReply(t, prompt) {
+    const asking = t.status === "blocked" && t.harness?.reader === "claude-code" && (parsePrompt(t.harness, prompt) || looksLikePrompt(prompt));
+    if (!asking) {
+      if (this.replyScreen && !this.replyScreen.goneAt) this.replyScreen = { ...this.replyScreen, goneAt: Date.now() };
+      return;
+    }
+    const screen = await readScreen(t, 0);
+    if (screen) this.replyScreen = { key: this.host.key, screen };
+  }
+
+  /** The screen the reply above a question is read from, or null (another session, or long since answered). */
+  screenForReply() {
+    const r = this.replyScreen;
+    if (!r || r.key !== this.host.key) return null;
+    if (r.goneAt && Date.now() - r.goneAt > REPLY_KEPT) { this.replyScreen = null; return null; }
+    return r.screen;
   }
 
   /** Shows a multi-select's typed text in its box, and clears the box when the question changes. */

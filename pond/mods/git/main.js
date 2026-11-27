@@ -1,5 +1,10 @@
-// A lazygit-style git panel: numbered sections, vim-ish keys, writes run in core
-// terminals whose output stays in a copyable log, and conflicts/failures hand off to an agent.
+// The Git panel as a workbench: four columns, Branches · History · Files · Diff, showing as many as fit
+// (the expanded tab shows all four). Everything works from the keyboard with vim-ish moves and
+// lazygit's letters, and everything works with the mouse: click, shift-click / cmd-click ranges,
+// double-click, right-click menus and dragging commits or branches onto each other.
+// Writes run in core terminals whose output stays in a copyable log; conflicts, hook failures and
+// review notes hand off to an agent. Every action lives in one table per row type (actions()):
+// the keys, the right-click / x menu, the footer and the ? card are all built from it.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, TextareaState, Textarea, Editor, EditorState, Scrollbar, ScrollHandle, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { keybar, keysCard, keycap } from "./keybar.js";
@@ -7,8 +12,8 @@ import { spaces, panes, focused, agents, knownAgents, exec, hc, run, theme, sett
 import * as G from "./git.js";
 import { graphCell } from "./graph.js";
 import { SelfUpdate } from "./update.js";
-import { closePanel, hidePanel, revealPanel, pathTo, panelOnScreen } from "./panel.js";
-import { loadFileDiff, loadFolderDiff, treeRows, patchFor, snippetOf, lineOf, sidesOf, incomingPaths, loadConflict, resolveBlock } from "./files.js";
+import { closePanel, hidePanel, revealPanel, pathTo, panelOnScreen, focusTab } from "./panel.js";
+import { loadFileDiff, loadFolderDiff, loadRevFiles, loadRevFileDiff, treeRows, patchFor, snippetOf, lineOf, sidesOf, incomingPaths, loadConflict, resolveBlock } from "./files.js";
 
 const commitDraft = root => (shared("git.commitDrafts") ?? {})[root] ?? "";
 function setCommitDraft(root, msg) {
@@ -17,24 +22,27 @@ function setCommitDraft(root, msg) {
   setShared("git.commitDrafts", all);
 }
 
-const ROW = 22, LINE = 18;
+const ROW = 28, HROW = 40, LINE = 18;
+const FIXED_W = { 0: 260, 2: 290 };
+// "16 minutes ago" → "16m".
+const short = d => String(d ?? "").replace(/ ago$/, "").replace(/^(\d+) (second|minute|hour|day|week|month|year)s?(, .*)?$/, (_m, n, u) => `${n}${{ second: "s", minute: "m", hour: "h", day: "d", week: "w", month: "mo", year: "y" }[u]}`);
 const CHROME = "mods/workspace-chrome";
-const SECTIONS = [
-  { id: "files", key: "2", title: "Files", cap: 6 },
-  { id: "branches", key: "3", title: "Branches", cap: 5, tabs: ["Local", "Remote"] },
-  { id: "commits", key: "4", title: "Commits", cap: 6, tabs: ["Branch", "All"] },
-  { id: "stash", key: "5", title: "Stash", cap: 2 },
+const ZONES = [
+  { id: "branches", key: "1", title: "Branches" },
+  { id: "history", key: "2", title: "History" },
+  { id: "files", key: "3", title: "Files" },
+  { id: "diff", key: "4", title: "Diff" },
 ];
-const LISTS = ["files", "branches0", "branches1", "commits0", "commits1", "stash"];
 const PR_COLOR = { OPEN: "ansi2", MERGED: "ansi5", CLOSED: "ansi1" };
 const { q } = G;
-// The panel column grows to this (or its max) while Files shows, so the diff gets the right half.
-const WIDE = 1000;
+// Files rows: a press left of this x toggles staging (the checkbox).
+const CHECK_W = 30;
 const changeRow = r => r?.kind === "add" || r?.kind === "del";
 const lineRow = r => changeRow(r) || ["ctx", "ours", "theirs", "base"].includes(r?.kind);
 // Diffs up to this many rows are drawn as plain rows (clicks, shift-click and drag select);
 // longer ones as a virtual list (keys and plain clicks).
 const PLAIN_ROWS = 2000;
+const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
 
 // `fixed`: the repo an expanded Git tab was opened on (its props, read once in init).
 // `keep`: the last place; a mod pane in focus (the conflicts pane, a diff) has no folder, so it stays.
@@ -49,8 +57,14 @@ function location(fixed, keep) {
 
 // lazygit spells keys "<c-p>", "<a-x>", "<space>"; keys here are "ctrl-p", "alt-x", "space".
 const lazyKey = k => k.replace(/^<c-(.+)>$/, "ctrl-$1").replace(/^<a-(.+)>$/, "alt-$1").replace(/^<(.+)>$/, "$1");
-const CONTEXTS = { global: () => true, files: v => v.sec === "files", localBranches: v => v.sec === "branches" && !v.tab.branches,
-  remoteBranches: v => v.sec === "branches" && v.tab.branches === 1, commits: v => v.sec === "commits", stash: v => v.sec === "stash" };
+const CONTEXTS = {
+  global: () => true,
+  files: v => v.zone === 2 && v.subject().kind === "wip",
+  localBranches: v => v.zone === 0 && v.selected(0)?.kind === "local",
+  remoteBranches: v => v.zone === 0 && v.selected(0)?.kind === "remote",
+  commits: v => v.zone === 1 && Boolean(v.selected(1)?.sha),
+  stash: v => v.zone === 0 && v.selected(0)?.kind === "stash",
+};
 
 function keyOf(e) {
   const m = e.modifiers ?? {};
@@ -60,7 +74,7 @@ function keyOf(e) {
   return e.key_char ?? (m.shift ? e.key.toUpperCase() : e.key);
 }
 
-function lineKind(text, style) {
+function lineKind(text) {
   if (/^(diff --git|index |--- |\+\+\+ |new file|deleted file|similarity|rename |old mode|new mode)/.test(text)) return { kind: "file", text };
   if (text.startsWith("@@")) return { kind: "hunk", text };
   if (text.startsWith("+")) return { kind: "add", text };
@@ -69,26 +83,31 @@ function lineKind(text, style) {
   return { kind: "", text };
 }
 
+const zoomOf = () => Number(settings().zoom ?? 1) || 1;
+
 export default class Git extends View {
   init(_props, cx) {
     this.selfUpdate = new SelfUpdate("git", "Git panel"); this.selfUpdate.start(cx);
     this.handle = cx.focus_handle();
     // A reload runs init on the same copy: drop overlays the old code opened (their handlers are gone).
-    this.prompt = null; this.menu = null; this.commitBox = null; this.typing = false; this.keysOpen = false;
+    this.prompt = null; this.menu = null; this.commitBox = null; this.switcher = null; this.typing = false; this.keysOpen = false;
     // Props read later can belong to another copy, so read them once.
     const p = props();
     this.fixed = p?.cwd ? { cwd: p.cwd, on: p.on ?? null } : null;
     // Which expanded tab this copy is in: expand() names it with a token (tabs from before: the only Git pane).
     this.token = p?.token ?? null;
     if (this.fixed) cx.timer.after(150, () => this.handle.focus());
-    this.scrolls = Object.fromEntries([...LISTS, "main"].map(k => [k, VirtualListScrollHandle.new()]));
+    this.scrolls = Object.fromEntries([...ZONES.map(z => z.id), "main"].map(k => [k, VirtualListScrollHandle.new()]));
     this.diffScroll = ScrollHandle.new();
-    this.sec = "branches"; this.tab = { branches: 0, commits: 0 };
-    this.sel = {}; this.filter = {}; this.log = []; this.seq = 0; this.copied = [];
+    this._zone = 1; this.branchTab = "local"; this.sel = { branches: 0, history: 0, files: 0 }; this.filter = {}; this.scope = "head";
+    this.log = []; this.seq = 0; this.copied = []; this.undoStack = [];
     this.mainTop = 0; this.mainToken = 0; this.cur = 0; this.anchor = null;
-    // Files as a tree (t: flat); folded folders by path ("" is "/").
-    this.folded = new Set(); this.flat = shared("git.flatFiles") === true;
-    // A reload or restart while Files had the panel widened: this copy puts the width back.
+    this.rangeAnchor = null; this.picks = new Set(); this.stashRef = null; this.detail = null; this.detailToken = 0;
+    this.drag = null; this.dragStart = null; this.ctxPending = null; this.gToken = 0;
+    // Files as a tree (t: flat); folded folders by path ("" is "/"). Folded branch groups are kept across restarts.
+    this.folded = new Set(); this.flat = shared("git.flatFiles") !== false;
+    this.foldedGroups = new Set(shared("git.foldedGroups") ?? []);
+    // A reload or restart while the panel was widened: this copy puts the width back.
     this.widened = this.fixed ? null : shared("git.widened") ?? null;
     this.seqEditor = `${appHome()}/mods/git/seq-edit.pl`;
     cx.spawn(async cx => {
@@ -104,20 +123,20 @@ export default class Git extends View {
       for (;;) {
         const c = await nextCommand();
         try {
-        if (c === "focus") {
-          // One retry in case the first focus didn't land; focus that landed and then moved
-          // (leaving quickly, a click, the leader popup) is the person's choice, so no retry then.
-          const token = this.focusToken = (this.focusToken ?? 0) + 1;
-          this.handle.focus();
-          cx.timer.after(40, () => { if (this.handle.is_focused()) this.focusToken++; });
-          cx.timer.after(150, cx => { if (this.focusToken === token && !this.handle.is_focused()) { this.handle.focus(); cx.notify(); } });
-        }
-        else if (c === "expand" && !this.fixed) this.expand(cx);
-        else if (c === "collapse" && this.fixed) this.collapse();
-        // One key for both (cmd-g): the side panel expands, the expanded tab collapses.
-        else if (c === "toggle") { if (this.fixed) this.collapse(); else this.expand(cx); }
-        else if (c.startsWith("go:")) this.go(c.slice(3));
-        else if (c.startsWith("key:")) { const k = c.slice(4); this.menu ? this.menuKey(k, cx) : this.handleKey(k, cx); }
+          if (c === "focus") {
+            // One retry in case the first focus didn't land; focus that landed and then moved
+            // (leaving quickly, a click, the leader popup) is the person's choice, so no retry then.
+            const token = this.focusToken = (this.focusToken ?? 0) + 1;
+            this.handle.focus();
+            cx.timer.after(40, () => { if (this.handle.is_focused()) this.focusToken++; });
+            cx.timer.after(150, cx => { if (this.focusToken === token && !this.handle.is_focused()) { this.handle.focus(); cx.notify(); } });
+          }
+          else if (c === "expand" && !this.fixed) this.expand(cx);
+          else if (c === "collapse" && this.fixed) this.collapse();
+          // One key for both (cmd-g): the side panel expands, the expanded tab collapses.
+          else if (c === "toggle") { if (this.fixed) this.collapse(); else this.expand(cx); }
+          else if (c.startsWith("go:")) this.go(c.slice(3));
+          else if (c.startsWith("key:")) { const k = c.slice(4); this.menu ? this.menuKey(k, cx) : this.handleKey(k, cx); }
         } catch (e) { this.flash(`git.${c}: ${e?.message ?? e}`, 6000); } // a failing command must not end the loop
         cx.notify();
       }
@@ -139,6 +158,22 @@ export default class Git extends View {
   // had the keys left the leader thinking the expanded tab still had them, so e collapsed nothing).
   close() {
     setShared(this.fixed ? "git.tabHasKeys" : "git.hasKeys", false);
+  }
+
+  // The column with the keyboard: 0 branches, 1 history, 2 files, 3 the diff.
+  get zone() { return this._zone; }
+  set zone(z) { this._zone = Math.max(0, Math.min(3, z)); }
+  // The diff has the keyboard (the old panel's "main focus").
+  get mainFocus() { return this._zone === 3; }
+  set mainFocus(v) { if (v) this._zone = 3; else if (this._zone === 3) this._zone = 2; }
+
+  setZone(z, cx) {
+    const before = this.zone;
+    this.zone = z;
+    if (this.zone === 3 && this.main?.diff) { this.clampCursor(); this.revealCursor(); }
+    if (this.zone !== before) this.ctxPending = null;
+    this.handle.focus();
+    cx?.notify();
   }
 
   // The expanded tab: coming back to it (tab.select, a click on its tab) shows the pane as focused,
@@ -177,6 +212,8 @@ export default class Git extends View {
     });
   }
 
+  commitTarget() { return this.scope === "all" ? ["--all"] : this.scope?.ref ? [this.scope.ref] : ["HEAD"]; }
+
   refresh(cx, heavy) {
     if (this.refreshing) { this.again = this.again || (heavy ? "heavy" : "light"); return; }
     this.refreshing = true;
@@ -187,7 +224,8 @@ export default class Git extends View {
           this.locKey = k;
           this.ctx = loc.cwd ? await G.openRepo(loc.cwd, loc.on) : null;
           this.cwd = loc.cwd;
-          Object.assign(this, { status: null, op: null, branches: null, commits: null, stash: null, prs: null, main: null, mainOverride: null, sel: {}, filter: {}, copied: [], folded: new Set() });
+          Object.assign(this, { status: null, op: null, branches: null, commits: null, stash: null, prs: null, main: null, mainOverride: null, detail: null,
+            sel: { branches: 0, history: 0, files: 0 }, filter: {}, copied: [], folded: new Set(), scope: "head", stashRef: null, rangeAnchor: null, picks: new Set(), undoStack: [] });
           if (!this.ctx) return;
           this.base = await G.defaultRef(this.ctx);
           this.watch(this.ctx, cx);
@@ -198,17 +236,25 @@ export default class Git extends View {
         const [status, op] = await Promise.all([G.loadStatus(ctx), G.loadOp(ctx)]);
         if (ctx !== this.ctx) return;
         this.status = status; this.op = op;
+        this.numstat = await G.numstat(ctx).catch(() => null);
         const opKey = op ? `${op.kind}:${op.other}:${op.current ?? ""}` : null;
         if (opKey !== this.incoming?.key) this.incoming = op ? { key: opKey, paths: await incomingPaths(ctx, op).catch(() => new Set()) } : null;
         if (heavy) {
-          const [branches, commits, stash] = await Promise.all([G.loadBranches(ctx, this.base), G.loadCommits(ctx, this.tab.commits === 1 ? ["--all"] : ["HEAD"], this.base), G.loadStash(ctx)]);
+          const [branches, commits, stash] = await Promise.all([G.loadBranches(ctx, this.base), G.loadCommits(ctx, this.commitTarget(), this.base), G.loadStash(ctx)]);
           if (ctx !== this.ctx) return;
+          // The cursors stay on the same commit and branch when the lists change under them.
+          const keepCommit = this.keepHistory === false ? null : this.selected(1)?.sha, keepBranch = this.itemKey(0, this.selected(0));
           Object.assign(this, { branches, commits, stash, lastHeavy: Date.now() });
+          this.keepHistory = true;
+          if (keepCommit) { const i = this.items(1).findIndex(r => r.sha === keepCommit); if (i >= 0) this.sel.history = i; }
+          const bi = this.items(0).findIndex(r => this.itemKey(0, r) === keepBranch);
+          if (bi >= 0) this.sel.branches = bi;
         }
         if (Date.now() - (this.prsAt ?? 0) > 120000) {
           this.prsAt = Date.now();
           cx.spawn(async cx => { const prs = await G.loadPRs(ctx); if (prs && ctx === this.ctx) { this.prs = prs; cx.notify(); } });
         }
+        this.syncDetail(cx);
         this.syncMain(cx, true);
       } catch (e) { this.flash(`Refresh failed: ${e}`); }
       finally {
@@ -218,88 +264,139 @@ export default class Git extends View {
     });
   }
 
-  // ---- Lists & selection -----------------------------------------------------
+  // ---- Lists ----------------------------------------------------------------------
 
-  lk(sec = this.sec) { return sec === "files" ? "files" : sec === "branches" ? `branches${this.tab.branches}` : sec === "commits" ? `commits${this.tab.commits}` : sec; }
+  // Branches: the tab's list (Local, Remote or Stashes, chosen in the column's header). Remote groups
+  // its branches under a foldable header per remote when there is more than one.
+  branchRows() {
+    const f = this.filter.branches?.toLowerCase(), b = this.branches, match = s => !f || s.toLowerCase().includes(f);
+    this.branchIndent = false;
+    if (this.branchTab === "stash") return (this.stash ?? []).map(s => ({ kind: "stash", ...s })).filter(s => match(s.message));
+    if (this.branchTab !== "remote") return (b?.local ?? []).filter(x => match(`${x.name} ${x.subject}`));
+    const remotes = new Map();
+    for (const r of b?.remote ?? []) {
+      if (!remotes.has(r.remote)) remotes.set(r.remote, []);
+      if (match(`${r.name} ${r.subject}`)) remotes.get(r.remote).push(r);
+    }
+    if (remotes.size <= 1) return [...remotes.values()].flat();
+    const rows = [];
+    this.branchIndent = true;
+    for (const [name, list] of remotes) {
+      if (!list.length && f) continue;
+      const id = `remote:${name}`, open = Boolean(f) || !this.foldedGroups.has(id);
+      rows.push({ kind: "group", id, title: name, count: list.length, open });
+      if (open) rows.push(...list);
+    }
+    return rows;
+  }
 
-  rawItems(sec) {
-    if (sec === "files") {
+  // [ / ] and the header's tabs: Local, Remote, Stashes.
+  setBranchTab(tab, cx) {
+    if (tab === this.branchTab) return;
+    this.branchTab = tab; this.sel.branches = 0;
+    this.scrolls.branches.scroll_to_item(0);
+    cx.notify();
+  }
+
+  // History: the working tree on top, then the commits of the scope (this branch, all, or one branch's log).
+  historyRows() {
+    const f = this.filter.history?.toLowerCase(), commits = this.commits ?? [];
+    return [{ kind: "wip" }, ...(f ? commits.filter(c => `${c.short} ${c.subject} ${c.author} ${c.refs.join(" ")}`.toLowerCase().includes(f)) : commits)];
+  }
+
+  // Files of the subject: the working tree's (a tree, or flat with t or a filter), or a commit's / stash's.
+  fileRows() {
+    const s = this.subject(), f = this.filter.files?.toLowerCase();
+    if (s.kind === "wip") {
       const files = this.status?.files ?? [];
-      // A filter lists the matching files flat.
-      return this.flat || this.filter.files ? files.map(f => ({ kind: "file", path: f.path, file: f, depth: 0 })) : treeRows(files, this.folded);
+      if (this.flat || f) return files.filter(x => !f || x.path.toLowerCase().includes(f)).map(x => ({ kind: "file", path: x.path, file: x, depth: 0 }));
+      return files.length ? treeRows(files, this.folded) : [];
     }
-    if (sec === "branches") return (this.tab.branches ? this.branches?.remote : this.branches?.local) ?? [];
-    if (sec === "commits") return this.commits ?? [];
-    return this.stash ?? [];
+    return (this.detail?.files ?? []).filter(x => !f || x.path.toLowerCase().includes(f)).map(x => ({ kind: "file", path: x.path, file: x, depth: 0, ro: true }));
   }
 
-  textOf(sec, it) {
-    if (sec === "files") return it.path;
-    if (sec === "branches") return `${it.name} ${it.subject}`;
-    if (sec === "commits") return it.sha ? `${it.short} ${it.subject} ${it.author} ${it.refs.join(" ")}` : "";
-    return it.message;
+  items(z = this.zone) { return z === 0 ? this.branchRows() : z === 1 ? this.historyRows() : z === 2 ? this.fileRows() : []; }
+  selIndex(z = this.zone) { const n = this.items(z).length; return Math.max(0, Math.min(this.sel[ZONES[z].id] ?? 0, n - 1)); }
+  selected(z = this.zone) { return z > 2 ? null : this.items(z)[this.selIndex(z)] ?? null; }
+
+  itemKey(z, it, i) {
+    if (!it) return null;
+    if (z === 0) return it.kind === "group" ? `g:${it.id}` : it.kind === "stash" ? `s:${it.ref}` : `${it.kind[0]}:${it.name}`;
+    if (z === 1) return it.kind === "wip" ? "wip" : it.sha;
+    return `${it.kind === "dir" ? "d" : "f"}:${it.path}:${i}`;
   }
 
-  items(sec = this.sec) {
-    const all = this.rawItems(sec), f = this.filter[this.lk(sec)]?.toLowerCase();
-    return f ? all.filter(it => this.textOf(sec, it).toLowerCase().includes(f)) : all;
-  }
-
-  selIndex(sec = this.sec) {
-    const items = this.items(sec);
-    let i = Math.max(0, Math.min(this.sel[this.lk(sec)] ?? 0, items.length - 1));
-    if (sec === "commits") { while (i < items.length - 1 && !items[i]?.sha) i++; }
-    return i;
-  }
-  selected(sec = this.sec) { return this.items(sec)[this.selIndex(sec)] ?? null; }
-
-  move(delta, cx, absolute) {
-    const items = this.items();
+  move(delta, cx, absolute, z = this.zone) {
+    if (z > 2) return;
+    const items = this.items(z);
     if (!items.length) return;
-    let i = absolute != null ? absolute : this.selIndex() + delta;
+    let i = absolute != null ? absolute : this.selIndex(z) + delta;
     i = Math.max(0, Math.min(i, items.length - 1));
-    if (this.sec === "commits") {
-      const dir = (absolute != null ? (absolute === 0 ? 1 : -1) : Math.sign(delta)) || 1;
-      let j = i;
-      while (j >= 0 && j < items.length && !items[j].sha) j += dir;
-      if (j < 0 || j >= items.length) { j = i; while (j >= 0 && j < items.length && !items[j].sha) j -= dir; }
-      if (j >= 0 && j < items.length) i = j;
+    this.sel[ZONES[z].id] = i;
+    this.scrolls[ZONES[z].id].scroll_to_item(i);
+    if (z === 1) { this.stashRef = null; this.syncDetail(cx); }
+    if (z === 2) { this.mainOverride = null; this.syncMain(cx); }
+    cx.notify();
+  }
+
+  // What Files and the diff show: the working tree, the history cursor's commit, or a stash (enter on one).
+  subject() {
+    if (this.stashRef) { const s = (this.stash ?? []).find(x => x.ref === this.stashRef); if (s) return { kind: "stash", s }; }
+    const r = this.selected(1);
+    return r?.sha ? { kind: "commit", c: r } : { kind: "wip" };
+  }
+
+  syncDetail(cx) {
+    const s = this.subject(), ctx = this.ctx;
+    const key = s.kind === "wip" ? "wip" : s.kind === "commit" ? `c:${s.c.sha}` : `s:${s.s.ref}:${s.s.message}`;
+    if (key === this.detail?.key) return;
+    const was = this.detail?.key;
+    this.detail = { key, files: s.kind === "wip" ? null : undefined };
+    if (was) { this.sel.files = 0; this.mainOverride = null; }
+    if (s.kind !== "wip" && ctx) {
+      const token = ++this.detailToken, detail = this.detail;
+      cx.spawn(async cx => {
+        const files = s.kind === "commit" ? await loadRevFiles(ctx, s.c.sha, s.c.parents[0] ?? null) : await loadRevFiles(ctx, s.s.ref, `${s.s.ref}^1`);
+        if (token !== this.detailToken) return;
+        detail.files = files;
+        this.syncMain(cx); cx.notify();
+      });
     }
-    this.sel[this.lk()] = i;
-    this.scrolls[this.lk()].scroll_to_item(i);
-    this.mainOverride = null;
     this.syncMain(cx);
-    cx.notify();
   }
 
-  focusSection(id, cx) {
-    if (this.sec !== id) { this.sec = id; this.mainOverride = null; this.mainFocus = false; this.syncMain(cx); }
-    this.handle.focus();
-    cx.notify();
+  // History rows picked as a group: a range (v, shift-click) or single picks (cmd-click), newest first.
+  selectedCommits() {
+    const rows = this.items(1);
+    if (this.rangeAnchor) {
+      const a = rows.findIndex(r => r.sha === this.rangeAnchor), b = this.selIndex(1);
+      if (a < 0) return [];
+      return rows.slice(Math.min(a, b), Math.max(a, b) + 1).filter(r => r.sha);
+    }
+    if (this.picks.size) return rows.filter(r => r.sha && this.picks.has(r.sha));
+    return [];
   }
-
-  switchTab(delta, cx) {
-    const s = SECTIONS.find(x => x.id === this.sec);
-    if (!s.tabs) return;
-    this.tab[this.sec] = (this.tab[this.sec] + delta + s.tabs.length) % s.tabs.length;
-    if (this.sec === "commits") this.refresh(cx, true);
-    this.syncMain(cx); cx.notify();
+  rangeRows() { return this.selectedCommits(); }
+  contiguous(list) {
+    const rows = this.items(1), idx = list.map(c => rows.indexOf(c));
+    return idx.every((v, i) => i === 0 || v === idx[i - 1] + 1);
   }
+  clearRange() { this.rangeAnchor = null; this.picks = new Set(); }
 
-  // ---- Main view -------------------------------------------------------------
+  // ---- Main view (the diff column) -------------------------------------------------
 
   mainSpec() {
-    const it = this.selected(), ctx = this.ctx;
-    if (!it || !ctx) return null;
-    switch (this.sec) {
-      case "files":
-        if (it.kind === "dir") return { key: `d:${it.path}`, title: it.path || "/", path: it.path, diff: () => loadFolderDiff(ctx, it.path, this.status?.files ?? []) };
-        return { key: `f:${it.path}`, title: it.path, path: it.path, diff: () => it.file.conflict ? loadConflict(ctx, it.file, this.sides()) : loadFileDiff(ctx, it.file) };
-      case "branches": return { key: `b:${it.name}:${it.sha}`, title: `log · ${it.name}`, commits: () => G.loadCommits(ctx, [it.name], this.base, 200) };
-      case "commits": return it.sha ? { key: `c:${it.sha}`, title: `${it.short} · ${it.subject}`, load: () => G.commitShow(ctx, it.sha) } : null;
-      case "stash": return { key: `s:${it.ref}:${it.message}`, title: `${it.ref} · ${it.message}`, load: () => G.stashShow(ctx, it.ref) };
+    const ctx = this.ctx, s = this.subject(), it = this.selected(2);
+    if (!ctx) return null;
+    if (s.kind === "wip") {
+      if (!it) return null;
+      if (it.kind === "dir") return { key: `d:${it.path}`, title: it.path || "/", path: it.path, diff: () => loadFolderDiff(ctx, it.path, this.status?.files ?? []) };
+      return { key: `f:${it.path}`, title: it.path, path: it.path, diff: () => it.file.conflict ? loadConflict(ctx, it.file, this.sides()) : loadFileDiff(ctx, it.file) };
     }
-    return null;
+    if (this.detail?.files == null) return null;
+    if (!it) return s.kind === "commit" ? { key: `c:${s.c.sha}`, title: `${s.c.short} · ${s.c.subject}`, load: () => G.commitShow(ctx, s.c.sha) } : null;
+    const rev = s.kind === "commit" ? s.c.sha : s.s.ref, parent = s.kind === "commit" ? s.c.parents[0] ?? null : `${s.s.ref}^1`;
+    return { key: `r:${rev}:${it.path}`, title: it.path, path: it.path, diff: () => loadRevFileDiff(ctx, rev, it.file, parent) };
   }
 
   syncMain(cx, force) {
@@ -308,7 +405,7 @@ export default class Git extends View {
     if (spec.log) { this.showLogEditor(spec.log); this.main = { key: spec.key, log: spec.log }; return; }
     if (spec.key === this.main?.key && !force) return;
     const same = spec.key === this.main?.key;
-    this.main = { key: spec.key, title: spec.title, style: spec.style, path: spec.path, rows: same ? this.main.rows : null, commits: same ? this.main.commits : null, diff: same ? this.main.diff : null, notesSig: same ? this.main.notesSig : null, width: same ? this.main.width : 0 };
+    this.main = { key: spec.key, title: spec.title, path: spec.path, rows: same ? this.main.rows : null, diff: same ? this.main.diff : null, notesSig: same ? this.main.notesSig : null, width: same ? this.main.width : 0 };
     if (!same) this.mainTop = 0;
     const token = ++this.mainToken, main = this.main;
     if (spec.diff) {
@@ -322,19 +419,10 @@ export default class Git extends View {
       });
       return;
     }
-    if (spec.commits) {
-      cx.spawn(async cx => {
-        const commits = await spec.commits().catch(() => []);
-        if (token !== this.mainToken) return;
-        main.commits = commits; main.rows = commits; main.width = 0;
-        cx.notify();
-      });
-      return;
-    }
     cx.spawn(async cx => {
       const lines = await spec.load().catch(e => [String(e)]);
       if (token !== this.mainToken) return;
-      main.rows = lines.map(l => lineKind(l.replace(/\t/g, "    "), spec.style));
+      main.rows = lines.map(l => lineKind(l.replace(/\t/g, "    ")));
       main.width = Math.min(30000, Math.max(300, ...lines.slice(0, 2000).map(l => l.length * 7.3 + 40)));
       cx.notify();
     });
@@ -377,7 +465,7 @@ export default class Git extends View {
   // The diff's rows with this file's notes under the line each ends on (rebuilt when the notes change).
   diffRows(main = this.main) {
     if (!main?.diff) return main?.rows ?? [];
-    const notes = this.notes().filter(n => main.diff.folder ? this.under(main.path, n.path) : n.path === main.path), sig = notes.map(n => n.id).join(",");
+    const notes = this.subject().kind !== "wip" ? [] : this.notes().filter(n => main.diff.folder ? this.under(main.path, n.path) : n.path === main.path), sig = notes.map(n => n.id).join(",");
     if (main.rows && main.notesSig === sig) return main.rows;
     const rows = [], placed = new Set();
     const noteRows = n => String(n.text).split("\n").map((line, i) => ({ kind: "note", note: n, text: `${i ? "  " : "✎ "}${line}` }));
@@ -405,29 +493,37 @@ export default class Git extends View {
     this.keepSelected(row, cx);
   }
   foldAll(fold, cx) {
-    const row = this.selected("files");
+    const row = this.selected(2);
     this.folded = fold ? new Set(treeRows(this.status?.files ?? [], new Set()).filter(r => r.kind === "dir" && !r.root).map(r => r.path)) : new Set();
     // The selection climbs to its outermost folded folder.
     const top = row && fold ? treeRows(this.status?.files ?? [], this.folded).find(r => r.kind === "dir" && !r.root && this.under(r.path, row.path)) : row;
     this.keepSelected(top ?? row, cx);
   }
   keepSelected(row, cx) {
-    const i = this.items("files").findIndex(r => row && r.kind === row.kind && r.path === row.path);
+    const i = this.items(2).findIndex(r => row && r.kind === row.kind && r.path === row.path);
     if (i >= 0) this.sel.files = i;
     this.mainOverride = null; this.syncMain(cx); cx.notify();
   }
   toggleFlat(cx) {
-    const row = this.selected("files");
+    const row = this.selected(2);
     this.flat = !this.flat; setShared("git.flatFiles", this.flat);
     this.keepSelected(row?.kind === "file" ? row : null, cx);
     this.flash(this.flat ? "Files: flat list" : "Files: tree");
   }
+  // Branch groups (Local, each remote, Stashes) fold like folders; kept across restarts.
+  toggleGroup(id, cx) {
+    if (this.foldedGroups.has(id)) this.foldedGroups.delete(id); else this.foldedGroups.add(id);
+    setShared("git.foldedGroups", [...this.foldedGroups]);
+    const i = this.items(0).findIndex(r => r.kind === "group" && r.id === id);
+    if (i >= 0) this.sel.branches = i;
+    cx.notify();
+  }
   // J / K in the diff: the next / previous file row (folders skipped).
   nextFile(dir, cx) {
-    const items = this.items("files");
-    let i = this.selIndex("files") + dir;
+    const items = this.items(2);
+    let i = this.selIndex(2) + dir;
     while (i >= 0 && i < items.length && items[i].kind !== "file") i += dir;
-    if (i >= 0 && i < items.length) this.move(0, cx, i);
+    if (i >= 0 && i < items.length) this.move(0, cx, i, 2);
   }
 
   // The operation's two sides, named (null when no merge / rebase / pick is running).
@@ -440,7 +536,7 @@ export default class Git extends View {
   }
 
   // A press on a diff line: the cursor goes there; shift extends the selection from the cursor;
-  // holding the button and moving selects the lines dragged over.
+  // holding the button and moving selects the lines dragged over. A double press writes a note.
   pressLine(i, e, cx) {
     const rows = this.main?.rows ?? [];
     if (!lineRow(rows[i])) return;
@@ -448,6 +544,7 @@ export default class Git extends View {
     this.mainFocus = true;
     if (e?.modifiers?.shift) { if (this.anchor == null) this.anchor = this.cur; this.cur = i; }
     else { this.cur = i; this.anchor = null; this.dragging = i; }
+    if (e?.click_count === 2 && this.subject().kind === "wip") { this.dragging = null; this.addNote(cx); }
     cx.notify();
   }
   dragTo(i, cx) {
@@ -530,6 +627,7 @@ export default class Git extends View {
   // space in the diff: stage (or, on the staged side, unstage) the chosen lines or the cursor's hunk.
   stageHunk(cx) {
     const r = this.main?.rows?.[this.cur], f = this.fileAt(this.rowPath(r));
+    if (r?.side === "commit") { this.flash("This change is committed: nothing to stage"); return; }
     if (r?.side === "conflict") { this.flash("Keep a side first (o / t / b or the buttons), then stage the file"); return; }
     if (!f || !r?.hunk) { this.flash("Move onto a change first"); return; }
     if (f.untracked) { this.cmd(`git add ${f.path}`, `git add -- ${q(f.path)}`, cx, { term: false }); return; }
@@ -544,6 +642,7 @@ export default class Git extends View {
   // d in the diff: throw away the chosen lines or the cursor's hunk from the working tree (asks first).
   discardHunk(cx) {
     const r = this.main?.rows?.[this.cur], f = this.fileAt(this.rowPath(r));
+    if (r?.side === "commit") { this.flash("This change is committed: revert the commit instead (t in History)"); return; }
     if (!f || !r?.hunk) { this.flash("Move onto a change first"); return; }
     if (r.side !== "unstaged") { this.flash(r.side === "staged" ? "Unstage it first (space), then discard" : "Resolve the conflict instead"); return; }
     if (f.untracked) return this.discardFile(f, cx);
@@ -569,6 +668,7 @@ export default class Git extends View {
 
   // a in the diff: a note on the cursor's line, or on the chosen lines (v).
   addNote(cx) {
+    if (this.subject().kind !== "wip") { this.flash("Notes are for uncommitted changes"); return; }
     const rows = this.main?.rows ?? [], r = rows[this.cur], path = this.rowPath(r), f = path ? { path } : null;
     if (!f || !lineRow(r)) { this.flash("Move onto a line first"); return; }
     const [a, b] = this.anchor == null ? [this.cur, this.cur] : [Math.min(this.anchor, this.cur), Math.max(this.anchor, this.cur)];
@@ -579,7 +679,7 @@ export default class Git extends View {
       const note = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, path: f.path, side: r.side, at: this.anchorOf(last), from, to, text: text.trim(), snippet: snippetOf(span) };
       this.setNotes([...this.notes(), note]);
       this.anchor = null;
-    }, cx, { hint: "What should change here? Enter saves; i or p sends your notes to an agent" });
+    }, cx, { hint: "What should change here? Enter saves; p sends your notes to an agent" });
   }
 
   // Ask AI (the diff's button, A): a question about this file's change, or the selected lines,
@@ -587,20 +687,21 @@ export default class Git extends View {
   askAbout(cx) {
     const m = this.main, ctx = this.ctx, f = m?.path != null ? { path: m.diff?.folder ? `${m.path || "."}/` : m.path } : null;
     if (!f || !m?.diff || !ctx) return;
-    const rows = m.rows ?? [], sides = this.sides();
+    const rows = m.rows ?? [], sides = this.sides(), s = this.subject();
     const [a, b] = this.anchor == null ? [0, rows.length - 1] : [Math.min(this.anchor, this.cur), Math.max(this.anchor, this.cur)];
     const part = rows.slice(a, b + 1), picked = this.anchor != null;
     const text = r => r.kind === "section" ? `## ${r.text}` : r.kind === "hunk" ? r.text
       : r.kind === "mark" ? (r.part === "ours" ? `<<<<<<< ${sides?.ours ?? "current"}` : r.part === "theirs" ? `======= (below: ${sides?.theirs ?? "incoming"})` : "||||||| base")
-      : r.kind === "note" ? null : ({ add: "+", del: "-", ours: " ", theirs: " ", base: " " }[r.kind] ?? " ") + (r.text ?? "");
+        : r.kind === "note" ? null : ({ add: "+", del: "-", ours: " ", theirs: " ", base: " " }[r.kind] ?? " ") + (r.text ?? "");
     let lines = part.map(text).filter(x => x != null);
     if (lines.length > 400) lines = [...lines.slice(0, 400), `… (${lines.length - 400} more lines)`];
     const what = picked ? `${f.path}:${lineOf(part.find(lineRow)) ?? ""}-${lineOf([...part].reverse().find(lineRow)) ?? ""}` : f.path;
     const name = m.diff.folder ? `${m.path.split("/").pop() || "/"}/` : f.path.split("/").pop();
+    const about = s.kind === "commit" ? `the change commit ${s.c.short} ("${s.c.subject}") made to ` : s.kind === "stash" ? `the change ${s.s.ref} holds for ` : "the uncommitted change to ";
     this.ask(`Ask AI about ${picked ? `these ${part.filter(lineRow).length} lines of ` : ""}${name}`, "", (question, cx) => {
       const head = this.status?.info?.head;
       const prompt = [
-        `About ${picked ? "these lines of " : "the uncommitted change to "}${what} in ${ctx.root}${head ? ` (branch ${head})` : ""}${sides ? `, during a ${this.op.kind}: ${sides.ours} vs ${sides.theirs}` : ""}:`,
+        `About ${picked ? "these lines of " : about}${what} in ${ctx.root}${head ? ` (branch ${head})` : ""}${sides ? `, during a ${this.op.kind}: ${sides.ours} vs ${sides.theirs}` : ""}:`,
         "", "```diff", ...lines, "```", "",
         question || "Explain what this change does and point out anything risky or wrong. Don't edit anything yet.",
       ].join("\n");
@@ -635,7 +736,7 @@ export default class Git extends View {
     run("terminal.open", { argv: [this.shell ?? "/bin/zsh", "-lic", `${editor} ${line ? `+${line} ` : ""}${q(path)}`], folder: this.ctx.root, place: "right" });
   }
 
-  // Keys while the diff has the cursor (enter from Files). False: not a diff key.
+  // Keys while the diff has the keyboard. False: not a diff key.
   diffKey(k, cx) {
     const rows = this.main?.rows ?? [];
     switch (k) {
@@ -644,11 +745,11 @@ export default class Git extends View {
       case "k": case "up": if (this.anchor != null) this.cursorTo(this.cur - 1, -1); else this.hunkJump(-1); break;
       case "ctrl-d": case "pagedown": this.cursorTo(this.cur + 15, 1); break;
       case "ctrl-u": case "pageup": this.cursorTo(this.cur - 15, -1); break;
-      case "<": case "home": case "g": this.cursorTo(0, 1); break;
+      case "<": case "home": case "gg": this.cursorTo(0, 1); break;
       case ">": case "end": case "G": this.cursorTo(rows.length - 1, -1); break;
       case "}": this.hunkJump(1); break;
-      case "A": this.askAbout(cx); break;
       case "{": this.hunkJump(-1); break;
+      case "A": this.askAbout(cx); break;
       case "J": this.nextFile(1, cx); break;
       case "K": this.nextFile(-1, cx); break;
       case "v": this.anchor = this.anchor == null ? this.cur : null; break;
@@ -661,9 +762,9 @@ export default class Git extends View {
       case "t": if (rows[this.cur]?.block) this.resolve("theirs", cx); else return false; break;
       case "b": if (rows[this.cur]?.block) this.resolve("both", cx); else return false; break;
       case "e": this.openEditor(this.main.path, lineOf(rows[this.cur])); break;
-      case "escape": case "h": case "left":
+      case "escape":
         this.dragging = null;
-        if (this.anchor != null) this.anchor = null; else this.mainFocus = false;
+        if (this.anchor != null) this.anchor = null; else this.setZone(2, cx);
         break;
       default: return false;
     }
@@ -671,32 +772,16 @@ export default class Git extends View {
     return true;
   }
 
-  // ---- Files: the panel widens while Files shows ---------------------------------
+  // ---- Width ------------------------------------------------------------------------
 
-  // The column holding the panel's stack (what the tab bar shows and hides), as panel.js's hidePanel finds it.
-  panelColumn() {
-    const path = pathTo(layout(), "git");
-    if (!path) return null;
-    for (let i = path.length - 2; i >= 0; i--) if (path[i].type === "stack") return i - 1 > 0 ? path[i - 1] : path[i];
-    return null;
-  }
-
+  // The panel no longer widens itself (it took the keyboard away when it opened). A width an older
+  // version widened to is put back once.
   syncWidth() {
-    // Widens on Files, then stays wide while the panel shows (moving to 3 / 4 / 5 doesn't jump the
-    // layout back and forth); narrows when the panel is hidden or shows another panel.
-    const shown = Boolean(this.ctx) && panelOnScreen("git") === true;
-    const want = shown && (this.sec === "files" || Boolean(this.widened));
-    if (want && !this.widened) {
-      const col = this.panelColumn(), px = col?.size?.px, to = Math.min(col?.max ?? WIDE, WIDE);
-      this.widened = col?.id && px && px < to - 2 ? { id: col.id, from: px, to } : { skip: true };
-      if (!this.widened.skip) run("layout.resize", { id: col.id, px: to });
-      setShared("git.widened", this.widened);
-    } else if (!want && this.widened) {
-      const w = this.widened;
-      this.widened = null;
-      setShared("git.widened", null);
-      if (!w.skip) run("layout.resize", { id: w.id, px: w.from });
-    }
+    if (!this.widened) return;
+    const w = this.widened;
+    this.widened = null;
+    setShared("git.widened", null);
+    if (!w.skip && w.id) run("layout.resize", { id: w.id, px: w.from });
   }
 
   // ---- Running commands ------------------------------------------------------
@@ -704,13 +789,18 @@ export default class Git extends View {
   flash(text, ms = 3500) { this.flashMsg = { text, until: Date.now() + ms }; }
 
   // term: a core terminal through the login shell (hooks, network, prompts); otherwise exec.
-  cmd(title, script, cx, { term = true, after, onFail } = {}) {
+  // undo: remember where HEAD was, so u can put it back (git reset --keep).
+  cmd(title, script, cx, opts = {}) {
+    const { term = true, after, onFail, undo = false } = opts;
     if (!this.ctx) return;
     if (this.running) { this.flash("Wait for the running git command to finish"); cx.notify(); return; }
-    const ctx = this.ctx, entry = { id: ++this.seq, title, script, code: null, output: "", at: Date.now(), running: true };
+    const ctx = this.ctx, entry = { id: ++this.seq, title, script, opts, code: null, output: "", at: Date.now(), running: true };
+    const branch = this.status?.info?.head;
     this.log.unshift(entry); this.running = entry; this.failure = null;
     cx.notify();
     cx.spawn(async cx => {
+      const headNow = async () => (await G.git(ctx, ["rev-parse", "-q", "--verify", "HEAD"]).catch(() => null))?.stdout?.trim() || null;
+      const before = undo ? await headNow() : null;
       let r;
       if (term) r = await G.runScript(ctx, script, this.shell ?? "/bin/zsh", addr => { entry.addr = addr; cx.notify(); });
       else {
@@ -720,8 +810,13 @@ export default class Git extends View {
       Object.assign(entry, { code: r.code, output: r.output, running: false, addr: null });
       this.running = null;
       const op = await G.loadOp(ctx).catch(() => null);
-      if (r.code === 0) after?.(cx);
-      else {
+      if (r.code === 0) {
+        if (before) {
+          const now = await headNow();
+          if (now && now !== before) { this.undoStack.push({ title, before, after: now, branch, soft: undo === "soft" }); if (this.undoStack.length > 30) this.undoStack.shift(); }
+        }
+        after?.(cx);
+      } else {
         onFail?.(cx);
         // A merge or rebase that stopped on conflicts shows in the banner, not as a failure;
         // anything else (a hook failing `merge --continue`, say) is a failure even mid-op.
@@ -734,12 +829,31 @@ export default class Git extends View {
     });
   }
 
+  // u: puts the branch back where it was before the last commit, amend, rewrite, merge, pull or reset
+  // made from this panel. A commit or amend comes back as staged changes (--soft); a rewrite that left
+  // the files as they were (squash, reword, move) keeps the index as it is (--soft too); anything else
+  // (a merge, a pull, a drop) uses --keep, which leaves uncommitted changes alone and refuses if they'd be lost.
+  undo(cx) {
+    const u = this.undoStack.at(-1), head = this.status?.info?.head;
+    if (!u) { this.flash("Nothing to undo: u undoes commits, amends, rewrites, merges, pulls and resets made here"); cx.notify(); return; }
+    if (u.branch !== head) { this.flash(`The last change was on ${u.branch}: switch back to it to undo`); cx.notify(); return; }
+    const later = this.status?.info?.oid !== u.after;
+    this.confirm(`Undo “${u.title}”? ${head} goes back to ${u.before.slice(0, 7)}${later ? " (commits made since go too)" : ""}. Uncommitted changes stay.`, "Undo", cx => {
+      this.undoStack.pop();
+      const b = q(u.before), same = `[ "$(git rev-parse HEAD)" = ${q(u.after)} ]`;
+      const script = u.soft ? `if ${same}; then git reset --soft ${b}; else git reset --keep ${b}; fi`
+        : `if ${same} && [ "$(git rev-parse HEAD^{tree})" = "$(git rev-parse ${b}^{tree})" ]; then git reset --soft ${b}; else git reset --keep ${b}; fi`;
+      this.cmd(`undo: ${u.title}`, script, cx, { term: false });
+    }, cx);
+  }
+
   confirm(title, label, action, cx, lines) {
     this.openMenu(title, [{ key: "y", label, danger: true, run: action }, { key: "n", label: "Cancel", run: () => {} }], cx, lines);
   }
 
-  openMenu(title, items, cx, lines) {
-    this.menu = { title, items: items.filter(Boolean), sel: 0, lines };
+  // `at`: {x, y} in the panel (a right-click or a drop); otherwise centered.
+  openMenu(title, items, cx, lines, at) {
+    this.menu = { title, items: items.filter(Boolean), sel: 0, lines, at: at ?? null };
     cx.notify();
   }
 
@@ -749,7 +863,7 @@ export default class Git extends View {
     else if (k === "j" || k === "down") m.sel = Math.min(m.items.length - 1, m.sel + 1);
     else if (k === "k" || k === "up") m.sel = Math.max(0, m.sel - 1);
     else {
-      const item = k === "enter" || k === "space" ? m.items[m.sel] : m.items.find(i => i.key === k);
+      const item = k === "enter" ? m.items[m.sel] : m.items.find(i => i.key === k) ?? (k === "space" ? m.items[m.sel] : null);
       if (item && !item.disabled) { this.menu = null; item.run(cx); }
     }
     cx.notify();
@@ -772,6 +886,63 @@ export default class Git extends View {
   cancelPrompt(cx) {
     this.prompt?.onCancel?.(cx);
     this.prompt = null; this.typing = false; this.handle.focus(); cx.notify();
+  }
+
+  // / : filters the column with the keyboard (Diff has none).
+  startFilter(cx) {
+    const z = Math.min(this.zone, 2), id = ZONES[z].id;
+    if (this.zone === 3) this.setZone(2, cx);
+    this.ask(`Filter ${ZONES[z].title.toLowerCase()}`, this.filter[id] ?? "", (v, cx) => { this.filter[id] = v; }, cx,
+      { live: (v, cx) => { this.filter[id] = v; this.sel[id] = 0; if (z === 1) this.syncDetail(cx); if (z === 2) this.syncMain(cx); } });
+  }
+
+  // ---- Branch switcher (b, or a click on the branch name) -----------------------------
+
+  openSwitcher(cx) {
+    if (!this.ctx) return;
+    const input = InputState.new({ placeholder: "Switch to a branch, or type a new name…" });
+    input.on("change", (_e, cx) => { if (this.switcher) this.switcher.sel = 0; cx.notify(); });
+    input.on("submit", (_e, cx) => this.pickSwitch(cx));
+    input.on("focus", (_e, cx) => { this.typing = true; cx.notify(); });
+    input.on("blur", (_e, cx) => { this.typing = false; cx.notify(); });
+    this.switcher = { input, sel: 0 };
+    this.typing = true;
+    input.focus();
+    cx.notify();
+  }
+
+  closeSwitcher(cx) {
+    this.switcher?.input.release();
+    this.switcher = null; this.typing = false; this.handle.focus(); cx.notify();
+  }
+
+  // Locals (most recent first), then remotes nobody tracks; letters in order match ("pfl" finds perf-lab).
+  switchMatches() {
+    const query = this.switcher?.input.value().trim() ?? "", ql = query.toLowerCase();
+    const fz = name => { let i = 0; for (const ch of name.toLowerCase()) if (ch === ql[i]) i++; return i === ql.length; };
+    const local = this.branches?.local ?? [], remote = (this.branches?.remote ?? []).filter(r => !r.local);
+    const out = [...local, ...remote].filter(b => fz(b.name)).slice(0, 12);
+    if (query && !local.some(b => b.name === query)) out.push({ kind: "create", name: query });
+    return out;
+  }
+
+  pickSwitch(cx) {
+    const list = this.switchMatches(), b = list[Math.min(this.switcher?.sel ?? 0, list.length - 1)];
+    this.closeSwitcher(cx);
+    if (b) this.checkout(b, cx);
+  }
+
+  // Switch to a branch row: a local one, a remote one (its local, or a new tracking branch),
+  // one checked out in another worktree (its space), or a new one ("create").
+  checkout(b, cx) {
+    if (b.kind === "create") return this.cmd(`git switch -c ${b.name}`, `git switch -c ${q(b.name)}`, cx);
+    if (b.kind === "remote") return b.local
+      ? this.cmd(`git switch ${b.local}`, `git switch ${q(b.local)}`, cx)
+      : this.cmd(`git switch -c ${b.short} --track ${b.name}`, `git switch -c ${q(b.short)} --track ${q(b.name)}`, cx);
+    if (b.head) { this.flash(`Already on ${b.name}`); cx.notify(); return; }
+    // Git won't check a branch out twice: go to its worktree's space instead (opening one if none).
+    if (b.worktree) return this.openWorktree(b.worktree);
+    this.cmd(`git switch ${b.name}`, `git switch ${q(b.name)}`, cx);
   }
 
   // ---- AI hand-off -----------------------------------------------------------
@@ -808,7 +979,7 @@ export default class Git extends View {
       `This git command failed in ${this.ctx.root} (exit ${entry.code}):`, "", `$ ${entry.title}`, "", "Output:", "```", ...tail, "```", "",
       /--continue\b/.test(entry.title) ? "Every conflict is already resolved and staged, so this is most likely a commit hook (lint, type-check, tests). Please fix the reported problems and `git add` the fixes, but don't run the continue, commit or push yourself: I'll continue from the panel."
         : commit ? "This is most likely the pre-commit hook. Please fix the reported problems and `git add` the fixes, but don't commit: I'll re-run the commit myself."
-        : "Please find the cause and fix it. Don't re-run the git command yourself; tell me when it's safe to retry.",
+          : "Please find the cause and fix it. Don't re-run the git command yourself; tell me when it's safe to retry.",
     ].join("\n");
   }
 
@@ -825,7 +996,7 @@ export default class Git extends View {
       // Sent notes are done with; only the ones that went (more may have been added since).
       sent = () => { const ids = new Set(notes.map(n => n.id)); this.setNotes(this.notes().filter(n => !ids.has(n.id))); };
     }
-    if (!prompt) { this.flash(want === "notes" ? "No review notes yet: enter on a file, then a on a line" : "Nothing to hand off: no conflicts, failed command or review notes"); cx.notify(); return; }
+    if (!prompt) { this.flash(want === "notes" ? "No review notes yet: in the diff, a on a line" : "Nothing to hand off: no conflicts, failed command or review notes"); cx.notify(); return; }
     this.pickAgent(prompt, label, cx, sent, `Ask AI to ${label}`);
   }
 
@@ -836,7 +1007,7 @@ export default class Git extends View {
     const fresh = this.known?.find(k => k.installed);
     this.openMenu(title ?? `Ask AI: ${label}`, [
       ...here.slice(0, 8).map((a, i) => ({ key: String(i + 1), label: `Send to ${a.program?.name ?? a.app ?? "agent"} · ${a.tab_name === (a.program?.name ?? a.app) ? `tab ${a.tab_index}` : a.tab_name}`, hint: a.status, run: cx => this.sendToAgent(a, prompt, label, cx, sent) })),
-      fresh && { key: "n", label: `New ${fresh.name} tab`, run: () => { run("tab.new", { argv: fresh.run, task: prompt, folder: this.ctx.root, name: `AI · ${label}` }); this.ai = { label, address: null }; sent?.(); } },
+      fresh && { key: "n", label: `New ${fresh.name} tab`, run: () => { run("tab.new", { argv: fresh.run, task: prompt, folder: this.ctx.root, name: `AI · ${label}` }); this.ai = { label, address: null, failure: this.failure }; sent?.(); } },
       { key: "y", label: "Copy prompt", run: cx => { cx.write_to_clipboard(prompt); this.flash("Prompt copied"); } },
     ], cx);
   }
@@ -845,12 +1016,12 @@ export default class Git extends View {
     cx.spawn(async cx => {
       const r = await hc(["send", agent.address, prompt]).catch(e => ({ code: 1, stderr: String(e) }));
       if (r.code !== 0) this.flash(`Couldn't send: ${(r.stderr || r.stdout).trim()}`, 6000);
-      else { this.ai = { label, address: agent.address }; sent?.(); }
+      else { this.ai = { label, address: agent.address, failure: this.failure }; sent?.(); }
       cx.notify();
     });
   }
 
-  // ---- Actions -----------------------------------------------------------------
+  // ---- History rewriting ---------------------------------------------------------
 
   async baseOf(sha, depth) {
     const r = await G.git(this.ctx, ["rev-parse", "-q", "--verify", `${sha}~${depth}`]).catch(() => null);
@@ -862,13 +1033,13 @@ export default class Git extends View {
   // A history rewrite touching `commits` (asks first when any is pushed). The
   // range ends with it unless `keepRange` (moving a block keeps it selected).
   rewriteMany(title, commits, cx, build, { keepRange = false, terminal = false } = {}) {
-    if (this.tab.commits !== 0) { this.flash("Rewrite commits from the Branch tab (] to switch)"); cx.notify(); return; }
+    if (this.scope !== "head") { this.flash("Rewrite commits from This branch: [ or ] to switch"); cx.notify(); return; }
     if (commits.some(c => c.parents.length > 1)) { this.flash("Can't rewrite a merge commit here"); cx.notify(); return; }
     const go = cx => cx.spawn(async cx => {
       const script = await build();
       if (!keepRange) this.clearRange();
       if (terminal) run("terminal.open", { argv: [this.shell ?? "/bin/zsh", "-lic", script], folder: this.ctx.root, place: "tab", name: title });
-      else this.cmd(title, script, cx);
+      else this.cmd(title, script, cx, { undo: true });
       cx.notify();
     });
     const pushed = commits.filter(c => c.state !== "unpushed");
@@ -882,38 +1053,62 @@ export default class Git extends View {
     return `HERDR_MODE=${mode} HERDR_A=${short} HERDR_B=${(b ?? "").slice(0, 7)} HERDR_OP=${op ?? ""} GIT_SEQUENCE_EDITOR=${q(`perl ${q(this.seqEditor)}`)} git rebase -i --autostash --rebase-merges ${base}`;
   }
 
-  // ---- lazygit's range select on commits (v, shift-↑/↓) ---------------------
-
-  // The commits from the anchor to the selected one, newest first (as listed).
-  rangeRows() {
-    if (this.sec !== "commits" || !this.rangeAnchor) return [];
-    const rows = this.items(), a = rows.findIndex(r => r.sha === this.rangeAnchor), b = this.selIndex();
-    if (a < 0) return [];
-    return rows.slice(Math.min(a, b), Math.max(a, b) + 1).filter(r => r.sha);
-  }
-
-  clearRange() { this.rangeAnchor = null; }
-
+  // The commits a range or set of picks acts on. A range is next to each other; picks may not be.
   rangeActions(range, add) {
     const n = range.length, oldest = range.at(-1), shas = range.map(r => r.sha), list = shas.join(",");
     const many = (title, op, depth) => cx => this.rewriteMany(`${title} ${n} commits`, range, cx, async () => this.todo("replace", list, null, op, await this.baseOf(oldest.sha, depth)));
-    add("s", `Squash ${n} commits into the one below`, many("squash", "squash", 2), { chip: `squash ${n}` });
-    add("f", `Fixup ${n} commits into the one below`, many("fixup", "fixup", 2), { chip: `fixup ${n}` });
+    const together = this.contiguous(range);
+    if (together) {
+      add("s", `Squash ${n} commits into the one below`, many("squash", "squash", 2), { chip: `squash ${n}` });
+      add("f", `Fixup ${n} commits into the one below`, many("fixup", "fixup", 2), { chip: `fixup ${n}` });
+    }
     add("d", `Drop ${n} commits`, cx => this.confirm(`Drop ${n} commits?`, "Drop commits", many("drop", "drop", 1), cx), { chip: `drop ${n}` });
-    const rows = this.items(), top = rows.indexOf(range[0]), bottom = rows.indexOf(oldest);
-    const below = rows.slice(bottom + 1).find(r => r.sha), above = rows.slice(0, top).reverse().find(r => r.sha);
-    const cursorBy = d => { this.sel[this.lk()] = this.selIndex() + d; };
-    if (below) add("ctrl-j", `Move ${n} commits down`, cx => this.rewriteMany(`move ${n} commits down`, [...range, below], cx, async () => {
+    const rows = this.items(1), top = rows.indexOf(range[0]), bottom = rows.indexOf(oldest);
+    const below = rows.slice(bottom + 1).find(r => r.sha), above = rows.slice(0, top).reverse().find(r => r.sha && r !== range[0]);
+    const cursorBy = d => { this.sel.history = this.selIndex(1) + d; };
+    if (together && below) add("ctrl-j", `Move ${n} commits down`, cx => this.rewriteMany(`move ${n} commits down`, [...range, below], cx, async () => {
       cursorBy(rows.indexOf(below) - bottom);
       return this.todo("move", list, below.sha, null, await this.baseOf(below.sha, 1));
     }, { keepRange: true }));
-    if (above) add("ctrl-k", `Move ${n} commits up`, cx => this.rewriteMany(`move ${n} commits up`, [...range, above], cx, async () => {
+    if (together && above) add("ctrl-k", `Move ${n} commits up`, cx => this.rewriteMany(`move ${n} commits up`, [...range, above], cx, async () => {
       cursorBy(rows.indexOf(above) - top);
       return this.todo("move", list, above.sha, null, await this.baseOf(oldest.sha, 1));
     }, { keepRange: true }));
     add("C", `Mark ${n} commits for cherry-pick`, cx => { this.copied = [...new Set([...this.copied, ...shas])]; this.clearRange(); cx.notify(); });
     add("y", `Copy ${n} commit hashes`, cx => { cx.write_to_clipboard(shas.join("\n")); this.flash(`Copied ${n} hashes`); cx.notify(); });
-    add("v", "End the range", cx => { this.clearRange(); cx.notify(); });
+    add("v", this.rangeAnchor ? "End the range" : "Clear the picks", cx => { this.clearRange(); cx.notify(); }, { chip: "clear" });
+  }
+
+  // Commits dropped on a commit (a drag in History): squash / fixup into it, or move them just above it.
+  dropCommits(dragged, target, at, cx) {
+    const rows = this.items(1), all = [...dragged, target];
+    const oldest = all.reduce((a, c) => rows.indexOf(c) > rows.indexOf(a) ? c : a);
+    const list = dragged.map(c => c.sha).join(","), n = dragged.length, what = n > 1 ? `${n} commits` : `“${dragged[0].subject}”`;
+    const go = (title, op) => cx => this.rewriteMany(title, all, cx, async () => this.todo("onto", list, target.sha, op, await this.baseOf(oldest.sha, 1)));
+    this.openMenu(`Drop ${what} on ${target.short} “${target.subject}”`, [
+      { key: "s", label: "Squash into it", hint: "keeps both messages", run: go(`squash ${n} into ${target.short}`, "squash") },
+      { key: "f", label: "Fixup into it", hint: "keeps its message", run: go(`fixup ${n} into ${target.short}`, "fixup") },
+      { key: "m", label: "Move just above it", run: go(`move ${n} above ${target.short}`, "pick") },
+      { key: "n", label: "Cancel", run: () => {} },
+    ], cx, null, at);
+  }
+
+  // A branch dropped on a branch (a drag in Branches): merge or rebase one onto the other.
+  dropBranch(src, dst, at, cx) {
+    const head = this.status?.info?.head, from = src.name, to = dst.kind === "remote" ? dst.name : dst.name;
+    const items = [];
+    if (dst.head) {
+      items.push({ key: "m", label: `Merge ${from} into ${to}`, run: cx => this.cmd(`git merge ${from}`, `git merge --no-edit ${q(from)}`, cx, { undo: true }) });
+      items.push({ key: "n", label: `Merge commit (--no-ff)`, run: cx => this.cmd(`git merge --no-ff ${from}`, `git merge --no-ff --no-edit ${q(from)}`, cx, { undo: true }) });
+    } else if (src.head) {
+      items.push({ key: "r", label: `Rebase ${head} onto ${to}`, run: cx => this.cmd(`git rebase ${to}`, `git rebase --autostash ${q(to)}`, cx, { undo: true }) });
+      items.push({ key: "u", label: "Rebase, updating stacked branches", hint: "--update-refs", run: cx => this.cmd(`git rebase --update-refs ${to}`, `git rebase --autostash --update-refs ${q(to)}`, cx, { undo: true }) });
+    } else if (dst.kind === "local") {
+      items.push({ key: "m", label: `Switch to ${to} and merge ${from}`, run: cx => this.cmd(`git switch ${to} && git merge ${from}`, `git switch ${q(to)} && git merge --no-edit ${q(from)}`, cx) });
+    }
+    if (src.kind === "local" && !src.worktree) items.push({ key: "b", label: `Rebase ${from} onto ${to}`, hint: "switches to it", run: cx => this.cmd(`git rebase ${to} ${from}`, `git rebase --autostash ${q(to)} ${q(from)}`, cx) });
+    if (!items.length) { this.flash("Drop a branch on the current branch to merge, or the current branch on another to rebase"); cx.notify(); return; }
+    this.openMenu(`Drop ${from} on ${to}`, [...items, { key: "c", label: "Cancel", run: () => {} }], cx, null, at);
   }
 
   // Amend a commit with `args`: right away on HEAD, else stop at it in a rebase,
@@ -960,6 +1155,24 @@ export default class Git extends View {
     this.cmd("git push", "git push", cx);
   }
 
+  pull(cx, rebase) {
+    this.cmd(rebase ? "git pull --rebase" : "git pull", rebase ? "git pull --rebase --autostash" : "git pull", cx, { undo: true });
+  }
+
+  // The ⌄ next to pull / push: every way to sync, and the custom commands from config.json.
+  syncMenu(cx, at) {
+    const custom = (this.config?.customCommands ?? []).filter(c => c.command && (c.context ?? "global") === "global");
+    this.openMenu("Sync", [
+      { key: "p", label: "Pull", run: cx => this.pull(cx) },
+      { key: "r", label: "Pull, rebasing my commits", hint: "--rebase", run: cx => this.pull(cx, true) },
+      { key: "P", label: "Push", run: cx => this.push(cx) },
+      { key: "F", label: "Force push (with lease)", danger: true, run: cx => this.confirm("Force push? Commits on the remote that you don't have are replaced (lease: only if nobody pushed since your last fetch).", "Force push", cx => this.push(cx, true), cx) },
+      { key: "f", label: "Fetch all remotes", hint: "--prune", run: cx => this.cmd("git fetch --all --prune", "git fetch --all --prune", cx, { after: () => { this.prsAt = 0; } }) },
+      { key: "D", label: "Clean up merged / closed / gone branches", run: cx => this.cleanup(cx) },
+      ...custom.map(c => ({ key: lazyKey(c.key ?? ""), label: c.description ?? c.command, hint: "custom", run: cx => this.runCustom(c, cx) })),
+    ], cx, null, at);
+  }
+
   opMenu(cx) {
     const op = this.op;
     if (!op) return;
@@ -970,42 +1183,38 @@ export default class Git extends View {
       { key: "a", label: `Abort ${op.kind}`, danger: true, run: cx => this.confirm(`Abort the ${op.kind}?`, `Abort ${op.kind}`, cx => this.cmd(`git ${op.kind} --abort`, `git ${op.kind} --abort`, cx), cx) },
       n > 0 && { key: "v", label: "Resolve conflicts (chunk picker)", run: () => this.openConflicts() },
       n > 0 && { key: "i", label: "Ask AI to resolve conflicts", run: cx => this.askAI(cx) },
-      n > 0 && { key: "e", label: `Open conflicted file${n > 1 ? "s" : ""} in ${this.config?.editor ?? "editor"}`, run: () => cx_open(this, this.conflicts().map(f => f.path)) },
+      n > 0 && { key: "e", label: `Open conflicted file${n > 1 ? "s" : ""} in ${this.config?.editor ?? "editor"}`, run: () => openInEditor(this, this.conflicts().map(f => f.path)) },
       n > 0 && { key: "r", label: `Mark conflicted file${n > 1 ? "s" : ""} resolved`, hint: "git add", run: cx => this.cmd("git add (resolved)", `git add -- ${this.conflicts().map(f => q(f.path)).join(" ")}`, cx, { term: false }) },
     ], cx, this.conflicts().slice(0, 10).map(f => f.path));
   }
 
-  // Lazygit's "ours"/"theirs" confusion: during a rebase, ours is the upstream.
-  sideLabels() {
-    return this.op?.kind === "rebase" ? { ours: `upstream (${this.op.other ?? "onto"})`, theirs: "your commit" } : { ours: `current (${this.status?.info.head ?? "HEAD"})`, theirs: `incoming (${this.op?.other ?? "theirs"})` };
-  }
-
   // lazygit's template fields for the selection, for custom commands.
   fill(command) {
-    const it = this.selected(), sec = this.sec, info = this.status?.info;
+    const info = this.status?.info, b = this.selected(0), c = this.selected(1);
     const fields = {
       "CheckedOutBranch.Name": info?.head,
-      "SelectedLocalBranch.Name": sec === "branches" && it?.kind === "local" ? it.name : null,
-      "SelectedRemoteBranch.Name": sec === "branches" && it?.kind === "remote" ? it.short : null,
-      "SelectedRemoteBranch.RemoteName": sec === "branches" && it?.kind === "remote" ? it.remote : null,
-      "SelectedLocalCommit.Hash": sec === "commits" ? it?.sha : null, "SelectedLocalCommit.Sha": sec === "commits" ? it?.sha : null,
-      "SelectedLocalCommit.Name": sec === "commits" ? it?.subject : null,
-      "SelectedStashEntry.Name": sec === "stash" ? it?.ref : null,
+      "SelectedLocalBranch.Name": b?.kind === "local" ? b.name : null,
+      "SelectedRemoteBranch.Name": b?.kind === "remote" ? b.short : null,
+      "SelectedRemoteBranch.RemoteName": b?.kind === "remote" ? b.remote : null,
+      "SelectedLocalCommit.Hash": c?.sha ?? null, "SelectedLocalCommit.Sha": c?.sha ?? null,
+      "SelectedLocalCommit.Name": c?.subject ?? null,
+      "SelectedStashEntry.Name": b?.kind === "stash" ? b.ref : null,
     };
     let missing = null;
     const text = command.replace(/\{\{\s*\.([\w.]+)\s*\}\}/g, (m, name) => { const v = fields[name]; if (v == null) missing = name; return v ?? ""; });
     return { text, missing };
   }
 
+  runCustom(c, cx) {
+    const { text, missing } = this.fill(c.command);
+    if (missing) { this.flash(`Custom command needs {{.${missing}}}: select one first`); cx.notify(); return; }
+    if (c.output === "terminal") run("terminal.open", { argv: [this.shell ?? "/bin/zsh", "-lic", text], folder: this.ctx.root, place: "tab" });
+    else this.cmd(c.description ?? text, text, cx, { after: () => { this.prsAt = 0; } });
+  }
+
   customActions() {
     return (this.config?.customCommands ?? []).filter(c => c.key && c.command && (CONTEXTS[c.context ?? "global"] ?? (() => false))(this)).map(c => ({
-      key: lazyKey(c.key), label: c.description ?? c.command, custom: true,
-      run: cx => {
-        const { text, missing } = this.fill(c.command);
-        if (missing) { this.flash(`Custom command needs {{.${missing}}}: select one first`); cx.notify(); return; }
-        if (c.output === "terminal") run("terminal.open", { argv: [this.shell ?? "/bin/zsh", "-lic", text], folder: this.ctx.root, place: "tab" });
-        else this.cmd(c.description ?? text, text, cx, { after: () => { this.prsAt = 0; } });
-      },
+      key: lazyKey(c.key), label: c.description ?? c.command, custom: true, run: cx => this.runCustom(c, cx),
     }));
   }
 
@@ -1018,97 +1227,165 @@ export default class Git extends View {
     else run("space.new", { folder: path, machine: on ?? "" });
   }
 
+  // enter on a branch: History shows its log (esc, [ or ] go back to this branch).
+  viewLog(b, cx) {
+    this.scope = { ref: b.name }; this.keepHistory = false;
+    this.sel.history = 1; this.clearRange(); this.zone = 1; this.stashRef = null;
+    this.refresh(cx, true);
+    cx.notify();
+  }
+  setScope(scope, cx) {
+    if (JSON.stringify(scope) === JSON.stringify(this.scope)) return;
+    this.scope = scope; this.clearRange(); this.sel.history = 0; this.keepHistory = false;
+    this.refresh(cx, true);
+    cx.notify();
+  }
+
+  // ---- The action table: what each row can do, with its key --------------------------
+
+  // The diff's keys as actions (diffKey does the work), so the menu and ? card list them too.
+  diffActions(add) {
+    const rows = this.main?.rows ?? [], r = rows[this.cur], d = this.main?.diff, s = this.subject(), sides = this.sides();
+    const k = key => cx => this.diffKey(key, cx);
+    if (!d) return;
+    if (r?.block) {
+      add("o", `Keep ${sides?.oursShort ?? "current"} in this conflict`, k("o"), { chip: `keep ${sides?.oursShort ?? "current"}` });
+      add("t", `Keep ${sides?.theirsShort ?? "incoming"} in this conflict`, k("t"), { chip: `keep ${sides?.theirsShort ?? "incoming"}` });
+      add("b", "Keep both", k("b"), { chip: "both" });
+      add("v", "Open the conflict resolver pane", () => this.openConflicts());
+    } else if (s.kind === "wip") {
+      const pick = this.anchor != null;
+      add("space", `${r?.side === "staged" ? "Unstage" : "Stage"} ${pick ? "the selected lines" : "this hunk"}`, k("space"), { chip: `${r?.side === "staged" ? "unstage" : "stage"} ${pick ? "lines" : "hunk"}` });
+      add("v", pick ? "End the line selection" : "Select lines (then j / k)", k("v"), { chip: pick ? "end select" : "select lines" });
+      add("d", `Discard ${pick ? "the selected lines" : "this hunk"}…`, k("d"), { chip: "discard" });
+      add("a", "Write a review note here", k("a"), { chip: "note" });
+      if (this.notes().length) add("p", `Send ${plural(this.notes().length, "review note")} to an agent`, k("p"), { chip: "send notes" });
+      add("X", "Delete the notes on this line", k("X"));
+    }
+    add("A", "Ask AI about this change", k("A"), { chip: "ask AI" });
+    add("}", "Next hunk", k("}"));
+    add("{", "Previous hunk", k("{"));
+    add("J", "Next file", k("J"));
+    add("K", "Previous file", k("K"));
+    add("e", "Open in your editor at this line", k("e"));
+  }
+
   actions() {
-    const sec = this.sec, it = this.selected(), A = this.customActions();
+    const z = this.zone, it = this.selected(), A = this.customActions();
     const add = (key, label, run, extra) => A.push({ key, label, run, ...extra });
     const info = this.status?.info, head = info?.head;
-    if (sec === "files" && it?.kind === "dir") {
-      const files = (this.status?.files ?? []).filter(f => this.under(it.path, f.path)), spec = it.path || ".", where = it.path ? `${it.path}/` : "everything";
-      const unstaged = files.some(f => f.unstaged && !f.conflict);
+    const files = this.status?.files ?? [];
+
+    if (z === 3) this.diffActions(add);
+
+    if (z === 2 && it && this.subject().kind !== "wip") {
+      add("enter", "Show the diff", cx => this.setZone(3, cx), { chip: "diff" });
+      add("o", "Open the file in your editor", () => this.openEditor(it.path, null), { chip: "edit" });
+      add("y", "Copy path", cx => { cx.write_to_clipboard(it.path); this.flash("Path copied"); });
+    }
+    if (z === 2 && it?.kind === "dir" && this.subject().kind === "wip") {
+      const under = files.filter(f => this.under(it.path, f.path)), spec = it.path || ".", where = it.path ? `${it.path}/` : "everything";
+      const unstaged = under.some(f => f.unstaged && !f.conflict);
       if (unstaged) add("space", `Stage ${where}`, cx => this.cmd(`git add -A ${spec}`, `git add -A -- ${q(spec)}`, cx, { term: false }), { chip: "stage" });
       else add("space", `Unstage ${where}`, cx => this.cmd(`git restore --staged ${spec}`, `git restore --staged -- ${q(spec)} 2>/dev/null || git reset -q -- ${q(spec)}`, cx, { term: false }), { chip: "unstage" });
       add("enter", it.open ? "Fold" : "Unfold", cx => this.toggleFold(it, cx), { chip: it.open ? "fold" : "unfold" });
-      add("d", `Discard ${where}…`, cx => this.confirm(`Discard every change in ${where} (${files.length} file${files.length === 1 ? "" : "s"}, untracked ones deleted)? It can't be undone.`, "Discard all", cx =>
+      add("d", `Discard ${where}…`, cx => this.confirm(`Discard every change in ${where} (${plural(under.length, "file")}, untracked ones deleted)? It can't be undone.`, "Discard all", cx =>
         this.cmd(`discard ${where}`, `git restore --source=HEAD --staged --worktree -- ${q(spec)} 2>/dev/null; git clean -fdq -- ${q(spec)}`, cx, { term: false }), cx), { chip: "discard" });
-      add("A", "Ask AI about these changes", cx => this.askAbout(cx), { chip: "ask AI" });
+      add("A", "Ask AI about these changes", cx => { this.setZone(3, cx); this.askAbout(cx); }, { chip: "ask AI" });
     }
-    if (sec === "files") {
+    if (z === 2 && this.subject().kind === "wip") {
       add("-", "Fold every folder", cx => this.foldAll(true, cx));
       add("=", "Unfold every folder", cx => this.foldAll(false, cx));
       add("t", this.flat ? "Show as a tree" : "Show as a flat list", cx => this.toggleFlat(cx), { chip: this.flat ? "tree" : "flat" });
     }
-    if (sec === "files" && it?.kind === "file") {
-      const f = it.file, files = this.status?.files ?? [], anyUnstaged = files.some(x => x.unstaged && !x.conflict);
+    if (z === 2 && it?.kind === "file" && this.subject().kind === "wip") {
+      const f = it.file, anyUnstaged = files.some(x => x.unstaged && !x.conflict);
       if (f.conflict) add("space", "Mark resolved (stage)", cx => this.cmd(`git add ${f.path}`, `git add -- ${q(f.path)}`, cx, { term: false }), { chip: "resolved" });
       else if (f.unstaged) add("space", "Stage", cx => this.cmd(`git add ${f.path}`, `git add -- ${q(f.path)}`, cx, { term: false }), { chip: "stage" });
       else add("space", "Unstage", cx => this.cmd(`git restore --staged ${f.path}`, `git restore --staged -- ${q(f.path)} 2>/dev/null || git rm -q --cached -- ${q(f.path)}`, cx, { term: false }), { chip: "unstage" });
-      add("enter", "Review the diff (hunks, lines, notes)", cx => { this.mainFocus = true; this.clampCursor(); this.revealCursor(); }, { chip: "review" });
+      add("enter", "Review the diff (hunks, lines, notes)", cx => this.setZone(3, cx), { chip: "review" });
       add("a", anyUnstaged ? "Stage all" : "Unstage all", cx => anyUnstaged ? this.cmd("git add -A", "git add -A", cx, { term: false }) : this.cmd("git reset", "git reset -q", cx, { term: false }), { chip: anyUnstaged ? "stage all" : "unstage all" });
       add("d", "Discard…", cx => this.discardFile(f, cx), { chip: "discard" });
       add("o", "Open in editor", () => this.openEditor(f.path, null), { chip: "edit" });
-      if (this.notes().length) add("i", `Send ${this.notes().length} review note${this.notes().length === 1 ? "" : "s"} to an agent`, cx => this.askAI(cx, "notes"), { chip: "send notes" });
-      add("A", "Ask AI about this change", cx => this.askAbout(cx), { chip: "ask AI" });
+      if (this.notes().length) add("p", `Send ${plural(this.notes().length, "review note")} to an agent`, cx => this.askAI(cx, "notes"), { chip: "send notes" });
+      add("A", "Ask AI about this change", cx => { this.setZone(3, cx); this.askAbout(cx); }, { chip: "ask AI" });
       add("y", "Copy path", cx => { cx.write_to_clipboard(f.path); this.flash("Path copied"); });
     }
-    if (sec === "branches" && it) {
+
+    if (z === 0 && it?.kind === "group") {
+      add("enter", it.open ? `Fold ${it.title}` : `Unfold ${it.title}`, cx => this.toggleGroup(it.id, cx), { chip: it.open ? "fold" : "unfold" });
+      add("space", it.open ? `Fold ${it.title}` : `Unfold ${it.title}`, cx => this.toggleGroup(it.id, cx));
+      if (it.id === "local") add("D", "Clean up merged / closed / gone branches", cx => this.cleanup(cx), { chip: "clean up" });
+      if (it.id.startsWith("remote:")) add("f", `Fetch ${it.title}`, cx => this.cmd(`git fetch ${it.title} --prune`, `git fetch ${q(it.title)} --prune`, cx, { after: () => { this.prsAt = 0; } }), { chip: "fetch" });
+    }
+    if (z === 0 && (it?.kind === "local" || it?.kind === "remote")) {
       const remote = it.kind === "remote", ref = it.name;
-      if (remote) add("space", it.local ? `Check out ${it.local}` : `Check out as local ${it.short}`, cx => it.local
-        ? this.cmd(`git switch ${it.local}`, `git switch ${q(it.local)}`, cx)
-        : this.cmd(`git switch -c ${it.short} --track ${ref}`, `git switch -c ${q(it.short)} --track ${q(ref)}`, cx));
-      else add("space", it.worktree ? "Go to its worktree" : "Check out", cx => {
-        if (it.head) return;
-        // Git won't check a branch out twice: go to its worktree's space instead (opening one if none).
-        if (it.worktree) return this.openWorktree(it.worktree);
-        this.cmd(`git switch ${ref}`, `git switch ${q(ref)}`, cx);
-      });
+      add("space", remote ? (it.local ? `Switch to ${it.local}` : `Check out as local ${it.short}`) : it.head ? "Current branch" : it.worktree ? "Go to its worktree" : "Switch to it",
+        cx => this.checkout(it, cx), { chip: remote ? "check out" : "switch" });
+      add("enter", "Show its log in History", cx => this.viewLog(it, cx), { chip: "log" });
       add("n", "New branch from here", cx => this.ask(`New branch from ${ref}`, "", (name, cx) => name && this.cmd(`git switch -c ${name} ${ref}`, `git switch -c ${q(name)} ${q(ref)}`, cx), cx));
       if (!it.head) {
         add("M", `Merge into ${head}…`, cx => this.openMenu(`Merge ${ref} into ${head}`, [
-          { key: "m", label: "Merge", hint: "fast-forward if possible", run: cx => this.cmd(`git merge ${ref}`, `git merge --no-edit ${q(ref)}`, cx) },
-          { key: "n", label: "Merge commit (--no-ff)", run: cx => this.cmd(`git merge --no-ff ${ref}`, `git merge --no-ff --no-edit ${q(ref)}`, cx) },
-          { key: "f", label: "Fast-forward only", run: cx => this.cmd(`git merge --ff-only ${ref}`, `git merge --ff-only ${q(ref)}`, cx) },
+          { key: "m", label: "Merge", hint: "fast-forward if possible", run: cx => this.cmd(`git merge ${ref}`, `git merge --no-edit ${q(ref)}`, cx, { undo: true }) },
+          { key: "n", label: "Merge commit (--no-ff)", run: cx => this.cmd(`git merge --no-ff ${ref}`, `git merge --no-ff --no-edit ${q(ref)}`, cx, { undo: true }) },
+          { key: "f", label: "Fast-forward only", run: cx => this.cmd(`git merge --ff-only ${ref}`, `git merge --ff-only ${q(ref)}`, cx, { undo: true }) },
           { key: "s", label: "Squash (stage only, then commit)", run: cx => this.cmd(`git merge --squash ${ref}`, `git merge --squash ${q(ref)}`, cx) },
-        ], cx));
+        ], cx), { chip: "merge" });
         add("r", `Rebase ${head} onto this…`, cx => this.openMenu(`Rebase ${head} onto ${ref}`, [
-          { key: "r", label: "Rebase", hint: "--autostash", run: cx => this.cmd(`git rebase ${ref}`, `git rebase --autostash ${q(ref)}`, cx) },
-          { key: "u", label: "Rebase, updating stacked branches", hint: "--update-refs", run: cx => this.cmd(`git rebase --update-refs ${ref}`, `git rebase --autostash --update-refs ${q(ref)}`, cx) },
-          { key: "m", label: "Rebase, keeping merge commits", hint: "--rebase-merges", run: cx => this.cmd(`git rebase --rebase-merges ${ref}`, `git rebase --autostash --rebase-merges ${q(ref)}`, cx) },
-          { key: "a", label: "Rebase and apply fixup!/squash! commits", hint: "--autosquash", run: cx => this.cmd(`git rebase -i --autosquash ${ref}`, `GIT_SEQUENCE_EDITOR=: git rebase -i --autostash --autosquash ${q(ref)}`, cx) },
+          { key: "r", label: "Rebase", hint: "--autostash", run: cx => this.cmd(`git rebase ${ref}`, `git rebase --autostash ${q(ref)}`, cx, { undo: true }) },
+          { key: "u", label: "Rebase, updating stacked branches", hint: "--update-refs", run: cx => this.cmd(`git rebase --update-refs ${ref}`, `git rebase --autostash --update-refs ${q(ref)}`, cx, { undo: true }) },
+          { key: "m", label: "Rebase, keeping merge commits", hint: "--rebase-merges", run: cx => this.cmd(`git rebase --rebase-merges ${ref}`, `git rebase --autostash --rebase-merges ${q(ref)}`, cx, { undo: true }) },
+          { key: "a", label: "Rebase and apply fixup!/squash! commits", hint: "--autosquash", run: cx => this.cmd(`git rebase -i --autosquash ${ref}`, `GIT_SEQUENCE_EDITOR=: git rebase -i --autostash --autosquash ${q(ref)}`, cx, { undo: true }) },
           { key: "i", label: "Interactive rebase in editor (new tab)", run: () => run("terminal.open", { argv: [this.shell ?? "/bin/zsh", "-lic", `git rebase -i --autostash ${q(ref)}`], folder: this.ctx.root, place: "tab" }) },
-        ], cx));
+        ], cx), { chip: "rebase" });
       }
       if (!remote) {
         if (it.upstream && !it.gone) add("f", "Fast-forward from upstream", cx => it.head
-          ? this.cmd("git merge --ff-only @{u}", "git fetch && git merge --ff-only @{u}", cx)
+          ? this.cmd("git merge --ff-only @{u}", "git fetch && git merge --ff-only @{u}", cx, { undo: true })
           : this.cmd(`git fetch ${it.upstream.replace("/", " ")}:${ref}`, `git fetch ${q(it.upstream.split("/")[0])} ${q(`${it.upstream.split("/").slice(1).join("/")}:${ref}`)}`, cx));
         add("R", "Rename", cx => this.ask(`Rename ${ref}`, ref, (name, cx) => name && name !== ref && this.cmd(`git branch -m ${ref} ${name}`, `git branch -m ${q(ref)} ${q(name)}`, cx, { term: false }), cx));
         if (!it.head) add("d", "Delete…", cx => this.openMenu(`Delete ${ref}`, [
           { key: "d", label: "Delete local branch", run: cx => this.deleteLocal(it, cx) },
           it.upstream && !it.gone && { key: "r", label: `Delete local and ${it.upstream}`, danger: true, run: cx => this.confirm(`Delete ${it.upstream} on the remote too?`, "Delete both", cx => this.cmd(`git branch -D ${ref} && git push ${it.upstream.split("/")[0]} --delete ${it.upstream.split("/").slice(1).join("/")}`, `git branch -D ${q(ref)} && git push ${q(it.upstream.split("/")[0])} --delete ${q(it.upstream.split("/").slice(1).join("/"))}`, cx), cx) },
-        ], cx));
+        ], cx), { chip: "delete" });
         add("D", "Clean up merged / closed / gone branches", cx => this.cleanup(cx));
       } else add("d", "Delete remote branch", cx => this.confirm(`Delete ${ref} on ${it.remote}?`, "Delete remote branch", cx => this.cmd(`git push ${it.remote} --delete ${it.short}`, `git push ${q(it.remote)} --delete ${q(it.short)}`, cx), cx));
       const pr = this.prs?.[remote ? it.short : ref];
-      if (pr) add("o", `Open PR #${pr.number}`, () => exec("open", [pr.url]));
+      if (pr) add("o", `Open PR #${pr.number}`, () => exec("open", [pr.url]), { chip: "open PR" });
       add("y", "Copy branch name", cx => { cx.write_to_clipboard(remote ? it.short : ref); this.flash("Branch name copied"); });
     }
-    if (sec === "commits" && it?.sha) {
-      const c = it, range = this.rangeRows();
+    if (z === 0 && it?.kind === "stash") {
+      add("enter", "Show its files", cx => { this.stashRef = it.ref; this.detail = null; this.syncDetail(cx); this.setZone(2, cx); }, { chip: "files" });
+      add("space", "Apply", cx => this.cmd(`git stash apply ${it.ref}`, `git stash apply ${q(it.ref)}`, cx, { term: false }), { chip: "apply" });
+      add("g", "Pop", cx => this.cmd(`git stash pop ${it.ref}`, `git stash pop ${q(it.ref)}`, cx, { term: false }), { chip: "pop" });
+      add("d", "Drop", cx => this.confirm(`Drop ${it.ref} "${it.message}"?`, "Drop stash", cx => this.cmd(`git stash drop ${it.ref}`, `git stash drop ${q(it.ref)}`, cx, { term: false }), cx), { chip: "drop" });
+      add("n", "New branch from stash", cx => this.ask(`Branch from ${it.ref}`, "", (name, cx) => name && this.cmd(`git stash branch ${name} ${it.ref}`, `git stash branch ${q(name)} ${q(it.ref)}`, cx), cx));
+    }
+
+    if (z === 1 && it?.kind === "wip") {
+      const anyUnstaged = files.some(x => x.unstaged && !x.conflict);
+      add("c", "Commit…", cx => this.commit(cx), { chip: "commit" });
+      if (files.length) add("a", anyUnstaged ? "Stage all" : "Unstage all", cx => anyUnstaged ? this.cmd("git add -A", "git add -A", cx, { term: false }) : this.cmd("git reset", "git reset -q", cx, { term: false }), { chip: anyUnstaged ? "stage all" : "unstage all" });
+      add("enter", "Show the changed files", cx => this.setZone(2, cx), { chip: "files" });
+    }
+    if (z === 1 && it?.sha) {
+      const c = it, range = this.selectedCommits();
       if (range.length > 1) this.rangeActions(range, add);
       else {
         // lazygit's commit keys, in its order of usefulness (the footer shows the first).
         add("s", "Squash into the commit below", cx => this.rewrite(`squash ${c.short}`, c, cx, async () => this.todo("replace", c.sha, null, "squash", await this.baseOf(c.sha, 2))), { chip: "squash" });
         add("f", "Fixup into the commit below (drop message)", cx => this.rewrite(`fixup ${c.short}`, c, cx, async () => this.todo("replace", c.sha, null, "fixup", await this.baseOf(c.sha, 2))), { chip: "fixup" });
         add("r", "Reword", cx => this.reword(c, cx), { chip: "reword" });
+        add("v", "Select a range (then j / k)", cx => { this.rangeAnchor = c.sha; this.picks = new Set(); cx.notify(); }, { chip: "range" });
         add("d", "Drop this commit", cx => this.confirm(`Drop ${c.short} "${c.subject}"?`, "Drop commit", cx => this.rewrite(`drop ${c.short}`, c, cx, async () => this.todo("replace", c.sha, null, "drop", await this.baseOf(c.sha, 1))), cx), { chip: "drop" });
         add("A", "Amend staged changes into this commit", cx => {
-          if (!(this.status?.files ?? []).some(f => f.staged)) { this.flash("Stage something first"); cx.notify(); return; }
+          if (!files.some(f => f.staged)) { this.flash("Stage something first"); cx.notify(); return; }
           const isHead = c.refs.some(r => r.startsWith("HEAD"));
           this.rewrite(`amend into ${c.short}`, c, cx, async () => isHead ? "git commit --amend --no-edit"
             : `git commit --fixup=${c.sha} && GIT_SEQUENCE_EDITOR=: git rebase -i --autostash --autosquash --rebase-merges ${await this.baseOf(c.sha, 1)}`);
         }, { chip: "amend" });
-        add("e", "Edit (stop here in a rebase)", cx => this.rewrite(`edit ${c.short}`, c, cx, async () => this.todo("replace", c.sha, null, "edit", await this.baseOf(c.sha, 1))), { chip: "edit" });
-        add("v", "Select a range of commits", cx => { this.rangeAnchor = c.sha; cx.notify(); }, { chip: "range" });
+        add("enter", "Show its files", cx => this.setZone(2, cx));
+        add("e", "Edit (stop here in a rebase)", cx => this.rewrite(`edit ${c.short}`, c, cx, async () => this.todo("replace", c.sha, null, "edit", await this.baseOf(c.sha, 1))));
         add("R", "Reword in your editor", cx => this.amendHere(c, "", cx, { title: `reword ${c.short}`, terminal: true }));
         add("a", "Amend author / co-author…", cx => this.openMenu(`Amend ${c.short}'s attributes`, [
           { key: "r", label: "Reset author", hint: "to your git user", run: cx => this.amendHere(c, "--reset-author --no-edit", cx, { title: `reset author of ${c.short}` }) },
@@ -1116,21 +1393,21 @@ export default class Git extends View {
           { key: "c", label: "Add co-author…", hint: "Co-authored-by trailer", run: cx => this.ask(`Co-author of ${c.short}`, "", (v, cx) => v && this.amendHere(c, `--no-edit --trailer ${q(`Co-authored-by: ${v}`)}`, cx, { title: `add co-author to ${c.short}` }), cx, { hint: "Name <email>" }) },
         ], cx));
         add("F", "Create fixup! commit for this commit", cx => {
-          if (!(this.status?.files ?? []).some(f => f.staged)) { this.flash("Stage something first"); cx.notify(); return; }
-          this.cmd(`git commit --fixup=${c.short}`, `git commit --fixup=${c.sha}`, cx, { term: false });
+          if (!files.some(f => f.staged)) { this.flash("Stage something first"); cx.notify(); return; }
+          this.cmd(`git commit --fixup=${c.short}`, `git commit --fixup=${c.sha}`, cx, { term: false, undo: "soft" });
         });
         add("S", "Squash all fixup! commits above (autosquash)", cx => this.rewrite(`autosquash onto ${c.short}`, c, cx, async () => `GIT_SEQUENCE_EDITOR=: git rebase -i --autostash --autosquash --rebase-merges ${await this.baseOf(c.sha, 1)}`));
         add("space", "Check out this commit (detached)", cx => this.cmd(`git checkout ${c.short}`, `git checkout ${c.sha}`, cx));
-        const rows = this.items(), i = this.selIndex();
+        const rows = this.items(1), i = this.selIndex(1);
         const below = rows.slice(i + 1).find(r => r.sha), above = rows.slice(0, i).reverse().find(r => r.sha);
-        if (below) add("ctrl-j", "Move commit down", cx => this.rewrite(`move ${c.short} down`, c, cx, async () => { this.sel[this.lk()] = rows.indexOf(below); return this.todo("swap", below.sha, c.sha, null, await this.baseOf(c.sha, 2)); }));
-        if (above) add("ctrl-k", "Move commit up", cx => this.rewrite(`move ${c.short} up`, c, cx, async () => { this.sel[this.lk()] = rows.indexOf(above); return this.todo("swap", c.sha, above.sha, null, await this.baseOf(c.sha, 1)); }));
+        if (below) add("ctrl-j", "Move commit down", cx => this.rewrite(`move ${c.short} down`, c, cx, async () => { this.sel.history = rows.indexOf(below); return this.todo("swap", below.sha, c.sha, null, await this.baseOf(c.sha, 2)); }));
+        if (above) add("ctrl-k", "Move commit up", cx => this.rewrite(`move ${c.short} up`, c, cx, async () => { this.sel.history = rows.indexOf(above); return this.todo("swap", c.sha, above.sha, null, await this.baseOf(c.sha, 1)); }));
         add("g", "Reset to this commit…", cx => this.openMenu(`Reset ${head} to ${c.short}`, [
-          { key: "s", label: "Soft", hint: "keep changes staged", run: cx => this.cmd(`git reset --soft ${c.short}`, `git reset --soft ${c.sha}`, cx, { term: false }) },
-          { key: "m", label: "Mixed", hint: "keep changes unstaged", run: cx => this.cmd(`git reset --mixed ${c.short}`, `git reset --mixed ${c.sha}`, cx, { term: false }) },
-          { key: "h", label: "Hard", hint: "discard changes", danger: true, run: cx => this.confirm(`Hard reset to ${c.short}? Uncommitted changes are lost.`, "Hard reset", cx => this.cmd(`git reset --hard ${c.short}`, `git reset --hard ${c.sha}`, cx, { term: false }), cx) },
+          { key: "s", label: "Soft", hint: "keep changes staged", run: cx => this.cmd(`git reset --soft ${c.short}`, `git reset --soft ${c.sha}`, cx, { term: false, undo: true }) },
+          { key: "m", label: "Mixed", hint: "keep changes unstaged", run: cx => this.cmd(`git reset --mixed ${c.short}`, `git reset --mixed ${c.sha}`, cx, { term: false, undo: true }) },
+          { key: "h", label: "Hard", hint: "discard changes", danger: true, run: cx => this.confirm(`Hard reset to ${c.short}? Uncommitted changes are lost.`, "Hard reset", cx => this.cmd(`git reset --hard ${c.short}`, `git reset --hard ${c.sha}`, cx, { term: false, undo: true }), cx) },
         ], cx));
-        add("t", "Revert this commit", cx => this.cmd(`git revert ${c.short}`, `git revert --no-edit ${c.sha}`, cx));
+        add("t", "Revert this commit", cx => this.cmd(`git revert ${c.short}`, `git revert --no-edit ${c.sha}`, cx, { undo: true }));
         add("T", "Tag this commit", cx => this.ask(`Tag ${c.short}`, "", (name, cx) => name && this.cmd(`git tag ${name} ${c.short}`, `git tag ${q(name)} ${c.sha}`, cx, { term: false }), cx, { hint: "e.g. v1.2.0" }));
         add("C", this.copied.includes(c.sha) ? "Unmark for cherry-pick" : "Mark for cherry-pick", cx => { this.copied = this.copied.includes(c.sha) ? this.copied.filter(s => s !== c.sha) : [...this.copied, c.sha]; cx.notify(); });
         add("n", "New branch from this commit", cx => this.ask(`New branch from ${c.short}`, "", (name, cx) => name && this.cmd(`git switch -c ${name} ${c.short}`, `git switch -c ${q(name)} ${c.sha}`, cx), cx));
@@ -1139,25 +1416,21 @@ export default class Git extends View {
       }
       if (this.copied.length) add("V", `Cherry-pick ${this.copied.length} marked onto ${head}`, cx => {
         const order = (this.commits ?? []).filter(r => this.copied.includes(r.sha)).reverse().map(r => r.sha);
-        this.cmd(`git cherry-pick ${order.map(s => s.slice(0, 8)).join(" ")}`, `git cherry-pick ${order.join(" ")}`, cx, { after: () => { this.copied = []; } });
+        this.cmd(`git cherry-pick ${order.map(s => s.slice(0, 8)).join(" ")}`, `git cherry-pick ${order.join(" ")}`, cx, { after: () => { this.copied = []; }, undo: true });
       });
     }
-    if (sec === "stash" && it) {
-      add("space", "Apply", cx => this.cmd(`git stash apply ${it.ref}`, `git stash apply ${q(it.ref)}`, cx, { term: false }));
-      add("g", "Pop", cx => this.cmd(`git stash pop ${it.ref}`, `git stash pop ${q(it.ref)}`, cx, { term: false }));
-      add("d", "Drop", cx => this.confirm(`Drop ${it.ref} "${it.message}"?`, "Drop stash", cx => this.cmd(`git stash drop ${it.ref}`, `git stash drop ${q(it.ref)}`, cx, { term: false }), cx));
-      add("n", "New branch from stash", cx => this.ask(`Branch from ${it.ref}`, "", (name, cx) => name && this.cmd(`git stash branch ${name} ${it.ref}`, `git stash branch ${q(name)} ${q(it.ref)}`, cx), cx));
-    }
-    // Global, after the section's own so a section key wins. The footer shows the
-    // section's own first: what's marked global or custom only lives in x / ?.
+    // Global, after the column's own so a column key wins. The footer shows the column's
+    // own first: what's marked global or custom only lives in x / ?.
     const firstGlobal = A.length;
     if (this.op) add("m", `${this.op.kind}: continue / skip / abort…`, cx => this.opMenu(cx));
     if (this.op && this.conflicts().length) add("v", "Resolve conflicts (chunk picker)", () => this.openConflicts());
     add("i", "Ask AI (conflicts, a failed command or your review notes)", cx => this.askAI(cx));
+    add("b", "Switch branch (fuzzy)", cx => this.openSwitcher(cx));
     add("P", "Push", cx => this.push(cx));
-    add("p", "Pull", cx => this.cmd("git pull", "git pull", cx));
+    add("p", "Pull", cx => this.pull(cx));
     add("c", "Commit", cx => this.commit(cx));
-    if ((this.status?.files ?? []).length) add("S", "Stash all changes", cx => this.ask("Stash message (optional)", "", (msg, cx) => this.cmd(`git stash push -u${msg ? ` -m "${msg}"` : ""}`, `git stash push -u${msg ? ` -m ${q(msg)}` : ""}`, cx, { term: false }), cx));
+    add("u", this.undoStack.length ? `Undo: ${this.undoStack.at(-1).title}` : "Undo the last commit / rewrite / merge", cx => this.undo(cx));
+    if (files.length) add("S", "Stash all changes", cx => this.ask("Stash message (optional)", "", (msg, cx) => this.cmd(`git stash push -u${msg ? ` -m "${msg}"` : ""}`, `git stash push -u${msg ? ` -m ${q(msg)}` : ""}`, cx, { term: false }), cx));
     add("@", "Command log", cx => this.logMenu(cx));
     add("f", "Fetch all remotes", cx => this.cmd("git fetch --all --prune", "git fetch --all --prune", cx, { after: () => { this.prsAt = 0; } }));
     add("ctrl-r", "Refresh", cx => { this.prsAt = 0; this.refresh(cx, true); });
@@ -1179,16 +1452,18 @@ export default class Git extends View {
       cx.spawn(async cx => {
         const before = await head();
         const settle = async () => { if ((await head()) !== before) setCommitDraft(root, null); };
-        this.cmd(`git commit -m "${summary}"${body ? " -m …" : ""}`, `${stageAll ? "git add -A && " : ""}git commit -m ${q(summary)}${body ? ` -m ${q(body)}` : ""}`, cx, { after: settle, onFail: settle });
+        this.cmd(`git commit -m "${summary}"${body ? " -m …" : ""}`, `${stageAll ? "git add -A && " : ""}git commit -m ${q(summary)}${body ? ` -m ${q(body)}` : ""}`, cx, { after: settle, onFail: settle, undo: "soft" });
       });
     });
     const amend = (cx, stageAll) => {
       const head = (this.commits ?? []).find(c => c.refs.some(r => r.startsWith("HEAD")));
-      const run = cx => this.cmd("git commit --amend --no-edit", `${stageAll ? "git add -A && " : ""}git commit --amend --no-edit`, cx);
-      head && head.state !== "unpushed" && this.tab.commits === 0 ? this.confirm("The last commit is already pushed. Amending needs a force push.", "Amend anyway", run, cx) : run(cx);
+      const run = cx => this.cmd("git commit --amend --no-edit", `${stageAll ? "git add -A && " : ""}git commit --amend --no-edit`, cx, { undo: "soft" });
+      head && head.state !== "unpushed" && this.scope === "head" ? this.confirm("The last commit is already pushed. Amending needs a force push.", "Amend anyway", run, cx) : run(cx);
     };
     const staged = files.filter(f => f.staged).length, changed = files.filter(f => f.unstaged).length;
     if (!files.length) { this.flash("Nothing to commit"); cx.notify(); return; }
+    // Something staged: straight to the message (the menu is for the other ways: x on Working changes).
+    if (staged > 0 && !this.commitMenu) return go(cx, false);
     this.openMenu(`${staged} staged · ${changed} unstaged`, [
       staged > 0 && { key: "c", label: "Commit staged changes", run: cx => go(cx, false) },
       changed > 0 && { key: "a", label: "Stage all and commit", run: cx => go(cx, true) },
@@ -1197,6 +1472,9 @@ export default class Git extends View {
       { key: "e", label: "Commit in editor (new tab)", run: () => run("terminal.open", { argv: [this.shell ?? "/bin/zsh", "-lic", "git commit"], folder: this.ctx.root, place: "tab" }) },
     ], cx);
   }
+
+  // The commit's ⌄: every way to commit (amend, stage all, editor).
+  commitOptions(cx) { this.commitMenu = true; try { this.commit(cx); } finally { this.commitMenu = false; } }
 
   // The commit dialog, as lazygit's: a one-line summary (with its length) over a multi-line
   // description. tab switches between them, enter in the summary or cmd-enter commits, esc cancels.
@@ -1254,7 +1532,7 @@ export default class Git extends View {
     this.openMenu("Command log", this.log.slice(0, 20).map((e, i) => ({
       key: i < 9 ? String(i + 1) : null, label: `${e.running ? "…" : e.code === 0 ? "✓" : "✗"} ${e.title}`,
       hint: e.running ? "running" : `${Math.round((Date.now() - e.at) / 60000) || "now"}${Math.round((Date.now() - e.at) / 60000) ? "m" : ""}`,
-      run: cx => e.running && e.addr ? run("terminal.peek", { terminal: e.addr }) : this.showOutput(e, cx),
+      run: cx => { if (e.running && e.addr) run("terminal.peek", { terminal: e.addr }); else { this.showOutput(e, cx); this.setZone(3, cx); } },
     })), cx);
   }
 
@@ -1342,7 +1620,7 @@ export default class Git extends View {
   go(dir) {
     this.focusToken = (this.focusToken ?? 0) + 1; // cancel a pending focus retry
     const pane = focused()?.pane;
-    if (dir === "left" && pane && !this.fixed) return run("pane.focus", { pane });
+    if (dir === "left" && pane && !this.fixed) return focusTab();
     this.handle.focus();
     run("pane.go", { direction: dir });
   }
@@ -1366,6 +1644,15 @@ export default class Git extends View {
       cx.stop_propagation();
       return;
     }
+    if (this.switcher) {
+      const k = e.keystroke, n = this.switchMatches().length;
+      if (e.key === "escape") this.closeSwitcher(cx);
+      else if (["down", "ctrl-n", "ctrl-j"].includes(k)) this.switcher.sel = Math.min(n - 1, this.switcher.sel + 1);
+      else if (["up", "ctrl-p", "ctrl-k"].includes(k)) this.switcher.sel = Math.max(0, this.switcher.sel - 1);
+      else return;
+      cx.stop_propagation(); cx.notify();
+      return;
+    }
     if (!this.editorFocused && !this.prompt && this.navKey(e, cx)) return;
     if (this.editorFocused) { if (e.key === "escape") { this.handle.focus(); cx.stop_propagation(); } return; }
     if (this.prompt) { if (e.key === "escape") { this.cancelPrompt(cx); cx.stop_propagation(); } return; }
@@ -1374,422 +1661,583 @@ export default class Git extends View {
     if (this.handleKey(k, cx)) cx.stop_propagation();
   }
 
+  // g alone is an action in some rows (reset, pop); g g goes to the top. So a first g waits a moment.
+  gKey(cx) {
+    const z = this.zone;
+    if (this.gAt && Date.now() - this.gAt < 400) {
+      this.gAt = 0; this.gToken++;
+      if (z === 3) this.diffKey("gg", cx); else this.move(0, cx, 0);
+      return true;
+    }
+    this.gAt = Date.now();
+    const act = this.actions().find(a => a.key === "g"), token = ++this.gToken;
+    if (act) cx.timer.after(400, cx => { if (this.gToken === token && this.gAt) { this.gAt = 0; act.run(cx); cx.notify(); } });
+    return true;
+  }
+
   handleKey(k, cx) {
+    if (k !== "g") { this.gToken++; this.gAt = 0; }
     if (this.keysOpen) {
       if (k === "escape" || k === "?" || k === "q") { this.keysOpen = false; cx.notify(); }
       return true;
     }
     if (k === "?") { this.keysOpen = true; cx.notify(); return true; }
-    const idx = SECTIONS.findIndex(s => s.id === this.sec);
-    const num = SECTIONS.find(s => s.key === k);
-    if (num) { this.focusSection(num.id, cx); return true; }
-    if (this.mainFocus && this.sec === "files" && this.main?.diff && this.diffKey(k, cx)) return true;
-    if (this.mainFocus && (k === "j" || k === "down")) { this.scrollMain(1, cx); return true; }
-    if (this.mainFocus && (k === "k" || k === "up")) { this.scrollMain(-1, cx); return true; }
-    // shift-↑/↓ on commits: start or grow a range (lazygit).
-    if ((k === "shift-down" || k === "shift-up") && this.sec === "commits") {
-      if (!this.rangeAnchor && this.selected()?.sha) this.rangeAnchor = this.selected().sha;
-      this.move(k === "shift-down" ? 1 : -1, cx); cx.notify(); return true;
+    const num = ZONES.findIndex(z => z.key === k);
+    if (num >= 0) { this.setZone(num, cx); return true; }
+    if (k === "g") return this.gKey(cx);
+    if (this.zone === 3) {
+      if (this.main?.diff && this.diffKey(k, cx)) return true;
+      if (!this.main?.diff && ["j", "down", "k", "up", "ctrl-d", "ctrl-u", "G", "escape"].includes(k)) {
+        if (k === "escape") { if (this.mainOverride) { this.mainOverride = null; this.syncMain(cx); } this.setZone(2, cx); return true; }
+        this.scrollMain({ j: 1, down: 1, k: -1, up: -1, "ctrl-d": 15, "ctrl-u": -15, G: 1e9 }[k], cx); return true;
+      }
     }
-    if (k === "escape" && this.rangeRows().length) { this.clearRange(); cx.notify(); return true; }
+    // shift-↑/↓ in History: start or grow a range (lazygit).
+    if ((k === "shift-down" || k === "shift-up") && this.zone === 1) {
+      if (!this.rangeAnchor && this.selected(1)?.sha) { this.rangeAnchor = this.selected(1).sha; this.picks = new Set(); }
+      this.move(k === "shift-down" ? 1 : -1, cx); return true;
+    }
+    const page = Math.max(5, Math.floor(((this.size?.height ?? 600) / zoomOf()) / ROW / 2));
     switch (k) {
-      case "h": case "left": case "shift-tab": this.focusSection(SECTIONS[(idx + SECTIONS.length - 1) % SECTIONS.length].id, cx); return true;
-      case "l": case "right": case "tab": this.focusSection(SECTIONS[(idx + 1) % SECTIONS.length].id, cx); return true;
+      case "h": case "left": this.setZone(this.zone - 1, cx); return true;
+      case "l": case "right": this.setZone(this.zone + 1, cx); return true;
+      case "tab": this.setZone((this.zone + 1) % 4, cx); return true;
+      case "shift-tab": this.setZone((this.zone + 3) % 4, cx); return true;
       case "j": case "down": this.move(1, cx); return true;
       case "k": case "up": this.move(-1, cx); return true;
       case "<": case "home": this.move(0, cx, 0); return true;
-      case ">": case "end": this.move(0, cx, this.items().length - 1); return true;
-      case ",": case "pageup": this.move(-10, cx); return true;
-      case ".": case "pagedown": this.move(10, cx); return true;
-      case "[": this.switchTab(-1, cx); return true;
-      case "]": this.switchTab(1, cx); return true;
-      case "ctrl-d": case "J": this.scrollMain(k === "J" ? 3 : 15, cx); return true;
-      case "ctrl-u": case "K": this.scrollMain(k === "K" ? -3 : -15, cx); return true;
-      case "enter":
-        if (this.sec === "files" && !this.mainFocus && this.selected()?.kind === "dir") { this.toggleFold(this.selected(), cx); return true; }
-        this.mainFocus = !this.mainFocus;
-        if (this.mainFocus && this.main?.diff) { this.clampCursor(); this.revealCursor(); }
-        cx.notify(); return true;
+      case ">": case "end": case "G": this.move(0, cx, this.items().length - 1); return true;
+      case ",": case "pageup": case "ctrl-u": this.move(-page, cx); return true;
+      case ".": case "pagedown": case "ctrl-d": this.move(page, cx); return true;
+      case "[": case "]": {
+        if (this.zone === 0) {
+          const tabs = ["local", "remote", "stash"], i = tabs.indexOf(this.branchTab);
+          this.setBranchTab(tabs[(i + (k === "]" ? 1 : tabs.length - 1)) % tabs.length], cx);
+          return true;
+        }
+        const order = ["head", "all"], i = order.indexOf(typeof this.scope === "string" ? this.scope : "head");
+        this.setScope(typeof this.scope !== "string" ? "head" : order[(i + (k === "]" ? 1 : order.length - 1)) % order.length], cx);
+        this.setZone(1, cx);
+        return true;
+      }
       case "escape":
-        if (this.mainFocus) this.mainFocus = false;
-        else if (this.filter[this.lk()]) this.filter[this.lk()] = "";
+        if (this.selectedCommits().length) this.clearRange();
+        else if (this.filter[ZONES[Math.min(this.zone, 2)].id]) { this.filter[ZONES[Math.min(this.zone, 2)].id] = ""; this.syncDetail(cx); }
+        else if (this.zone === 1 && typeof this.scope !== "string") this.setScope("head", cx);
+        else if (this.stashRef && this.zone === 2) { this.stashRef = null; this.syncDetail(cx); this.setZone(0, cx); }
         else if (this.mainOverride) { this.mainOverride = null; this.syncMain(cx); }
         else if (this.failure) this.failure = null;
         else return false;
         cx.notify(); return true;
-      case "/": {
-        const lk = this.lk();
-        this.ask(`Filter ${SECTIONS[idx].title.toLowerCase()}`, this.filter[lk] ?? "", (v, cx) => { this.filter[lk] = v; }, cx, { live: (v, cx) => { this.filter[lk] = v; this.sel[lk] = 0; } });
-        return true;
-      }
+      case "/": this.startFilter(cx); return true;
       case "q":
         // Like quitting lazygit: put the panel away and give the keyboard back to the terminal.
         if (this.fixed) return false;
         closePanel("git");
         return true;
-      case "x": this.openMenu(`${SECTIONS[idx].title} actions`, this.actions().map(a => ({ ...a, hint: a.custom ? "custom" : a.key })), cx); return true;
+      case "x": this.openActions(cx); return true;
     }
     const action = this.actions().find(a => a.key === k);
     if (action) { action.run(cx); cx.notify(); return true; }
     return false;
   }
 
+  // x, or a right-click: every action for the row under the cursor (with its key).
+  openActions(cx, at) {
+    const it = this.selected(), z = this.zone;
+    const what = z === 3 ? (this.main?.path ?? "Diff") : z === 1 ? (it?.sha ? (this.selectedCommits().length > 1 ? `${this.selectedCommits().length} commits` : `${it.short} · ${it.subject}`) : "Working changes")
+      : z === 0 ? (it?.kind === "group" ? it.title : it?.name ?? it?.ref ?? "Branches") : it?.path ?? "Files";
+    this.openMenu(what, this.actions().map(a => ({ ...a, hint: a.custom ? "custom" : null })), cx, null, at);
+  }
+
+  // ---- Mouse: presses, right-clicks, drags ------------------------------------------
+
+  // A press on a list (before its row's click): which button modifiers and how many clicks,
+  // where (the checkbox lane in Files), and the start of a possible drag.
+  press(z, e, cx) {
+    const zoom = zoomOf(), ly = (e.local_position?.y ?? 0) / zoom;
+    this.lastPress = { z, mods: e.modifiers ?? {}, count: e.click_count ?? 1, x: (e.local_position?.x ?? 999) / zoom };
+    if (z <= 1) {
+      const index = Math.floor((ly + (this.scrolls[ZONES[z].id].offset()?.y ?? 0)) / this.rowH(z));
+      this.dragStart = { z, index, y: e.position.y, top: e.position.y - (e.local_position?.y ?? 0) };
+    }
+  }
+
+  clickRow(z, key, cx) {
+    if (this.justDragged) return;
+    const items = this.items(z), i = items.findIndex((it, j) => this.itemKey(z, it, j) === key);
+    if (i < 0) return;
+    const p = this.lastPress?.z === z ? this.lastPress : null, mods = p?.mods ?? {}, double = (p?.count ?? 1) >= 2;
+    const it = items[i], prev = this.selIndex(z), again = this.zone === z && prev === i;
+    this.zone = z; this.handle.focus();
+    if (z === 1 && it.sha && mods.shift) {
+      if (!this.rangeAnchor) this.rangeAnchor = items[prev]?.sha ?? it.sha;
+      this.picks = new Set();
+      return this.move(0, cx, i, 1);
+    }
+    if (z === 1 && it.sha && (mods.platform || mods.control)) {
+      const cur = items[prev];
+      if (!this.picks.size && !this.rangeAnchor && cur?.sha && cur.sha !== it.sha) this.picks.add(cur.sha);
+      this.rangeAnchor = null;
+      if (this.picks.has(it.sha)) this.picks.delete(it.sha); else this.picks.add(it.sha);
+      return this.move(0, cx, i, 1);
+    }
+    if (z === 1) this.clearRange();
+    this.move(0, cx, i, z);
+    // Files: the checkbox stages; a second click on a folder folds it.
+    if (z === 2 && this.subject().kind === "wip" && p && p.x < CHECK_W) { this.actions().find(a => a.key === "space")?.run(cx); cx.notify(); return; }
+    if (z === 0 && it.kind === "group") { this.toggleGroup(it.id, cx); return; }
+    if (z === 2 && it.kind === "dir" && again && !double) { this.toggleFold(it, cx); return; }
+    if (double) {
+      if (z === 0) this.actions().find(a => a.key === (it.kind === "stash" ? "enter" : "space"))?.run(cx);
+      else if (z === 1) it.sha ? this.actions().find(a => a.key === "r")?.run(cx) : this.commit(cx);
+      else if (z === 2 && it.kind === "file") this.setZone(3, cx);
+    }
+    cx.notify();
+  }
+
+  // The root's right press, after a row's: the row (and column) was noted, the menu opens where pressed.
+  rightPress(e, cx) {
+    const p = this.ctxPending;
+    this.ctxPending = null;
+    if (!p) return;
+    const zoom = zoomOf(), at = { x: (e.local_position?.x ?? 100) / zoom, y: (e.local_position?.y ?? 100) / zoom };
+    this.zone = p.z; this.handle.focus();
+    if (p.z === 3) { if (lineRow(this.main?.rows?.[p.i])) this.cur = p.i; }
+    else {
+      const items = this.items(p.z), i = items.findIndex((it, j) => this.itemKey(p.z, it, j) === p.key);
+      // Right-clicking inside the range keeps it; elsewhere the cursor moves there.
+      const inRange = p.z === 1 && this.selectedCommits().some(c => c.sha === items[i]?.sha);
+      if (i >= 0 && !inRange) { if (p.z === 1) this.clearRange(); this.move(0, cx, i, p.z); }
+    }
+    this.openActions(cx, at);
+  }
+
+  draggable(z, it) { return z === 1 ? Boolean(it?.sha) && this.scope === "head" : z === 0 && (it?.kind === "local" || it?.kind === "remote"); }
+
+  dragMove(e, cx) {
+    const d = this.dragStart;
+    if (!d) return;
+    if (e.pressed_button !== "left") { this.dragStart = null; if (this.drag) { this.drag = null; cx.notify(); } return; }
+    if (!this.drag && Math.abs(e.position.y - d.y) < 6) return;
+    const items = this.items(d.z);
+    if (!this.drag) {
+      if (!this.draggable(d.z, items[d.index])) { this.dragStart = null; return; }
+      const src = items[d.index], inRange = d.z === 1 && this.selectedCommits().some(c => c.sha === src.sha);
+      this.drag = { z: d.z, from: d.index, to: d.index, set: d.z === 1 ? (inRange ? this.selectedCommits() : [src]) : [src] };
+    }
+    const to = Math.floor(((e.position.y - d.top) / zoomOf() + (this.scrolls[ZONES[d.z].id].offset()?.y ?? 0)) / this.rowH(d.z));
+    if (to !== this.drag.to) { this.drag.to = to; cx.notify(); }
+  }
+
+  dragEnd(e, cx) {
+    const d = this.drag;
+    this.dragStart = null;
+    if (!d) return;
+    this.drag = null; this.justDragged = true;
+    cx.timer.after(60, () => { this.justDragged = false; });
+    const items = this.items(d.z), dst = items[d.to], zoom = zoomOf();
+    const at = { x: (e.local_position?.x ?? 100) / zoom, y: (e.local_position?.y ?? 100) / zoom };
+    if (dst && d.to !== d.from) {
+      if (d.z === 1 && dst.sha && !d.set.includes(dst)) this.dropCommits(d.set, dst, at, cx);
+      if (d.z === 0 && (dst.kind === "local" || dst.kind === "remote")) this.dropBranch(d.set[0], dst, at, cx);
+    }
+    cx.notify();
+  }
+
   // ---- Rendering -------------------------------------------------------------
+
+  keyboard() { return this.handle.is_focused() || Boolean(this.editorFocused || this.typing || this.menu || this.switcher); }
+  width() { return (this.size?.width ?? 400 * zoomOf()) / zoomOf(); }
+
+  // How many columns fit, and which: the one with the keyboard and its neighbours (History first).
+  visibleZones() {
+    const w = this.width(), cap = w >= 1080 ? 4 : w >= 780 ? 3 : w >= 500 ? 2 : 1, z = this.zone;
+    if (cap >= 4) return [0, 1, 2, 3];
+    if (cap === 1) return [z];
+    const ds = 1, start = z < ds ? z : z > ds + cap - 1 ? z - cap + 1 : ds;
+    return Array.from({ length: cap }, (_, i) => start + i);
+  }
 
   render(cx) {
     if (JSON.stringify(location(this.fixed, this.loc)) !== this.locKey && !this.refreshing) this.refresh(cx, true);
-    this.rangeSet = new Set(this.rangeRows().map(r => r.sha));
+    this.rangeSet = new Set(this.selectedCommits().map(r => r.sha));
     const hasKeys = this.hadKeys = this.keyboard();
-    const t = theme(), mono = settings().font_family ?? "JetBrains Mono";
-    const width = this.size?.width ?? 400, wide = width >= 720, pane = Boolean(this.fixed);
-    const sections = this.ctx ? this.sectionsColumn(t, mono, wide) : null;
-    const main = this.ctx ? this.mainView(t, mono) : null;
+    const t = theme(), mono = settings().font_family ?? "JetBrains Mono", pane = Boolean(this.fixed);
+    const zones = this.shown = this.ctx ? this.visibleZones() : [];
     const body = !this.ctx
       ? div().flex_1().p(14).text_color(t.dim).child(this.refreshing && !this.locKey ? "Loading…" : `Not a git repository${this.cwd ? `: ${this.cwd}` : ""}`)
-      : wide ? h_flex().flex_1().min_h(0).items_stretch().gap(6).p(6).child(sections.w(this.listWidth()).flex_none()).child(main.flex_1())
-        : this.mainFocus ? v_flex().flex_1().min_h(0).p(6).child(main.flex_1())
-          : v_flex().flex_1().min_h(0).gap(6).p(6).child(sections.flex_1()).child(main.h(Math.max(160, (this.size?.height ?? 600) * 0.38)).flex_none());
-    return v_flex().id("git").relative().size_full().min_h(0).rounded(pane ? 0 : 10).overflow_hidden().bg(t.background).when(!pane, el => el.border_1().border_color(hasKeys ? t.accent : t.border))
+      : h_flex().size_full().min_h(0).items_stretch().children(zones.map((z, i) => this.column(z, t, mono, zones, i === zones.length - 1)));
+    return v_flex().id("git").relative().size_full().min_h(0).rounded(pane ? 0 : 10).overflow_hidden().bg(t.chrome ?? t.background).when(!pane, el => el.border_1().border_color(hasKeys ? t.accent : t.border))
       .text_color(t.foreground).text_size(12.5)
       .track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx))
-      .on_mouse_down("left", () => { if (!this.prompt && !this.commitBox) this.handle.focus(); })
-      .on_size_change((size, cx) => { this.size = size; cx.notify(); })
-      .child(this.header(t, pane))
+      .on_mouse_down("left", () => { if (!this.prompt && !this.commitBox && !this.switcher) this.handle.focus(); })
+      .on_mouse_down("right", (e, cx) => this.rightPress(e, cx))
+      .on_window_mouse_move((e, cx) => this.dragMove(e, cx))
+      .on_window_mouse_up("left", (e, cx) => this.dragEnd(e, cx))
+      .when(!this.ctx || zones.length < 4, el => el.child(this.header(t, pane, zones)))
       .when(Boolean(this.op), el => el.child(this.opBanner(t)))
+      .when(Boolean(this.failure), el => el.child(this.failureBanner(t, mono)))
       .when(Boolean(this.ai), el => el.child(this.aiBanner(t)))
-      .child(body)
-      .when(Boolean(this.failure), el => el.child(this.failureBanner(t)))
+      .child(div().id("git-body").flex_1().min_h(0).flex().on_size_change((size, cx) => { this.size = size; cx.notify(); }).child(body))
       .child(this.footer(t))
       .when(Boolean(this.menu), el => el.child(this.menuView(t)))
       .when(Boolean(this.prompt), el => el.child(this.promptView(t)))
+      .when(Boolean(this.switcher), el => el.child(this.switcherView(t)))
       .when(Boolean(this.commitBox), el => el.child(this.commitView(t)))
       .when(Boolean(this.keysOpen), el => el.child(keysCard(t, { id: "git", title: "Git: all keys", groups: this.keysGroups(), onClose: cx => { this.keysOpen = false; cx.notify(); } })));
   }
 
-  // The sections column's width: the whole panel, or its left share when wide.
-  listWidth() { const w = this.size?.width ?? 400; return w >= 720 ? Math.max(300, Math.min(520, w * 0.42)) : w; }
-
-  keyboard() { return this.handle.is_focused() || Boolean(this.editorFocused || this.typing || this.menu); }
-
-  iconButton(id, icon, action, t, label) {
+  iconButton(id, icon, action, t, label, tip) {
     return h_flex().id(id).h(24).px(6).gap(4).flex_none().items_center().rounded(6).cursor_pointer().text_size(11.5).text_color(t.muted)
-      .hover(s => s.bg(t.hover).text_color(t.foreground)).on_click((_e, cx) => { action(cx); cx.notify(); })
-      .child(svg(icon).size(13)).when(Boolean(label), el => el.child(label));
+      .hover(s => s.bg(t.hover).text_color(t.foreground)).when(Boolean(tip), e => e.tooltip(tip))
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_click((e, cx) => { action(cx, e); cx.notify(); })
+      .when(Boolean(icon), el => el.child(svg(icon).size(13))).when(Boolean(label), el => el.child(label));
   }
 
-  header(t, pane) {
-    const info = this.status?.info, running = this.running, roomy = (this.size?.width ?? 0) >= 560;
-    return h_flex().h(42).flex_none().px(12).gap(8).items_center().border_b(1).border_color(t.border)
-      .child(div().font_semibold().text_size(13).child("Git"))
-      .when(Boolean(this.ctx), el => el.child(div().text_color(t.dim).truncate().max_w(160).child(this.ctx.root.split("/").pop()))
-        .child(h_flex().gap(4).min_w(0).items_center().text_color(t.foreground)
-          .child(svg(`${CHROME}/git-branch.svg`).size(12).flex_none().text_color(t.accent))
-          .child(div().truncate().child(info?.head === "(detached)" ? `detached @ ${info.oid?.slice(0, 7)}` : info?.head ?? "…")))
-        .when(Boolean(info?.upstream), el => el.child(div().flex_none().text_size(11.5).text_color(info.ahead || info.behind ? t.ansi3 : t.ansi2)
-          .child(info.ahead || info.behind ? [info.ahead && `↑${info.ahead}`, info.behind && `↓${info.behind}`].filter(Boolean).join(" ") : "✓")))
-        .when(Boolean(info?.head) && !info?.upstream && info?.head !== "(detached)", el => el.child(div().flex_none().text_size(11).text_color(t.dim).child("no upstream")))
-        .when(Boolean(this.status?.files.length), el => el.child(div().flex_none().text_size(11).text_color(t.ansi3).child(this.treeSummary()))))
+  // The branch name (opens the switcher), in the top bar or History's header.
+  branchPill(t, max = 220) {
+    const info = this.status?.info;
+    const name = info?.head === "(detached)" ? `detached @ ${info.oid?.slice(0, 7)}` : info?.head ?? "…";
+    return h_flex().id("git-branch").h(24).px(7).gap(6).min_w(0).flex_shrink_1().items_center().rounded(6).cursor_pointer().hover(s => s.bg(t.hover)).tooltip("Switch branch (b)")
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_click((_e, cx) => this.openSwitcher(cx))
+      .child(svg(`${CHROME}/git-branch.svg`).size(12).flex_none().text_color(t.muted))
+      .child(div().min_w(0).max_w(max).truncate().font_semibold().text_size(12.5).child(name))
+      .child(svg(`${CHROME}/chevron-down.svg`).size(11).flex_none().text_color(t.dim));
+  }
+
+  // Pull ↓n · push ↑n · ⌄ (every way to sync), or what's running.
+  syncControl(t) {
+    const info = this.status?.info, running = this.running;
+    if (running) return h_flex().id("git-running").gap(5).min_w(0).flex_shrink_1().items_center().text_size(11.5).text_color(t.working).cursor_pointer()
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_click(() => running.addr && run("terminal.peek", { terminal: running.addr })).tooltip("Watch it run")
+      .child(svg(`${CHROME}/spinner.svg`).size(11).flex_none().spin(900)).child(div().truncate().max_w(180).child(running.title));
+    const part = (id, label, tip, action) => h_flex().id(id).h_full().px(7).gap(4).items_center().cursor_pointer().text_color(t.muted)
+      .hover(s => s.bg(t.hover).text_color(t.foreground)).tooltip(tip)
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_click((_e, cx) => { action(cx); cx.notify(); }).child(label);
+    const sep = () => div().w(1).h_full().bg(t.border);
+    return h_flex().flex_none().h(24).items_center().rounded(6).border_1().border_color(t.border).overflow_hidden().text_size(11.5).font_family(settings().font_family ?? "JetBrains Mono")
+      .child(part("git-pull", `↓${info?.behind ?? 0}`, "Pull (p)", cx => this.pull(cx))).child(sep())
+      .child(part("git-push", `↑${info?.ahead ?? 0}`, "Push (P)", cx => this.push(cx))).child(sep())
+      .child(part("git-sync", "⌄", "Fetch, pull --rebase, force push, clean up, custom commands", cx => this.syncMenu(cx)));
+  }
+
+  // The top bar, only while some columns don't fit (with all four, History's header holds the branch and sync).
+  header(t, pane, zones) {
+    const roomy = this.width() >= 560;
+    return h_flex().h(40).flex_none().px(10).gap(6).items_center().border_b(1).border_color(t.border)
+      .when(!this.ctx, el => el.child(div().pl(2).font_semibold().text_size(13).child("Git")))
+      .when(Boolean(this.ctx), el => el.child(this.branchPill(t, roomy ? 220 : 140)))
       .child(div().flex_1())
-      .when(Boolean(running), el => el.child(h_flex().id("git-running").gap(5).min_w(0).items_center().text_size(11.5).text_color(t.working).cursor_pointer()
-        .on_click(() => running.addr && run("terminal.peek", { terminal: running.addr }))
-        .child(svg(`${CHROME}/spinner.svg`).size(11).flex_none().spin(900)).child(div().truncate().max_w(180).child(running.title))))
       .children([this.selfUpdate.pill(t)].filter(Boolean))
-      .when(Boolean(this.ctx) && !running, el => el
-        .child(this.iconButton("git-fetch", "mods/git/fetch.svg", cx => this.cmd("git fetch --all --prune", "git fetch --all --prune", cx, { after: () => { this.prsAt = 0; } }), t, roomy && "Fetch"))
-        .child(this.iconButton("git-pull", "mods/git/pull.svg", cx => this.cmd("git pull", "git pull", cx), t, roomy && "Pull"))
-        .child(this.iconButton("git-push", "mods/git/push.svg", cx => this.push(cx), t, roomy && "Push")))
-      .when(Boolean(this.ctx), el => el.child(this.iconButton("git-popout", "mods/git/popout.svg", cx => pane ? this.collapse() : this.expand(cx), t)));
+      .when(Boolean(this.ctx), el => el.child(h_flex().flex_none().gap(1).p(2).rounded(7).bg(t.surface).children(ZONES.map((z, i) => {
+        const shown = zones.includes(i), on = this.zone === i;
+        return div().id(`zt-${i}`).h(20).px(6).flex().items_center().rounded(5).cursor_pointer().text_size(11)
+          .text_color(on ? t.foreground : shown ? t.muted : t.dim).when(on, e => e.bg(t.raised)).hover(s => s.text_color(t.foreground))
+          .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+          .on_click((_e, cx) => this.setZone(i, cx)).tooltip(`${z.title} (${z.key})`)
+          .child(roomy ? z.title : z.key);
+      })))
+        .child(this.syncControl(t)))
+      .when(Boolean(this.ctx), el => el.child(this.iconButton("git-popout", "mods/git/popout.svg", cx => pane ? this.collapse() : this.expand(cx), t, null, pane ? "Back to the side panel" : "Open as a tab")));
+  }
+
+  // Branches and Files keep a fixed width beside a flexible column (History or the diff), which share the rest.
+  isFlexible(z, zones) { return zones.length === 1 || !FIXED_W[z] || !zones.some(x => x === 1 || x === 3); }
+  colWidth(z) {
+    const zones = this.shown ?? this.visibleZones();
+    if (!this.isFlexible(z, zones)) return FIXED_W[z];
+    const fixed = zones.filter(x => !this.isFlexible(x, zones)).reduce((a, x) => a + FIXED_W[x], 0);
+    return (this.width() - fixed) / Math.max(1, zones.filter(x => this.isFlexible(x, zones)).length);
+  }
+  rowH(z) { return z === 1 ? HROW : ROW; }
+
+  // One column: its header (number, title, what it shows) and its list or the diff.
+  column(z, t, mono, zones, last) {
+    const fixedW = FIXED_W[z], flexible = this.isFlexible(z, zones);
+    const col = v_flex().min_w(0).min_h(0).h_full().when(!last, e => e.border_r(1).border_color(t.border))
+      .when(flexible, e => e.flex_1()).when(!flexible, e => e.w(fixedW).flex_none());
+    if (z === 3) return col.child(this.mainView(t, mono));
+    return col.child(this.zoneHead(z, t)).child(this.list(z, t, mono)).when(z === 2 && this.subject().kind === "wip" && (this.status?.files?.length ?? 0) > 0, e => e.child(this.filesFooter(t)));
+  }
+
+  zoneBadge(z, t) {
+    const on = this.zone === z;
+    return div().flex_none().size(16).flex().items_center().justify_center().rounded(4).border_1()
+      .border_color(on ? (this.hadKeys ? t.accent : t.foreground) : t.border).text_color(on ? t.foreground : t.dim)
+      .font_family(settings().font_family ?? "JetBrains Mono").text_size(10).child(ZONES[z].key);
+  }
+
+  // A tab in a column's header (Local / Remote / Stashes, This branch / All).
+  chipButton(id, label, on, t, action, tip) {
+    return div().id(id).flex_none().h(20).px(7).flex().items_center().rounded(5).cursor_pointer().text_size(11.5)
+      .text_color(on ? t.foreground : t.dim).when(on, e => e.bg(t.raised)).hover(s => s.text_color(t.foreground))
+      .when(Boolean(tip), e => e.tooltip(tip))
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_click((_e, cx) => { action(cx); cx.notify(); }).child(label);
+  }
+
+  iconChip(id, icon, t, action, tip) {
+    return div().id(id).flex_none().size(22).flex().items_center().justify_center().rounded(5).cursor_pointer().text_color(t.dim)
+      .hover(s => s.bg(t.hover).text_color(t.foreground)).tooltip(tip)
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_click((_e, cx) => { action(cx); cx.notify(); }).child(svg(icon).size(13));
+  }
+
+  label(text, on, t) {
+    return div().flex_none().text_size(11).font_semibold().text_color(on ? t.foreground : t.dim).child(text.toUpperCase());
+  }
+
+  zoneHead(z, t) {
+    const on = this.zone === z, id = ZONES[z].id, filter = this.filter[id], all = (this.shown ?? []).length === 4;
+    const head = h_flex().id(`zh-${z}`).h(38).flex_none().px(10).gap(6).items_center().overflow_hidden().cursor_pointer()
+      .on_click((_e, cx) => this.setZone(z, cx))
+      .child(this.zoneBadge(z, t));
+    const find = this.iconChip(`find-${z}`, "mods/git/search.svg", t, cx => { this.zone = z; this.startFilter(cx); }, "Filter (/)");
+    const filterChip = filter ? div().flex_none().min_w(0).max_w(90).truncate().text_size(11).text_color(t.accent).child(`/${filter}`) : null;
+    if (z === 0) return head
+      .child(this.chipButton("bt-local", "Local", this.branchTab === "local", t, cx => this.setBranchTab("local", cx), "[ / ]"))
+      .child(this.chipButton("bt-remote", "Remote", this.branchTab === "remote", t, cx => this.setBranchTab("remote", cx), "[ / ]"))
+      .child(this.chipButton("bt-stash", "Stashes", this.branchTab === "stash", t, cx => this.setBranchTab("stash", cx), "[ / ]"))
+      .children([filterChip].filter(Boolean)).child(div().flex_1()).child(find);
+    if (z === 1) {
+      const ref = typeof this.scope !== "string" ? this.scope.ref : null;
+      // With all four columns the branch and sync share this header: the tabs alone name the column then.
+      return head.when(!all, e => e.child(this.label("History", on, t)))
+        .child(this.chipButton("sc-head", "This branch", this.scope === "head", t, cx => this.setScope("head", cx), "[ / ]"))
+        .child(this.chipButton("sc-all", "All", this.scope === "all", t, cx => this.setScope("all", cx), "[ / ]"))
+        .when(Boolean(ref), e => e.child(this.chipButton("sc-ref", `${ref} ×`, true, t, cx => this.setScope("head", cx), "Back to this branch (esc)").max_w(150).truncate()))
+        .children([filterChip].filter(Boolean))
+        .child(div().flex_1())
+        .when(all, e => e.child(this.branchPill(t, Math.max(80, this.colWidth(1) - 300))).child(this.syncControl(t)))
+        .when(!all, e => e.child(find));
+    }
+    const s = this.subject();
+    const what = s.kind === "wip" ? this.treeSummary() || "clean" : s.kind === "commit" ? s.c.short : s.s.ref;
+    return head.child(this.label("Files", on, t))
+      .child(div().flex_none().min_w(0).truncate().text_size(11).text_color(t.dim).when(s.kind !== "wip", e => e.font_family(settings().font_family ?? "JetBrains Mono")).child(what))
+      .when(s.kind === "stash", e => e.child(this.chipButton("fl-x", "×", false, t, cx => { this.stashRef = null; this.syncDetail(cx); }, "Back to History's selection (esc)")))
+      .when(this.notes().length > 0 && s.kind === "wip", e => e.child(div().flex_none().text_size(11).text_color(t.ansi3).child(`✎ ${this.notes().length}`)))
+      .children([filterChip].filter(Boolean)).child(div().flex_1()).child(find);
+  }
+
+  emptyText(z) {
+    if (z === 2) return this.subject().kind === "wip" ? "Working tree clean" : this.detail?.files == null ? "Loading…" : "No file changes";
+    return z === 0 ? { local: "No local branches", remote: "No remote branches: f fetches", stash: "No stashes" }[this.branchTab] : "No commits";
+  }
+
+  list(z, t, mono) {
+    const id = ZONES[z].id, items = this.items(z), h = this.rowH(z);
+    if (!items.length || (z === 2 && this.subject().kind !== "wip" && this.detail?.files == null))
+      return div().flex_1().px(16).py(8).text_size(12).text_color(t.dim).child(this.emptyText(z));
+    const listId = `list-${id}`;
+    return div().id(`wrap-${id}`).flex_1().min_h(0).relative()
+      .on_mouse_down("left", (e, cx) => this.press(z, e, cx))
+      .child(div().size_full().child(v_virtual_list(listId, items.length, h, i => this.itemKey(z, items[i], i), range => items.slice(range.start, range.end).map((it, j) => this.row(z, it, range.start + j, t, mono)))
+        .track_scroll(this.scrolls[id]).size_full()
+        .on_item_click((key, cx) => this.clickRow(z, key, cx))
+        .on_item_secondary_click((key, _e, _cx) => { this.ctxPending = { z, key }; })))
+      .child(Scrollbar.vertical(listId).viewport_from_layout().absolute().inset_0());
+  }
+
+  row(z, it, i, t, mono) {
+    const cursor = i === this.selIndex(z), active = this.zone === z;
+    const picked = z === 1 && Boolean(it.sha) && this.rangeSet.has(it.sha);
+    const drag = this.drag?.z === z ? this.drag : null;
+    const dragged = drag && (z === 1 ? drag.set.includes(it) : i === drag.from), target = drag && drag.to === i && !dragged;
+    const el = h_flex().id(`${id(z)}-${this.itemKey(z, it, i)}`).h(this.rowH(z)).flex_none().relative().mx(6).px(8).gap(8).items_center().rounded(6).cursor_pointer().min_w(0).overflow_hidden()
+      .when(picked, e => e.bg(t.selection))
+      .when(cursor && !picked, e => e.bg(active ? t.selected : t.hover))
+      .when(Boolean(target), e => e.border_1().border_color(t.accent))
+      .when(Boolean(dragged), e => e.opacity(0.45))
+      .hover(s => s.bg(cursor && active ? t.selected : t.hover))
+      // The row with the keyboard: a bar on its left edge.
+      .when(cursor && active, e => e.child(div().absolute().left(0).top(6).bottom(6).w(2).rounded(1).bg(this.hadKeys ? t.accent : t.foreground)));
+    if (z === 0) {
+      if (it.kind === "group") return el.child(svg(`${CHROME}/${it.open ? "chevron-down" : "chevron-right"}.svg`).size(11).flex_none().text_color(t.dim))
+        .child(div().flex_1().min_w(0).truncate().text_size(11).font_semibold().text_color(t.dim).child(it.title.toUpperCase()))
+        .child(div().flex_none().text_size(11).text_color(t.dim).child(String(it.count)));
+      if (it.kind === "stash") {
+        const m = it.message.match(/^(?:WIP on|On) ([^:]+): (.*)$/);
+        return el.child(svg(`${CHROME}/archive.svg`).size(13).flex_none().text_color(t.dim))
+          .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(m ? m[2] : it.message))
+          .when(Boolean(m) && this.colWidth(0) >= 280, e => e.child(div().flex_none().max_w(90).truncate().text_size(11).text_color(t.dim).child(m[1])))
+          .child(div().flex_none().text_size(11).text_color(t.dim).child(short(it.date)));
+      }
+      return this.branchRow(this.branchIndent ? el.pl(20) : el, it, t, mono);
+    }
+    if (z === 1) return it.kind === "wip" ? this.wipRow(el, t) : this.commitRow(el, it, t, mono);
+    return it.kind === "dir" ? this.dirRow(el, it, t) : this.fileRow(el, it, t, mono);
   }
 
   treeSummary() {
-    const f = this.status.files, staged = f.filter(x => x.staged).length, changed = f.filter(x => x.unstaged).length;
+    const f = this.status?.files ?? [], staged = f.filter(x => x.staged).length, changed = f.filter(x => x.unstaged).length;
     return [staged && `${staged} staged`, changed && `${changed} changed`].filter(Boolean).join(" · ");
   }
 
-  banner(id, color, t, text, buttons) {
-    return h_flex().id(id).flex_none().mx(6).mt(6).px(10).py(7).gap(8).items_center().rounded(8).border_1().border_color(color).bg(t.surface)
-      .child(div().size(7).flex_none().rounded_full().bg(color))
-      .child(div().flex_1().min_w(0).text_size(12).child(text))
-      .children(buttons.filter(Boolean).map(([label, action], i) => h_flex().id(`${id}-b${i}`).h(24).px(8).flex_none().items_center().rounded(6).border_1().border_color(t.input)
-        .bg(t.raised).text_size(11.5).cursor_pointer().hover(s => s.bg(t.hover)).on_click((_e, cx) => { action(cx); cx.notify(); }).child(label)));
+  // A small tinted label (no border): gone, worktree, a PR, merged.
+  tag(text, color, t) {
+    return div().flex_none().px(6).h(17).flex().items_center().rounded(5).text_size(10.5).font_medium().bg(color + "22").text_color(color).child(text);
   }
 
-  opBanner(t) {
-    const op = this.op, n = this.conflicts().length;
-    const what = op.kind === "rebase" ? `Rebasing ${op.branch ?? "HEAD"} onto ${op.other ?? "?"}${op.step ? ` · ${op.step}/${op.total}` : ""}`
-      : op.kind === "merge" ? `Merging ${op.other ?? "?"} into ${this.status?.info.head ?? "HEAD"}` : `${op.kind} of ${op.other ?? "?"} in progress`;
-    return this.banner("op", n ? t.ansi1 : t.ansi3, t, `${what}${n ? ` · ${n} conflict${n > 1 ? "s" : ""}` : " · no conflicts left"}`, [
-      n > 0 && ["Resolve (v)", () => this.openConflicts()],
-      n > 0 && ["Ask AI (i)", cx => this.askAI(cx)],
-      !n && [`Continue`, cx => this.cmd(`git ${op.kind} --continue`, `git ${op.kind} --continue`, cx)],
-      ["More (m)", cx => this.opMenu(cx)],
-    ]);
+  // The working tree, as History's first row: what's staged and changed, or clean.
+  wipRow(el, t) {
+    const files = this.status?.files ?? [], conflicts = files.filter(f => f.conflict).length;
+    const staged = files.filter(f => f.staged).length, unstaged = files.filter(f => f.unstaged).length;
+    return el.child(h_flex().w(18).flex_none().justify_center().child(div().size(10).rounded_full().border_2().border_color(files.length ? t.foreground : t.dim)))
+      .child(v_flex().flex_1().min_w(0).gap(1)
+        .child(div().font_semibold().text_size(12.8).text_color(files.length ? t.foreground : t.muted).child("Working changes"))
+        .child(div().truncate().text_size(11.5).text_color(conflicts ? t.ansi1 : t.dim)
+          .child(conflicts ? plural(conflicts, "conflict") : files.length ? `${staged} staged · ${unstaged} unstaged` : "clean")));
   }
 
-  aiBanner(t) {
-    const a = this.ai.address ? agents().find(x => x.address === this.ai.address) : null;
-    const status = a?.status, color = status === "working" ? t.working : status === "blocked" ? t.blocked : status ? t.ansi2 : t.dim;
-    const text = !this.ai.address ? `Started a new agent tab to ${this.ai.label}`
-      : !a ? `The agent asked to ${this.ai.label} is gone`
-        : status === "working" ? `${a.program?.name ?? "Agent"} (${a.tab_name}) is working on: ${this.ai.label}…`
-          : status === "blocked" ? `${a.program?.name ?? "Agent"} needs you (${this.ai.label})`
-            : `${a.program?.name ?? "Agent"} finished: review, then ${this.op ? "continue (m)" : "retry"}`;
-    return this.banner("ai", color, t, text, [
-      a && ["Show", () => run("agent.focus", { terminal: a.address })],
-      ["Dismiss", () => { this.ai = null; }],
-    ]);
+  // A checkbox drawn in a Files row (the press handler sees where it is): all, some or nothing staged.
+  checkbox(state, t, conflict) {
+    return div().size(14).flex_none().flex().items_center().justify_center().rounded(4).border_1()
+      .border_color(conflict ? t.ansi1 : state ? t.foreground : t.input)
+      .when(state === "all", e => e.bg(t.foreground)).text_size(10).text_color(state === "all" ? t.background : t.foreground)
+      .child(state === "all" ? "✓" : state === "some" ? "–" : "");
   }
 
-  failureBanner(t) {
-    const f = this.failure;
-    return this.banner("fail", t.ansi1, t, `${f.title} failed (exit ${f.code})`, [
-      ["Output", cx => this.showOutput(f, cx)],
-      ["Copy", cx => { cx.write_to_clipboard(`$ ${f.title}\n${f.output}`); this.flash("Output copied"); }],
-      ["Ask AI (i)", cx => this.askAI(cx)],
-      ["×", () => { this.failure = null; }],
-    ]);
-  }
-
-  footer(t) {
-    const flash = this.flashMsg?.text ?? null;
-    return keybar(t, { id: "git", chips: this.chips(), flash, width: this.size?.width, onKeys: cx => { this.keysOpen = true; this.handle.focus(); cx.notify(); } });
-  }
-
-  // An action's label as a short keycap label: "New branch from here" → "new branch".
-  static short(label) { return label.replace(/…$/, "").toLowerCase().split(" ").slice(0, 2).join(" "); }
-
-  // The footer's keycaps for what's on screen now.
-  chips() {
-    if (this.commitBox) return this.commitChips();
-    if (this.prompt) return [{ caps: ["enter"], label: "confirm" }, { caps: ["escape"], label: "cancel" }];
-    if (this.menu) return [{ caps: ["j", "k"], label: "move" }, { caps: ["enter"], label: "pick" }, { caps: ["escape"], label: "close" }];
-    if (this.editorFocused) return [{ caps: ["cmd-c"], label: "copy" }, { caps: ["escape"], label: "back" }];
-    if (this.mainFocus && this.main?.diff) {
-      const r = this.main.rows?.[this.cur], pick = this.anchor != null, n = this.notes().length, sides = this.sides();
-      if (r?.block) return [
-        { caps: ["o"], label: `keep ${sides?.oursShort ?? "current"}` }, { caps: ["t"], label: `keep ${sides?.theirsShort ?? "incoming"}` },
-        { caps: ["b"], label: "both" }, { caps: ["j", "k"], label: "conflict" }, { caps: ["a"], label: "note" }, { caps: ["escape"], label: "back" },
-      ];
-      return [
-        { caps: ["space"], label: `${r?.side === "staged" ? "unstage" : "stage"} ${pick ? "lines" : "hunk"}` },
-        { caps: ["j", "k"], label: pick ? "line" : "hunk" },
-        { caps: ["v"], label: pick ? "end selection" : "select lines" }, { caps: ["a"], label: "note" },
-        ...(n ? [{ caps: ["p"], label: `send ${n} note${n === 1 ? "" : "s"}` }] : []),
-        { caps: ["d"], label: "discard" }, { caps: ["A"], label: "ask AI" }, { caps: ["J", "K"], label: "file" },
-        { caps: ["o"], label: "editor" }, { caps: ["escape"], label: "back" },
-      ];
-    }
-    if (this.mainFocus) return [{ caps: ["j", "k"], label: "scroll" }, { caps: ["ctrl-d", "ctrl-u"], label: "page" }, { caps: ["escape"], label: "back" }];
-    // The shown section's own actions first (the keybar fits as many as there's room for).
-    const all = this.actions().filter(a => a.key !== "ctrl-r");
-    const own = all.filter(a => !a.global && !a.custom);
-    const acts = (own.length ? own : all).slice(0, 10).map(a => ({ caps: [a.key], label: a.chip ?? Git.short(a.label) }));
-    if (this.rangeRows().length > 1) return [{ caps: ["escape"], label: "end range" }, ...acts.filter(a => a.caps[0] !== "v")];
-    return [...acts, { caps: ["x"], label: "actions" }];
-  }
-
-  keysGroups() {
-    const sec = SECTIONS.find(s => s.id === this.sec);
-    return [
-      { title: `${sec.title}: actions`, chips: this.actions().map(a => ({ caps: [a.key], label: a.label.replace(/…$/, "") })) },
-      { title: "Moving", chips: [
-        { caps: SECTIONS.map(s => s.key), label: SECTIONS.map(s => s.title.toLowerCase()).join(" / ") },
-        { caps: ["h", "l"], label: "previous / next section" },
-        { caps: ["j", "k"], label: "move" }, { caps: ["<", ">"], label: "first / last" },
-        { caps: [",", "."], label: "page up / down" }, { caps: ["[", "]"], label: "switch tab" },
-        { caps: ["enter"], label: "focus the diff" }, { caps: ["J", "K"], label: "scroll the diff" },
-        { caps: ["ctrl-d", "ctrl-u"], label: "scroll the diff a page" },
-        { caps: ["v"], label: "commits: select a range" }, { caps: ["shift-down", "shift-up"], label: "commits: grow the range" },
-      ] },
-      { title: "Files: reviewing the diff (enter)", chips: [
-        { caps: ["j", "k"], label: "next / previous hunk or conflict (arrows, } / { too)" },
-        { caps: ["A"], label: "ask AI about this change (the selected lines, else the file)" },
-        { caps: ["J", "K"], label: "next / previous file" }, { caps: ["v"], label: "select lines: then j / k move a line at a time" },
-        { caps: ["space"], label: "stage the hunk or lines (unstage on the staged side)" },
-        { caps: ["d"], label: "discard the hunk or lines" }, { caps: ["a"], label: "write a note on the line or lines" },
-        { caps: ["X"], label: "delete the notes on this line" }, { caps: ["p", "i"], label: "send the notes to an agent" },
-        { caps: ["e"], label: "open in your editor at this line (o too, outside a conflict)" },
-        { caps: ["o", "t", "b"], label: "on a conflict: keep current / incoming / both" },
-        { caps: ["click"], label: "put the cursor on a line" }, { caps: ["shift-click"], label: "select lines (or drag)" },
-        { caps: ["escape"], label: "back to the list" },
-      ] },
-      { title: "Everywhere", chips: [
-        { caps: ["/"], label: "filter" }, { caps: ["x"], label: "actions menu" }, { caps: ["escape"], label: "back / clear" },
-        { caps: ["q"], label: "close the panel" }, { caps: ["?"], label: "this card" },
-      ] },
-    ];
-  }
-
-  sectionsColumn(t, mono, wide) {
-    return v_flex().min_h(0).gap(6).children(SECTIONS.map(s => this.sectionBox(s, t, mono)));
-  }
-
-  sectionBox(s, t, mono) {
-    const focusedSec = this.sec === s.id, lk = this.lk(s.id), items = this.items(s.id), sel = this.selIndex(s.id);
-    const count = s.id === "commits" ? items.filter(r => r.sha).length : s.id === "files" ? (this.filter.files ? items.length : this.status?.files?.length ?? 0) : items.length;
-    const head = h_flex().id(`sec-${s.id}`).h(24).flex_none().px(8).gap(6).items_center().cursor_pointer()
-      .on_click((_e, cx) => this.focusSection(s.id, cx))
-      .child(div().text_size(10.5).font_semibold().px(4).rounded(4).bg(focusedSec && this.hadKeys ? t.accent : t.raised).text_color(focusedSec && this.hadKeys ? t.accent_foreground : t.muted).child(s.key))
-      .child(div().font_semibold().text_color(focusedSec ? t.foreground : t.muted).child(s.title))
-      .when(Boolean(s.tabs), el => el.children(s.tabs.map((name, i) => div().id(`tab-${s.id}-${i}`).px(5).rounded(4).text_size(11)
-        .text_color(this.tab[s.id] === i ? t.foreground : t.dim).when(this.tab[s.id] === i, d => d.bg(t.raised))
-        .on_click((_e, cx) => { cx.stop_propagation(); if (this.tab[s.id] !== i) { this.sec = s.id; this.switchTab(i - this.tab[s.id], cx); } }).child(name))))
-      .when(Boolean(this.filter[lk]), el => el.child(div().text_size(11).text_color(t.accent).truncate().child(`/${this.filter[lk]}`)))
-      .child(div().flex_1())
-      .when(s.id === "files" && this.notes().length > 0, el => el.child(div().text_size(11).text_color(t.ansi3).child(`✎ ${this.notes().length}`)))
-      .child(div().text_size(11).text_color(t.dim).child(String(count)));
-    const row = (it, i, inList) => this.row(s.id, it, i, i === sel, focusedSec, t, mono, inList);
-    let body;
-    if (!items.length) body = div().px(10).h(ROW).flex_none().flex().items_center().text_size(11.5).text_color(t.dim).child(this.emptyText(s.id));
-    else if (focusedSec) {
-      const id = `list-${lk}`;
-      body = div().flex_1().min_h(0).relative()
-        .child(div().size_full().child(v_virtual_list(id, items.length, ROW, i => this.itemKey(s.id, items[i], i), range => items.slice(range.start, range.end).map((it, j) => row(it, range.start + j, true)))
-          .track_scroll(this.scrolls[lk]).size_full()
-          .on_item_click((key, cx) => this.clickRow(s.id, items.findIndex((it, j) => this.itemKey(s.id, it, j) === key), cx))))
-        .child(Scrollbar.vertical(id).viewport_from_layout().absolute().inset_0());
-    } else {
-      const cap = Math.min(s.cap, items.length), start = Math.max(0, Math.min(sel - Math.floor(cap / 2), items.length - cap));
-      body = v_flex().flex_none().children(items.slice(start, start + cap).map((it, j) => row(it, start + j)));
-    }
-    return v_flex().id(`box-${s.id}`).min_h(0).rounded(8).border_1().border_color(focusedSec && this.hadKeys ? t.accent : t.border).pb(4)
-      .when(focusedSec, el => el.flex_1()).when(!focusedSec, el => el.flex_none())
-      .child(head).child(body);
-  }
-
-  emptyText(sec) {
-    return { files: "No changes", branches: "No branches", commits: "No commits", stash: "No stashes" }[sec];
-  }
-
-  itemKey(sec, it, i) {
-    return sec === "files" ? `${it.kind === "dir" ? "d" : "f"}${it.path}` : sec === "branches" ? `b${it.name}` : sec === "commits" ? it.sha : `s${it.ref}`;
-  }
-
-  // Virtual-list rows can't carry handlers, so a second click on the same row within 400 ms counts as a double click.
-  clickRow(sec, i, cx) {
-    if (i < 0) return;
-    const now = Date.now(), double = this.lastClick?.sec === sec && this.lastClick.i === i && now - this.lastClick.at < 400;
-    this.lastClick = { sec, i, at: now };
-    const it = this.items(sec)[i], again = sec === "files" && it?.kind === "dir" && this.sec === sec && this.selIndex(sec) === i;
-    if (this.sec !== sec) this.focusSection(sec, cx);
-    this.move(0, cx, i);
-    if (again) this.toggleFold(it, cx);
-    else if (double && it?.kind !== "dir") this.actions().find(a => a.key === "space")?.run(cx);
-    cx.notify();
-  }
-
-  row(sec, it, i, selected, focusedSec, t, mono, inList) {
-    // In a commit range (v): drawn like the selected row.
-    const picked = !selected && sec === "commits" && Boolean(it.sha) && Boolean(this.rangeSet?.has(it.sha));
-    const el = h_flex().id(`${sec}-${this.itemKey(sec, it, i)}`).h(ROW).flex_none().px(8).gap(6).items_center().rounded(5).cursor_pointer().min_w(0).overflow_hidden()
-      .when(selected || picked, e => e.bg(focusedSec ? t.selected : t.hover))
-      .hover(s => s.bg(selected && focusedSec ? t.selected : t.hover))
-      .when(!inList, e => e.on_click((_e, cx) => this.clickRow(sec, i, cx)));
-    if (sec === "files") return it.kind === "dir" ? this.dirRow(el, it, t) : this.fileRow(el, it, t);
-    if (sec === "branches") return this.branchRow(el, it, t);
-    if (sec === "commits") return this.commitRow(el, it, t, mono);
-    return el.child(div().flex_none().text_color(t.dim).font_family(mono).text_size(11.5).child(it.ref.replace("stash@", "")))
-      .child(div().flex_1().min_w(0).truncate().child(it.message)).child(div().flex_none().text_size(11).text_color(t.dim).child(it.date));
-  }
-
-  // lazygit's two status letters: staged (green) then unstaged (red); then the folder, dim, and the name.
-  // A folder in the Files tree: ▾ / ▸, its name ("/" at the root), how many files when folded.
+  // A folder in the Files tree (t): ▾ / ▸, its name ("/" at the root), how many files when folded.
   dirRow(el, d, t) {
+    const files = (this.status?.files ?? []).filter(f => this.under(d.path, f.path) && !f.conflict);
+    const staged = files.filter(f => f.staged && !f.unstaged).length, some = files.some(f => f.staged);
+    const state = files.length && staged === files.length ? "all" : some ? "some" : null;
     const noted = this.notes().some(n => this.under(d.path, n.path));
-    return el.pl(8 + d.depth * 14)
-      .child(div().w(10).flex_none().text_size(10).text_color(t.dim).child(d.open ? "▾" : "▸"))
-      .child(div().flex_1().min_w(0).truncate().text_color(d.conflict ? t.ansi1 : d.root ? t.muted : t.ansi4).child(d.root ? "/" : d.name))
+    return el.child(this.checkbox(state, t, d.conflict)).child(div().w(d.depth * 12).flex_none())
+      .child(svg(`${CHROME}/${d.open ? "chevron-down" : "chevron-right"}.svg`).size(11).flex_none().text_color(t.dim))
+      .child(div().flex_1().min_w(0).truncate().text_color(d.conflict ? t.ansi1 : t.muted).child(d.root ? "/" : d.name))
       .when(noted, e => e.child(div().flex_none().text_size(11).text_color(t.ansi3).child("✎")))
       .when(!d.open, e => e.child(div().flex_none().text_size(11).text_color(t.dim).child(String(d.count))));
   }
 
-  fileRow(el, row, t) {
-    const f = row.file, tree = !this.flat && !this.filter.files;
-    const letter = (c, color) => div().w(8).flex_none().text_color(color).child(c === "." ? "" : c);
+  // +12 −3 for a file (working tree or a commit's), right-aligned and quiet.
+  counts(path, t, mono, stat) {
+    const n = stat ?? this.numstat?.get(path);
+    if (!n) return null;
+    return h_flex().flex_none().gap(5).font_family(mono).text_size(11)
+      .when(n.a > 0, e => e.child(div().text_color(t.ansi2).child(`+${n.a}`)))
+      .when(n.d > 0, e => e.child(div().text_color(t.ansi1).child(`−${n.d}`)));
+  }
+
+  fileRow(el, row, t, mono) {
+    const f = row.file, tree = !row.ro && !this.flat && !this.filter.files;
     const slash = f.path.lastIndexOf("/"), dir = tree || slash < 0 ? "" : f.path.slice(0, slash + 1), name = f.path.slice(slash + 1);
+    const letterOf = c => ({ A: t.ansi2, D: t.ansi1, R: t.ansi4, C: t.ansi4, "?": t.ansi2, "!": t.ansi1 }[c] ?? t.ansi3);
+    const body = (letter, color, nameColor) => el
+      .child(div().w(12).flex_none().font_family(mono).text_size(11.5).font_semibold().text_color(color).child(letter))
+      .child(h_flex().flex_1().min_w(0).gap(6).items_center().overflow_hidden()
+        .child(div().flex_none().max_w_full().truncate().text_color(nameColor).child(name))
+        .child(div().flex_1().min_w(0).truncate().text_size(11.5).text_color(t.dim).child(dir.replace(/\/$/, ""))));
+    if (row.ro) return body(f.x, letterOf(f.x), t.foreground).children([this.counts(f.path, t, mono, f.stat)].filter(Boolean));
+    const state = f.conflict ? null : f.staged && !f.unstaged ? "all" : f.staged ? "some" : null;
+    const letter = f.untracked ? "?" : f.conflict ? "!" : f.unstaged ? (f.y === "." ? f.x : f.y) : f.x;
     const noted = this.notes().some(n => n.path === f.path);
-    return el.when(tree, e => e.pl(8 + row.depth * 14)).child(h_flex().flex_none().font_family(settings().font_family ?? "JetBrains Mono").text_size(11.5).font_semibold()
-        .child(letter(f.untracked ? "?" : f.x, f.conflict ? t.ansi1 : t.ansi2)).child(letter(f.untracked ? "?" : f.y, t.ansi1)))
-      .child(h_flex().flex_1().min_w(0).overflow_hidden()
-        .child(div().flex_none().text_color(f.conflict ? t.ansi1 : f.unstaged ? t.foreground : t.ansi2).child(name))
-        .child(div().min_w(0).truncate().pl(6).text_size(11).text_color(t.dim).child(dir.replace(/\/$/, ""))))
+    el = el.child(this.checkbox(state, t, f.conflict)).when(tree, e => e.child(div().w(row.depth * 12).flex_none()));
+    return body(letter, letterOf(letter), f.conflict ? t.ansi1 : t.foreground)
       .when(noted, e => e.child(div().flex_none().text_size(11).text_color(t.ansi3).child("✎")))
       // During a merge / rebase / pick: conflicts were changed on both sides; others came in from the incoming side.
-      .when(f.conflict, e => e.child(div().flex_none().px(4).rounded(4).border_1().border_color(t.ansi1).text_size(10).text_color(t.ansi1).child("both sides")))
-      .when(!f.conflict && this.fromIncoming(f.path), e => e.child(div().flex_none().max_w(120).truncate().px(4).rounded(4).border_1().border_color(t.ansi4).text_size(10).text_color(t.ansi4).child(`▼ ${this.sides()?.theirsShort ?? "incoming"}`)));
+      .when(f.conflict, e => e.child(this.tag("both sides", t.ansi1, t)))
+      .when(!f.conflict && this.fromIncoming(f.path), e => e.child(this.tag(`▼ ${this.sides()?.theirsShort ?? "incoming"}`, t.ansi4, t).max_w(120).truncate()))
+      .children([this.counts(f.path, t, mono)].filter(Boolean));
   }
 
-  branchRow(el, b, t) {
+  // Under the working tree's files: stage all, and commit (its ⌄ has amend, stage-all-and-commit, editor).
+  filesFooter(t) {
+    const files = this.status?.files ?? [], staged = files.filter(f => f.staged).length, anyUnstaged = files.some(f => f.unstaged && !f.conflict);
+    const btn = (id, label, primary, action, tip) => div().id(id).h(28).px(11).flex().flex_none().items_center().justify_center().cursor_pointer().text_size(12)
+      .when(primary, e => e.bg(t.solid ?? t.accent).text_color(t.solid_foreground ?? t.accent_foreground).font_medium().hover(s => s.opacity(0.9)))
+      .when(!primary, e => e.rounded(7).text_color(t.muted).hover(s => s.bg(t.hover).text_color(t.foreground)))
+      .when(Boolean(tip), e => e.tooltip(tip))
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_click((_e, cx) => { action(cx); cx.notify(); }).child(label);
+    return h_flex().flex_none().p(8).gap(6).items_center().border_t(1).border_color(t.border)
+      .child(btn("ff-stage", anyUnstaged ? "Stage all" : "Unstage all", false, cx => anyUnstaged ? this.cmd("git add -A", "git add -A", cx, { term: false }) : this.cmd("git reset", "git reset -q", cx, { term: false }), "a"))
+      .child(div().flex_1())
+      .child(h_flex().flex_none().rounded(7).overflow_hidden()
+        .child(btn("ff-commit", staged ? `Commit ${plural(staged, "file")}` : "Commit…", true, cx => this.commit(cx), "c"))
+        .child(div().w(1).h(28).bg(t.background))
+        .child(btn("ff-more", "⌄", true, cx => this.commitOptions(cx), "Amend, stage all and commit, commit in editor").px(8)));
+  }
+
+  branchRow(el, b, t, mono) {
     const remote = b.kind === "remote", pr = this.prs?.[remote ? b.short : b.name];
     const stale = !remote && !b.head && (pr?.state === "MERGED" || pr?.state === "CLOSED" || b.gone);
-    const badge = (text, color) => div().flex_none().px(4).rounded(4).border_1().border_color(color).text_size(10.5).text_color(color).child(text);
-    return el.child(div().w(10).flex_none().text_color(t.accent).child(b.head ? "*" : ""))
-      .child(div().flex_1().min_w(0).truncate().text_color(b.head ? t.accent : stale ? t.dim : t.foreground).when(b.head, d => d.font_semibold()).child(b.name))
-      .when(Boolean(pr), e => e.child(badge(`#${pr.number} ${pr.isDraft && pr.state === "OPEN" ? "draft" : pr.state.toLowerCase()}`, pr.isDraft && pr.state === "OPEN" ? t.dim : t[PR_COLOR[pr.state]] ?? t.dim)))
-      .when(!remote, e => e.child(
-        b.gone ? badge("gone", t.ansi1)
-          : !b.upstream ? badge("local", t.dim)
-            : b.ahead || b.behind ? div().flex_none().text_size(11).text_color(t.ansi3).child(`${b.ahead ? `↑${b.ahead}` : ""}${b.behind ? `↓${b.behind}` : ""}`)
-              : div().flex_none().text_size(11).text_color(t.ansi2).child("✓")))
-      .when(!remote && b.merged && !pr && !b.head && b.name !== this.base?.replace(/^[^/]+\//, ""), e => e.child(badge("merged", t.ansi5)))
-      .when(!remote && Boolean(b.worktree), e => e.child(badge("worktree", t.dim)))
-      .when(remote && Boolean(b.local), e => e.child(badge(`local: ${b.local === b.short ? "✓" : b.local}`, t.ansi2)))
-      .when(this.listWidth() >= 460, e => e.child(div().flex_none().text_size(11).text_color(t.dim).child(b.date.replace(/ ago$/, ""))));
+    const prColor = pr ? (pr.isDraft && pr.state === "OPEN" ? t.dim : t[PR_COLOR[pr.state]] ?? t.dim) : null;
+    const roomy = this.colWidth(0) >= 280;
+    // To push (↑, warm like unpushed commits) and to pull (↓, blue like remote branches), as tinted labels.
+    const track = !remote && (b.ahead || b.behind);
+    return el.child(div().w(12).flex_none().child(b.head ? svg(`${CHROME}/check.svg`).size(12).text_color(t.foreground) : ""))
+      .child(div().flex_1().min_w(0).truncate().text_color(stale ? t.muted : t.foreground).when(b.head, d => d.font_semibold()).child(remote ? b.short : b.name))
+      .when(!remote && b.gone, e => e.child(this.tag("gone", t.ansi1, t)))
+      .when(!remote && Boolean(b.worktree), e => e.child(this.tag("worktree", t.muted, t)))
+      .when(Boolean(pr) && roomy, e => e.child(this.tag(`#${pr.number}`, prColor, t)))
+      .when(!remote && b.merged && !pr && !b.head && b.name !== this.base?.replace(/^[^/]+\//, ""), e => e.child(this.tag("merged", t.ansi5, t)))
+      .when(!remote && b.ahead > 0, e => e.child(this.tag(`↑${b.ahead}`, t.ansi3, t).font_family(mono)))
+      .when(!remote && b.behind > 0, e => e.child(this.tag(`↓${b.behind}`, t.ansi4, t).font_family(mono)))
+      .when(!track && (remote || !b.upstream || roomy), e => e.child(div().flex_none().text_size(11).text_color(t.dim).child(short(b.date))));
   }
 
-  palette(t) { return [t.ansi4, t.ansi5, t.ansi6, t.ansi2, t.ansi3, t.ansi1, t.ansi12 ?? t.ansi4, t.ansi13 ?? t.ansi5]; }
+  palette(t) { return [t.input]; }
 
+  // Two lines, as the mock: the subject (and branch labels), then hash · author · when. The dot says
+  // what it is: filled warm = not pushed yet (safe to rewrite), hollow = pushed, purple ring = a merge.
   commitRow(el, c, t, mono) {
-    const hashColor = c.state === "unpushed" ? t.ansi1 : c.state === "pushed" ? t.ansi3 : t.ansi2;
-    const refs = c.refs.map(r => r.replace(/^HEAD -> /, "→ ")).filter(r => r !== "HEAD" && !r.endsWith("/HEAD"));
-    const isHead = c.refs.some(r => r.startsWith("HEAD"));
-    // Narrow: one ref chip and no author, so the subject keeps room.
-    const wide = this.listWidth() >= 460, shown = wide ? 2 : 1;
-    return el.child(graphCell(c.lane, ROW, this.palette(t), t.background, { highlight: isHead ? t.foreground : null }))
-      .child(div().flex_none().font_family(mono).text_size(11.5).text_color(hashColor).child(c.short))
-      .when(this.copied.includes(c.sha), e => e.child(div().flex_none().text_size(10.5).text_color(t.ansi6).child("⎘")))
-      .children(refs.slice(0, shown).map(r => div().flex_shrink_1().min_w(40).max_w(140).truncate().px(4).rounded(4).text_size(10.5)
-        .bg(r.startsWith("→") ? t.accent : t.raised).text_color(r.startsWith("→") ? t.accent_foreground : r.startsWith("tag:") ? t.ansi3 : t.ansi6).child(r)))
-      .when(refs.length > shown, e => e.child(div().flex_none().text_size(10.5).text_color(t.dim).child(`+${refs.length - shown}`)))
-      .child(div().flex_1().min_w(60).truncate().text_color(c.state === "merged" ? t.muted : t.foreground).child(c.subject))
-      .when(wide, e => e.child(div().flex_none().text_size(11).text_color(t.dim).child(`${c.author.split(" ")[0]} · ${c.date.replace(/ ago$/, "")}`)));
+    const refs = c.refs.filter(r => r !== "HEAD" && !r.endsWith("/HEAD") && !r.startsWith("tag: ")).map(r => r.replace(/^HEAD -> /, "→ "));
+    const tags = c.refs.filter(r => r.startsWith("tag: ")).length;
+    const cw = this.colWidth(1), shown = cw >= 560 ? 2 : cw >= 380 ? 1 : 0;
+    const visible = shown ? refs.slice(0, shown) : refs.filter(r => r.startsWith("→")).slice(0, 1);
+    const dot = c.lane.merge ? { ring: t.ansi5 } : c.state === "unpushed" ? { fill: t.ansi3, ring: t.ansi3 } : { ring: t.muted };
+    const chip = r => div().flex_shrink_1().min_w(36).max_w(150).truncate().px(6).h(17).flex().items_center().rounded(5).text_size(10.5).font_medium()
+      .bg(r.startsWith("→") ? t.foreground : t.ansi4 + "22").text_color(r.startsWith("→") ? t.background : t.ansi4).child(r.replace(/^→ /, ""));
+    return el.pl(2).child(graphCell(c.lane, HROW, this.palette(t), t.chrome ?? t.background, { dot }))
+      .child(v_flex().flex_1().min_w(0).gap(1)
+        .child(h_flex().min_w(0).gap(6).items_center()
+          .child(div().flex_1().min_w(40).truncate().text_size(12.8).text_color(c.state === "merged" ? t.muted : t.foreground).when(c.subject === "wip", d => d.italic().text_color(t.muted)).child(c.subject))
+          .children(visible.map(chip))
+          .when(this.copied.includes(c.sha), e => e.child(this.tag("⎘ pick", t.ansi6, t))))
+        .child(h_flex().gap(6).min_w(0).text_size(11.5).text_color(t.dim)
+          .child(div().flex_none().font_family(mono).text_size(11).text_color(c.state === "unpushed" ? t.ansi3 : t.dim).child(c.short))
+          .child(div().flex_none().child(c.author.split(" ")[0]))
+          .child(div().flex_none().child(short(c.date)))
+          .when(tags > 0 && cw >= 380, e => e.child(div().flex_none().truncate().child(c.refs.find(r => r.startsWith("tag: ")).slice(5))))));
   }
 
   mainView(t, mono) {
-    const m = this.main, log = m?.log;
-    // A file: its name, then its folder (dim, cut first), so a long path never hides the name or the buttons.
-    const file = !log && m?.diff && m.path != null
-      ? m.diff.folder ? { name: m.path ? `${m.path.split("/").pop()}/` : "/", dir: m.path.split("/").slice(0, -1).join("/") }
-        : { name: m.path.split("/").pop(), dir: m.path.split("/").slice(0, -1).join("/") }
-      : null;
-    const head = h_flex().h(28).flex_none().px(10).gap(8).items_center().border_b(1).border_color(t.border)
-      .when(!file, el => el.child(div().flex_1().min_w(0).truncate().text_size(11.5).text_color(this.mainFocus ? t.foreground : t.muted)
-        .child(log ? `${log.running ? "running" : log.code === 0 ? "✓" : `✗ exit ${log.code}`} · ${log.title}` : m?.title ?? "")))
-      .when(Boolean(file), el => el
-        .child(h_flex().flex_1().min_w(0).gap(6).items_center().overflow_hidden().text_size(11.5)
-          .child(div().flex_none().max_w_full().truncate().font_semibold().text_color(this.mainFocus ? t.foreground : t.muted).child(file.name))
-          .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).child(file.dir)))
-        .child(this.diffButton("ask-file", "Ask AI", cx => this.askAbout(cx), t, t.accent)))
+    const m = this.main, log = m?.log, on = this.zone === 3, all = (this.shown ?? []).length === 4;
+    const path = !log && m?.diff && m.path != null ? (m.diff.folder ? `${m.path || ""}/` : m.path) : null;
+    const head = h_flex().id("zh-3").h(38).flex_none().px(10).gap(8).items_center().cursor_pointer()
+      .on_click((_e, cx) => this.setZone(3, cx))
+      .child(this.zoneBadge(3, t))
+      .child(div().flex_1().min_w(0).truncate().when(Boolean(path), e => e.font_family(mono)).text_size(path ? 12 : 11.5).text_color(on ? t.foreground : t.muted)
+        .child(path ?? (log ? `${log.running ? "running" : log.code === 0 ? "✓" : `✗ exit ${log.code}`} · ${log.title}` : m?.title ?? "")))
+      .when(Boolean(path), el => el.child(this.diffButton("ask-file", "Ask AI", cx => this.askAbout(cx), t, t.ansi5)))
       .when(Boolean(log), el => el
         .when(Boolean(log.running && log.addr), e => e.child(this.iconButton("main-peek", `${CHROME}/terminal.svg`, () => run("terminal.peek", { terminal: log.addr }), t, "Watch")))
         .child(this.iconButton("main-copy", "mods/git/copy.svg", cx => { cx.write_to_clipboard(`$ ${log.title}\n${log.output}`); this.flash("Output copied"); }, t, "Copy"))
-        .when(!log.running && log.code !== 0, e => e.child(this.iconButton("main-ai", "mods/git/ai.svg", cx => this.askAI(cx), t, "Ask AI"))));
-    const box = v_flex().min_h(0).min_w(0).rounded(8).border_1().border_color(this.mainFocus && this.hadKeys ? t.accent : t.border).overflow_hidden().child(head);
-    if (!m) return box.child(div().p(10).text_color(t.dim).child("Nothing selected"));
-    if (log) return box.child(div().id("main-editor").flex_1().min_h(0).on_mouse_down("left", (_e, cx) => cx.stop_propagation()).child(Editor.new(this.editor).size_full()));
-    if (!m.rows) return box.child(div().p(10).text_color(t.dim).child("Loading…"));
-    if (m.commits) return box.child(div().flex_1().min_h(0).relative().px(4)
-      .child(v_virtual_list("main-commits", m.commits.length, ROW, i => m.commits[i].sha,
-        range => m.commits.slice(range.start, range.end).map(c => this.commitRow(h_flex().h(ROW).flex_none().px(6).gap(6).items_center().min_w(0), c, t, mono)))
-        .track_scroll(this.scrolls.main).size_full())
-      .child(Scrollbar.vertical("main-commits").viewport_from_layout().absolute().inset_0()));
+        .when(!log.running && log.code !== 0, e => e.child(this.iconButton("main-ai", "mods/git/ai.svg", cx => this.askAI(cx), t, "Ask AI")))
+        .child(this.iconButton("main-close", null, cx => { this.mainOverride = null; this.syncMain(cx); }, t, "×", "Back to the diff (esc)")))
+      // With all four columns there's no top bar: its update pill and expand button live here.
+      .when(all, el => el.children([this.selfUpdate.pill(t)].filter(Boolean))
+        .child(this.iconButton("git-popout", "mods/git/popout.svg", cx => this.fixed ? this.collapse() : this.expand(cx), t, null, this.fixed ? "Back to the side panel" : "Open as a tab")));
+    const box = v_flex().flex_1().min_h(0).min_w(0).overflow_hidden().child(head);
+    const quiet = text => box.child(div().px(14).py(8).text_size(12).text_color(t.dim).child(text));
+    if (!m && this.subject().kind !== "wip" && this.detail?.files == null) return quiet("Loading…");
+    if (!m) return quiet(this.subject().kind === "wip" && !(this.status?.files ?? []).length ? "Working tree clean" : this.ctx ? "Pick a file to see its diff" : "");
+    if (log) return box.child(div().id("main-editor").flex_1().min_h(0).m(8).mt(0).rounded(8).border_1().border_color(t.border).overflow_hidden().on_mouse_down("left", (_e, cx) => cx.stop_propagation()).child(Editor.new(this.editor).size_full()));
+    if (!m.rows) return quiet("Loading…");
     if (m.diff) return box.child(this.diffView(m, t, mono));
-    const palette = { add: [t.ansi2, t.ansi2 + "18"], del: [t.ansi1, t.ansi1 + "18"], hunk: [t.ansi6, t.raised], file: [t.foreground, null], meta: [t.ansi3, null] };
+    const palette = { add: [t.ansi2, t.ansi2 + "18"], del: [t.ansi1, t.ansi1 + "18"], hunk: [t.dim, t.surface], file: [t.foreground, null], meta: [t.muted, null] };
     const line = r => {
       const [fg, bg] = palette[r.kind] ?? [t.foreground, null];
       return div().h(LINE).flex_none().px(10).whitespace_nowrap().text_color(fg).when(Boolean(bg), e => e.bg(bg)).when(r.kind === "file", e => e.font_semibold()).child(r.text || " ");
     };
-    return box.child(div().flex_1().min_h(0).relative().font_family(mono).text_size(12)
+    return box.child(div().flex_1().min_h(0).relative().m(8).mt(0).rounded(8).border_1().border_color(t.border).bg(t.background).overflow_hidden().font_family(mono).text_size(12)
       .child(div().id("main-x").size_full().overflow_x_scrollbar()
         .child(div().w_full().min_w(m.width).h_full().child(v_virtual_list("main-lines", m.rows.length, LINE, i => String(i),
           range => m.rows.slice(range.start, range.end).map(line)).track_scroll(this.scrolls.main).size_full())))
@@ -1798,16 +2246,16 @@ export default class Git extends View {
 
   // A small button inside the diff (hunk headers, conflicts, the action bar).
   diffButton(id, label, run, t, color) {
-    return div().id(id).flex_none().h(18).px(7).flex().items_center().rounded(4).cursor_pointer()
-      .text_size(10.5).border_1().border_color(color ? color + "88" : t.border)
-      .text_color(color ?? t.muted).bg(t.background).hover(s => s.bg(t.hover).text_color(color ?? t.foreground))
+    return div().id(id).flex_none().h(20).px(7).flex().items_center().rounded(5).cursor_pointer()
+      .text_size(11).text_color(color ?? t.muted).hover(s => s.bg(t.hover).text_color(color ?? t.foreground))
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .on_click((_e, cx) => { cx.stop_propagation(); this.handle.focus(); run(cx); cx.notify(); })
       .child(label);
   }
 
   // A file's diff: old and new line numbers, the change, notes under their lines. Click a line for
-  // the cursor, shift-click or drag to select lines; hunk headers and conflicts carry their buttons.
+  // the cursor, shift-click or drag to select lines, double-click to write a note, right-click for
+  // its menu; hunk headers and conflicts carry their buttons.
   // During a merge / rebase / pick, conflicts show which side each part comes from.
   diffView(m, t, mono) {
     const rows = this.diffRows(m), on = this.mainFocus, sides = this.sides(), side = rows[this.cur]?.side;
@@ -1819,24 +2267,29 @@ export default class Git extends View {
     const num = n => h_flex().w(38).h(LINE).flex_none().items_center().justify_end().pr(6).text_color(t.dim).child(n == null ? "" : String(n));
     const plain = rows.length <= PLAIN_ROWS;
     const line = (r, i) => {
-      const cursor = on && i === this.cur, chosen = i >= lo && i <= hi && r.side === side && lineRow(r);
+      const cursor = i === this.cur && (on || this.anchor != null), chosen = i >= lo && i <= hi && r.side === side && lineRow(r);
       // Plain rows wrap long lines (the row grows; line numbers stay on its first line); the virtual
       // list's rows must keep one height, so they stay one line and scroll sideways.
       let el = plain ? h_flex().w_full().min_h(LINE).flex_none().items_start()
         : h_flex().h(LINE).flex_none().items_center().whitespace_nowrap().min_w(m.width);
       const text = (content, color) => (plain ? div().flex_1().min_w(0).py(1) : div()).when(Boolean(color), d => d.text_color(color)).child(content);
-      if (plain) el = el.id(`dl-${i}`).on_mouse_down("left", (e, cx) => this.pressLine(i, e, cx)).on_mouse_move((_e, cx) => this.dragTo(i, cx));
+      if (plain) el = el.id(`dl-${i}`).on_mouse_down("left", (e, cx) => this.pressLine(i, e, cx)).on_mouse_move((_e, cx) => this.dragTo(i, cx))
+        .on_mouse_down("right", () => { this.ctxPending = { z: 3, i }; });
       // A folder's diff names each file before its hunks.
-      if (r.kind === "file") return el.px(10).pt(4).border_t(1).border_color(t.border).font_semibold().text_color(t.foreground).child(text(r.text));
-      if (r.kind === "section") return el.px(10).gap(6).font_semibold().text_size(11.5).text_color(SIDE[r.side] ?? t.muted).child(text(sectionText(r)));
+      if (r.kind === "file") return el.px(10).pt(6).pb(2).when(i > 0, e => e.border_t(1).border_color(t.border)).font_semibold().text_color(t.foreground).child(text(r.text));
+      if (r.kind === "section") return el.px(10).pt(i ? 8 : 4).pb(2).gap(6).items_center().text_size(10.5).font_semibold().text_color(t.dim)
+        .child(div().size(6).flex_none().rounded_full().bg(SIDE[r.side] ?? t.dim)).child(text(sectionText(r).toUpperCase()));
       if (r.kind === "hunk") {
-        const staged = r.side === "staged";
-        // Buttons first: a long @@ line (its function context) never pushes them out of view.
-        return el.pl(10).pr(6).gap(6).bg(t.raised).text_color(t.ansi6).when(plain, e => e.items_center())
-          .when(plain, e => e
-            .child(this.diffButton(`hk-s-${i}`, staged ? "Unstage hunk" : "Stage hunk", cx => this.onHunk(i, "stage", cx), t, staged ? t.ansi3 : t.ansi2))
-            .when(r.side === "unstaged", e => e.child(this.diffButton(`hk-d-${i}`, "Discard", cx => this.onHunk(i, "discard", cx), t, t.ansi1))))
-          .child(text(r.text).pl(2));
+        const staged = r.side === "staged", editable = r.side === "staged" || r.side === "unstaged";
+        // Its buttons show on the hunk under the pointer or the one with the cursor (keys do the same anywhere).
+        const live = plain && editable && (this.hoverHunk === r.hunk || rows[this.cur]?.hunk === r.hunk);
+        return el.pl(10).pr(6).gap(6).min_h(LINE + 4).bg(t.surface).text_color(t.dim).when(plain, e => e.items_center())
+          .when(plain, e => e.on_hover((h, cx) => { const was = this.hoverHunk; this.hoverHunk = h ? r.hunk : this.hoverHunk === r.hunk ? null : this.hoverHunk; if (was !== this.hoverHunk) cx.notify(); }))
+          .child(text(r.text).pl(2))
+          .when(live, e => e
+            .child(this.diffButton(`hk-s-${i}`, staged ? "Unstage" : "Stage", cx => this.onHunk(i, "stage", cx), t, staged ? t.ansi3 : t.ansi2))
+            .when(r.side === "unstaged", e => e.child(this.diffButton(`hk-d-${i}`, "Discard", cx => this.onHunk(i, "discard", cx), t, t.ansi1)))
+            .child(this.diffButton(`hk-a-${i}`, "Ask AI", cx => { this.cur = i + 1; this.askAbout(cx); }, t, t.ansi5)));
       }
       if (r.kind === "mark") {
         const b = r.block, c = r.part === "ours" ? OURS : r.part === "theirs" ? THEIRS : t.dim;
@@ -1855,13 +2308,13 @@ export default class Git extends View {
       const fg = r.kind === "ctx" ? t.foreground : tone;
       const bg = cursor ? t.selected : chosen ? t.selection : tone && r.kind !== "base" ? tone + "18" : null;
       const sign = { add: "+", del: "-", ours: "▲", theirs: "▼", base: "·" }[r.kind] ?? "";
-      return el.when(Boolean(bg), e => e.bg(bg)).border_l(2).border_color(cursor ? t.accent : chosen ? t.accent + "66" : bg ?? t.background)
+      return el.when(Boolean(bg), e => e.bg(bg)).border_l(2).border_color(cursor ? (this.hadKeys ? t.accent : t.foreground) : chosen ? t.accent + "66" : bg ?? t.background)
         .child(num(r.old)).child(num(r.new))
         .child(div().w(12).flex_none().h(LINE).flex().items_center().text_color(fg).child(sign))
         .child(text(r.text || " ", fg).pr(10));
     };
     const list = plain
-      ? div().id("main-diff").flex_1().min_h(0).overflow_y_scrollbar().track_scroll(this.diffScroll).font_family(mono).text_size(12)
+      ? div().id("main-diff").flex_1().min_h(0).overflow_y_scrollbar().track_scroll(this.diffScroll).font_family(mono).text_size(12).pb(4)
         .on_mouse_up("left", () => { this.dragging = null; })
         .on_hover(h => { if (!h) this.dragging = null; })
         .children(rows.map(line))
@@ -1870,11 +2323,12 @@ export default class Git extends View {
           .child(div().w_full().min_w(m.width).h_full().child(v_virtual_list("main-diff-v", rows.length, LINE, i => String(i),
             range => rows.slice(range.start, range.end).map((r, j) => line(r, range.start + j)))
             .track_scroll(this.scrolls.main).size_full()
-            .on_item_click((key, cx) => this.pressLine(Number(key), null, cx)))))
+            .on_item_click((key, cx) => this.pressLine(Number(key), null, cx))
+            .on_item_secondary_click((key, _e, _cx) => { this.ctxPending = { z: 3, i: Number(key) }; }))))
         .child(Scrollbar.vertical("main-diff-v").viewport_from_layout().absolute().inset_0());
     return v_flex().flex_1().min_h(0)
       .when(Boolean(sides) && (m.diff.blocks || incoming), e => e.child(this.sidesLegend(sides, t)))
-      .child(list)
+      .child(v_flex().flex_1().min_h(0).mx(8).rounded(8).border_1().border_color(t.border).bg(t.background).overflow_hidden().child(list))
       .child(this.actionBar(m, t));
   }
 
@@ -1887,11 +2341,16 @@ export default class Git extends View {
 
   // What the buttons under the diff do: the selected lines, the cursor's hunk or conflict, and the notes.
   actionBar(m, t) {
-    const rows = m.rows ?? [], r = rows[this.cur], entry = this.selected("files"), f = entry?.kind === "file" ? entry.file : null, sides = this.sides();
+    const rows = m.rows ?? [], r = rows[this.cur], entry = this.selected(2), wip = this.subject().kind === "wip";
+    const f = wip && entry?.kind === "file" ? entry.file : null, sides = this.sides();
     const pick = this.picked(), n = this.notes().length, bits = [];
     const b = (id, label, run, color) => bits.push(this.diffButton(id, label, run, t, color));
     let what;
-    if (r?.block && this.mainFocus) {
+    if (!wip) {
+      const s = this.subject();
+      what = s.kind === "commit" ? `${s.c.short} · ${s.c.author.split(" ")[0]} · ${s.c.date}` : `${s.s.ref} · ${s.s.message}`;
+      b("ab-a", "Ask AI", cx => this.askAbout(cx), t.accent);
+    } else if (r?.block && this.mainFocus) {
       what = `Conflict ${r.block.index + 1} of ${m.diff.blocks.length}`;
       b("ab-o", `Keep ${sides?.oursShort ?? "current"}`, cx => this.resolve("ours", cx), t.ansi2);
       b("ab-t", `Keep ${sides?.theirsShort ?? "incoming"}`, cx => this.resolve("theirs", cx), t.ansi4);
@@ -1904,35 +2363,197 @@ export default class Git extends View {
       b("ab-n", "Note", cx => this.addNote(cx), t.ansi3);
       b("ab-c", "Clear", () => { this.anchor = null; });
     } else if (r?.hunk && this.mainFocus) {
-      what = `Line ${lineOf(r) ?? ""} · click, shift-click or drag to select lines`;
+      what = `Line ${lineOf(r) ?? ""} · shift-click or drag selects · double-click writes a note`;
       b("ab-s", r.side === "staged" ? "Unstage hunk" : "Stage hunk", cx => this.stageHunk(cx), r.side === "staged" ? t.ansi3 : t.ansi2);
       b("ab-n", "Note", cx => this.addNote(cx), t.ansi3);
-    } else what = entry?.kind === "dir" ? `${entry.root ? "Everything" : `${entry.path}/`} · ${entry.count} file${entry.count === 1 ? "" : "s"}`
+    } else what = entry?.kind === "dir" ? `${entry.root ? "Everything" : `${entry.path}/`} · ${plural(entry.count, "file")}`
       : f ? (f.conflict ? "Conflicted: keep a side in each conflict, then stage the file" : "Click a line to review it · shift-click or drag selects") : "";
-    if (f && !f.conflict) b("ab-f", f.unstaged ? "Stage file" : "Unstage file", cx => this.actions().find(a => a.key === "space")?.run(cx));
-    if (entry?.kind === "dir") b("ab-f", this.actions().find(a => a.key === "space")?.label.startsWith("Stage") ? "Stage folder" : "Unstage folder", cx => this.actions().find(a => a.key === "space")?.run(cx));
+    if (f && !f.conflict) b("ab-f", f.unstaged ? "Stage file" : "Unstage file", cx => this.stageCurrentFile(cx));
+    if (wip && entry?.kind === "dir") b("ab-f", "Stage / unstage folder", cx => this.stageCurrentFile(cx));
     if (f?.conflict && !(r?.block && this.mainFocus)) b("ab-r", "Open resolver", () => this.openConflicts());
-    if (n) b("ab-p", `Send ${n} note${n === 1 ? "" : "s"} to AI`, cx => this.askAI(cx, "notes"), t.ansi3);
-    return h_flex().h(30).flex_none().px(10).gap(6).items_center().border_t(1).border_color(t.border).bg(t.background)
+    if (wip && n) b("ab-p", `Send ${plural(n, "note")} to AI`, cx => this.askAI(cx, "notes"), t.ansi3);
+    return h_flex().h(34).flex_none().px(12).gap(4).items_center()
       .text_size(11)
       .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(what))
       .children(bits);
   }
 
+  // The Files row's space action, from anywhere (the diff's "Stage file").
+  stageCurrentFile(cx) {
+    const z = this.zone;
+    this.zone = 2;
+    const a = this.actions().find(a => a.key === "space");
+    this.zone = z;
+    a?.run(cx);
+  }
+
+  // Banners: a merge / rebase / pick in progress, a command that failed (hooks first), an agent at work.
+  banner(id, color, t, title, buttons, extra) {
+    return v_flex().id(id).flex_none().mx(8).mt(6).px(10).py(7).gap(6).rounded(8).border_1().border_color(color).bg(t.surface)
+      .child(h_flex().gap(8).items_center()
+        .child(div().size(7).flex_none().rounded_full().bg(color))
+        .child(div().flex_1().min_w(0).truncate().text_size(12).font_semibold().child(title))
+        .children(buttons.filter(Boolean).map(([label, action, primary], i) => h_flex().id(`${id}-b${i}`).h(24).px(8).flex_none().items_center().rounded(6)
+          .when(primary, e => e.bg(color).text_color(t.background).hover(s => s.opacity(0.88)))
+          .when(!primary, e => e.border_1().border_color(t.input).bg(t.raised).hover(s => s.bg(t.hover)))
+          .text_size(11.5).cursor_pointer()
+          .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+          .on_click((_e, cx) => { action(cx); cx.notify(); }).child(label))))
+      .when(Boolean(extra), e => e.child(extra));
+  }
+
+  opBanner(t) {
+    const op = this.op, n = this.conflicts().length;
+    const what = op.kind === "rebase" ? `Rebasing ${op.branch ?? "HEAD"} onto ${op.other ?? "?"}${op.step ? ` · ${op.step} of ${op.total}` : ""}`
+      : op.kind === "merge" ? `Merging ${op.other ?? "?"} into ${this.status?.info.head ?? "HEAD"}` : `${op.kind} of ${op.other ?? "?"} in progress`;
+    // A rebase's progress, one step per commit (the stopped one red while it has conflicts).
+    const steps = op.kind === "rebase" && op.total && op.total <= 40 ? h_flex().gap(2).children(Array.from({ length: op.total }, (_, i) => div().flex_1().h(3).rounded(2)
+      .bg(i + 1 < op.step ? t.ansi3 : i + 1 === op.step ? (n ? t.ansi1 : t.ansi3) : t.raised))) : null;
+    const extra = steps || op.current ? v_flex().gap(4).child(steps ? steps : div())
+      .when(Boolean(op.current), e => e.child(div().text_size(11).text_color(t.muted).truncate().child(`Stopped at ${op.current}${n ? ` · ${plural(n, "file")} conflict (Files shows them)` : ""}`))) : null;
+    return this.banner("op", n ? t.ansi1 : t.ansi3, t, `${what}${n ? ` · ${plural(n, "conflict")}` : " · no conflicts left"}`, [
+      n > 0 && ["Resolve with AI (i)", cx => this.askAI(cx), true],
+      n > 0 && ["Resolve (v)", () => this.openConflicts()],
+      !n && [`Continue`, cx => this.cmd(`git ${op.kind} --continue`, `git ${op.kind} --continue`, cx), true],
+      op.kind !== "merge" && ["Skip", cx => this.cmd(`git ${op.kind} --skip`, `git ${op.kind} --skip`, cx)],
+      ["Abort", cx => this.confirm(`Abort the ${op.kind}?`, `Abort ${op.kind}`, cx => this.cmd(`git ${op.kind} --abort`, `git ${op.kind} --abort`, cx), cx)],
+    ], extra);
+  }
+
+  aiBanner(t) {
+    const a = this.ai.address ? agents().find(x => x.address === this.ai.address) : null;
+    const status = a?.status, color = status === "working" ? t.working : status === "blocked" ? t.blocked : status ? t.ansi2 : t.dim;
+    const done = a && status !== "working" && status !== "blocked";
+    const text = !this.ai.address ? `Started a new agent tab to ${this.ai.label}`
+      : !a ? `The agent asked to ${this.ai.label} is gone`
+        : status === "working" ? `${a.program?.name ?? "Agent"} (${a.tab_name}) is working on: ${this.ai.label}…`
+          : status === "blocked" ? `${a.program?.name ?? "Agent"} needs you (${this.ai.label})`
+            : `${a.program?.name ?? "Agent"} finished: review, then ${this.op ? "continue" : "retry"}`;
+    const retry = this.ai.failure && !this.ai.failure.running ? this.ai.failure : null;
+    return this.banner("ai", color, t, text, [
+      done && this.op && !this.conflicts().length && ["Continue", cx => { this.ai = null; this.cmd(`git ${this.op.kind} --continue`, `git ${this.op.kind} --continue`, cx); }, true],
+      done && !this.op && retry && ["Retry", cx => { this.ai = null; this.cmd(retry.title, retry.script, cx, retry.opts); }, true],
+      a && ["Show", () => run("agent.focus", { terminal: a.address })],
+      ["Dismiss", () => { this.ai = null; }],
+    ]);
+  }
+
+  // A failed command: which hook (when it's one), its last lines, and the fix: AI, or retry.
+  failureBanner(t, mono) {
+    const f = this.failure, out = f.output ?? "";
+    const hook = out.match(/\b(pre-commit|commit-msg|pre-push|prepare-commit-msg|post-checkout|pre-rebase)\b/)?.[1] ?? (/husky|lint-staged/i.test(out) ? "commit" : null);
+    const title = hook ? `${hook} hook failed · ${f.title}` : `${f.title} failed (exit ${f.code})`;
+    const tail = out.split("\n").map(l => l.replace(/\s+$/, "")).filter(l => l.trim()).slice(-5);
+    const extra = tail.length ? v_flex().px(8).py(5).rounded(6).bg(t.background).font_family(mono).text_size(11).text_color(t.muted)
+      .children(tail.map(l => div().truncate().child(l))) : null;
+    return this.banner("fail", t.ansi1, t, title, [
+      ["Fix with AI (i)", cx => this.askAI(cx), true],
+      ["Retry", cx => this.cmd(f.title, f.script, cx, f.opts)],
+      ["Output", cx => { this.showOutput(f, cx); this.setZone(3, cx); }],
+      ["×", () => { this.failure = null; }],
+    ], extra);
+  }
+
+  footer(t) {
+    const flash = this.flashMsg?.text ?? null;
+    return keybar(t, { id: "git", chips: this.chips(), flash, width: this.width(), onKeys: cx => { this.keysOpen = true; this.handle.focus(); cx.notify(); } });
+  }
+
+  // An action's label as a short keycap label: "New branch from here" → "new branch".
+  static short(label) { return label.replace(/…$/, "").toLowerCase().split(" ").slice(0, 2).join(" "); }
+
+  // The footer's keycaps for what's on screen now: the row's own actions first.
+  chips() {
+    if (this.commitBox) return this.commitChips();
+    if (this.switcher) return [{ caps: ["up", "down"], label: "move" }, { caps: ["enter"], label: "switch" }, { caps: ["escape"], label: "close" }];
+    if (this.prompt) return [{ caps: ["enter"], label: "confirm" }, { caps: ["escape"], label: "cancel" }];
+    if (this.menu) return [{ caps: ["j", "k"], label: "move" }, { caps: ["enter"], label: "pick" }, { caps: ["escape"], label: "close" }];
+    if (this.editorFocused) return [{ caps: ["cmd-c"], label: "copy" }, { caps: ["escape"], label: "back" }];
+    if (this.zone === 3 && !this.main?.diff) return [{ caps: ["j", "k"], label: "scroll" }, { caps: ["ctrl-d", "ctrl-u"], label: "page" }, { caps: ["h"], label: "files" }, { caps: ["escape"], label: "back" }];
+    const all = this.actions().filter(a => a.key !== "ctrl-r");
+    const own = all.filter(a => !a.global && !a.custom);
+    const acts = (own.length ? own : all).filter(a => a.chip || !own.length).slice(0, 8).map(a => ({ caps: [a.key], label: a.chip ?? Git.short(a.label) }));
+    const n = this.selectedCommits().length;
+    if (n > 1) return [{ caps: ["escape"], label: `clear ${n}` }, ...acts.filter(a => a.caps[0] !== "v")];
+    if (this.zone === 3 && this.main?.diff) return [...acts, { caps: ["j", "k"], label: this.anchor != null ? "line" : "hunk" }, { caps: ["x"], label: "actions" }];
+    return [...acts, { caps: ["x"], label: "actions" }];
+  }
+
+  keysGroups() {
+    const z = ZONES[this.zone];
+    return [
+      { title: `${z.title}: this row`, chips: this.actions().filter(a => !a.global && !a.custom).map(a => ({ caps: [a.key], label: a.label.replace(/…$/, "") })) },
+      { title: "Moving", chips: [
+        { caps: ["1", "2", "3", "4"], label: "branches / history / files / diff" },
+        { caps: ["h", "l"], label: "column left / right (tab too)" },
+        { caps: ["j", "k"], label: "move (in the diff: hunk to hunk)" },
+        { caps: ["g", "g"], label: "top" }, { caps: ["G"], label: "bottom" },
+        { caps: ["ctrl-d", "ctrl-u"], label: "half a page" },
+        { caps: ["enter"], label: "open: files, the diff, a branch's log" },
+        { caps: ["[", "]"], label: "the column\u2019s tabs: local / remote / stashes, this branch / all" },
+        { caps: ["v"], label: "History: select a range, then j / k" }, { caps: ["shift-down", "shift-up"], label: "History: grow the range" },
+        { caps: ["escape"], label: "clear the range / filter, back" },
+      ] },
+      { title: "Anywhere", chips: this.actions().filter(a => a.global || a.custom).map(a => ({ caps: [a.key], label: a.label.replace(/…$/, "") }))
+        .concat([{ caps: ["/"], label: "filter this column" }, { caps: ["x"], label: "actions for this row (= right-click)" }, { caps: ["q"], label: "close the panel" }, { caps: ["?"], label: "this card" }]) },
+      { title: "The diff (4)", chips: [
+        { caps: ["space"], label: "stage the hunk or lines (unstage on the staged side)" },
+        { caps: ["v"], label: "select lines: then j / k move a line at a time" },
+        { caps: ["d"], label: "discard the hunk or lines" }, { caps: ["a"], label: "write a note on the line or lines" },
+        { caps: ["X"], label: "delete the notes on this line" }, { caps: ["p"], label: "send the notes to an agent" },
+        { caps: ["A"], label: "ask AI about this change" }, { caps: ["J", "K"], label: "next / previous file" },
+        { caps: ["}", "{"], label: "next / previous hunk" }, { caps: ["e"], label: "open in your editor at this line" },
+        { caps: ["o", "t", "b"], label: "on a conflict: keep current / incoming / both" },
+      ] },
+      { title: "Mouse", chips: [
+        { caps: ["click"], label: "pick a row (any column)" }, { caps: ["shift-click"], label: "History: a range · diff: lines" },
+        { caps: ["cmd-click"], label: "History: pick commits one by one" },
+        { caps: ["double-click"], label: "reword · switch branch · open the diff · note a line" },
+        { caps: ["right-click"], label: "the row's actions" },
+        { caps: ["drag"], label: "commit onto commit: squash / fixup / move · branch onto branch: merge / rebase" },
+        { caps: ["checkbox"], label: "Files: stage / unstage" },
+      ] },
+    ];
+  }
+
+  // A menu: centered over a scrim, or at `at` (a right-click, a drop) as a popover.
   menuView(t) {
-    const m = this.menu;
-    return div().id("menu-scrim").absolute().inset_0().bg("#00000055").flex().items_center().justify_center()
-      .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.menu = null; cx.notify(); })
-      .child(v_flex().id("menu").w(380).max_h(520).p(6).rounded(10).border_1().border_color(t.border).bg(t.popover).shadow_lg()
+    const m = this.menu, mono = settings().font_family ?? "JetBrains Mono";
+    const close = (_e, cx) => { cx.stop_propagation(); this.menu = null; cx.notify(); };
+    const items = v_flex().id("menu-items").overflow_y_scrollbar().children(m.items.map((it, i) => h_flex().id(`mi-${i}`).h(26).flex_none().px(8).gap(8).items_center().rounded(6)
+      .when(!it.disabled, e => e.cursor_pointer()).when(i === m.sel, e => e.bg(t.selected)).hover(s => s.bg(t.hover))
+      .on_click((_e, cx) => { if (it.disabled) return; this.menu = null; it.run(cx); cx.notify(); })
+      .child(div().flex_1().min_w(0).truncate().text_color(it.disabled ? t.dim : it.danger ? t.ansi1 : t.foreground).child(it.label))
+      .when(Boolean(it.hint) && it.hint !== it.key, e => e.child(div().flex_none().text_size(11).text_color(t.dim).child(it.hint)))
+      .child(div().flex_none().min_w(18).text_size(11).font_family(mono).text_color(t.accent).child(it.key ?? ""))));
+    const card = v_flex().id("menu").p(6).rounded(10).border_1().border_color(t.border).bg(t.popover).shadow_lg()
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .child(div().px(8).py(6).font_semibold().child(m.title))
+      .when(Boolean(m.lines?.length), el => el.child(v_flex().px(8).pb(6).text_size(11.5).text_color(t.muted).children(m.lines.map(l => div().truncate().child(l)))))
+      .child(items);
+    if (!m.at) return div().id("menu-scrim").absolute().inset_0().bg("#00000055").flex().items_center().justify_center()
+      .on_mouse_down("left", close).child(card.w(380).max_h(520));
+    const w = 300, h = Math.min(440, m.items.length * 26 + 50 + (m.lines?.length ?? 0) * 18);
+    const W = this.width(), H = (this.size?.height ?? 600) / zoomOf() + 80;
+    const x = Math.max(6, Math.min(m.at.x, W - w - 6)), y = m.at.y + h > H - 8 ? Math.max(6, m.at.y - h) : m.at.y;
+    return div().id("menu-scrim").absolute().inset_0().on_mouse_down("left", close).on_mouse_down("right", close)
+      .child(card.absolute().left(x).top(y).w(w).max_h(440));
+  }
+
+  switcherView(t) {
+    const s = this.switcher, list = this.switchMatches(), sel = Math.min(s.sel, list.length - 1);
+    return div().id("sw-scrim").absolute().inset_0().bg("#00000044").flex().items_start().justify_center().pt(48)
+      .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.closeSwitcher(cx); })
+      .child(v_flex().id("sw").w(Math.max(300, Math.min(460, this.width() - 24))).p(8).gap(4).rounded(10).border_1().border_color(t.border).bg(t.popover).shadow_lg()
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-        .child(div().px(8).py(6).font_semibold().child(m.title))
-        .when(Boolean(m.lines?.length), el => el.child(v_flex().px(8).pb(6).text_size(11.5).text_color(t.muted).children(m.lines.map(l => div().truncate().child(l)))))
-        .child(v_flex().id("menu-items").overflow_y_scrollbar().children(m.items.map((it, i) => h_flex().id(`mi-${i}`).h(26).flex_none().px(8).gap(8).items_center().rounded(6)
-          .when(!it.disabled, e => e.cursor_pointer()).when(i === m.sel, e => e.bg(t.selected)).hover(s => s.bg(t.hover))
-          .on_click((_e, cx) => { if (it.disabled) return; this.menu = null; it.run(cx); cx.notify(); })
-          .child(div().w(46).flex_none().text_size(11).font_family(settings().font_family ?? "JetBrains Mono").text_color(t.accent).child(it.key ?? ""))
-          .child(div().flex_1().min_w(0).truncate().text_color(it.disabled ? t.dim : it.danger ? t.ansi1 : t.foreground).child(it.label))
-          .when(Boolean(it.hint) && it.hint !== it.key, e => e.child(div().flex_none().text_size(11).text_color(t.dim).child(it.hint)))))));
+        .child(Input.new(s.input).h(32).px(10).rounded(7).border_1().border_color(t.accent).bg(t.background).text_size(12.5).text_color(t.foreground))
+        .child(v_flex().id("sw-list").max_h(360).overflow_y_scrollbar().children(list.map((b, i) => h_flex().id(`sw-${i}`).h(26).flex_none().px(8).gap(8).items_center().rounded(6).cursor_pointer()
+          .when(i === sel, e => e.bg(t.selected)).hover(st => st.bg(t.hover))
+          .on_click((_e, cx) => { this.switcher.sel = i; this.pickSwitch(cx); })
+          .child(div().w(12).flex_none().text_color(t.accent).child(b.head ? "✓" : b.kind === "create" ? "+" : ""))
+          .child(div().flex_1().min_w(0).truncate().text_color(b.kind === "create" ? t.accent : t.foreground).child(b.kind === "create" ? `Create branch “${b.name}”` : b.name))
+          .child(div().flex_none().text_size(11).text_color(t.dim).child(b.kind === "remote" ? "remote" : b.kind === "create" ? "new" : b.worktree ? "worktree" : (b.date ?? "").replace(/ ago$/, ""))))))
+        .child(div().px(4).text_size(10.5).text_color(t.dim).child("↑ ↓ choose · enter switch · esc close · letters in order match")));
   }
 
   // What the commit dialog's keys do in the box that has the keyboard.
@@ -1949,10 +2570,10 @@ export default class Git extends View {
     const head = (text, on, right) => h_flex().items_center().gap(8).text_size(11.5)
       .child(div().font_semibold().text_color(on ? t.accent : t.muted).child(text)).child(div().flex_1()).child(right);
     return div().id("commit-scrim").absolute().inset_0().bg("#00000055").flex().items_start().justify_center().pt(56)
-      .child(v_flex().id("commit").w(Math.max(320, Math.min(640, (this.size?.width ?? 640) - 24))).p(14).gap(6).rounded(10)
+      .child(v_flex().id("commit").w(Math.max(320, Math.min(640, this.width() - 24))).p(14).gap(6).rounded(10)
         .border_1().border_color(t.border).bg(t.popover).shadow_lg()
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-        .child(div().text_size(11).text_color(t.dim).child(c.stageAll ? `Stage all and commit · ${all} file${all === 1 ? "" : "s"}` : `Commit ${staged} staged file${staged === 1 ? "" : "s"}`))
+        .child(div().text_size(11).text_color(t.dim).child(c.stageAll ? `Stage all and commit · ${plural(all, "file")}` : `Commit ${staged} staged file${staged === 1 ? "" : "s"}`))
         .child(head("Commit summary", onSummary, div().font_family(settings().font_family ?? "JetBrains Mono").text_size(11)
           .text_color(n > 72 ? t.ansi1 : n > 50 ? t.ansi3 : t.dim).child(String(n))))
         .child(Input.new(c.summary).h(32).px(10).rounded(7).border_1().border_color(onSummary ? t.accent : t.border).bg(t.background).text_size(12.5).text_color(t.foreground))
@@ -1973,7 +2594,7 @@ export default class Git extends View {
   promptView(t) {
     const p = this.prompt;
     return div().id("prompt-scrim").absolute().inset_0().bg("#00000055").flex().items_start().justify_center().pt(70)
-      .child(v_flex().id("prompt").w(420).p(12).gap(8).rounded(10).border_1().border_color(t.border).bg(t.popover).shadow_lg()
+      .child(v_flex().id("prompt").w(Math.max(280, Math.min(420, this.width() - 24))).p(12).gap(8).rounded(10).border_1().border_color(t.border).bg(t.popover).shadow_lg()
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
         .child(div().font_semibold().child(p.title))
         .child(Input.new(p.input).h(32).px(10).rounded(7).border_1().border_color(t.accent).bg(t.background).text_size(12.5).text_color(t.foreground))
@@ -1981,7 +2602,9 @@ export default class Git extends View {
   }
 }
 
-function cx_open(view, paths) {
+const id = z => ZONES[z].id;
+
+function openInEditor(view, paths) {
   const editor = view.config?.editor ? q(view.config.editor) : "${VISUAL:-${EDITOR:-vi}}";
   run("terminal.open", { argv: [view.shell ?? "/bin/zsh", "-lic", `${editor} ${[paths].flat().map(q).join(" ")}`], folder: view.ctx.root, place: "tab" });
 }

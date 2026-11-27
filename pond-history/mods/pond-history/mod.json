@@ -1,0 +1,25 @@
+{
+  "place": "none",
+  "title": "Session history",
+  "version": "1.0.0",
+  "source": {
+    "repo": "https://github.com/SimonBystromTableCheck/herdr-mods",
+    "item": "pond-history",
+    "mod": "pond-history"
+  },
+  "overlay": {
+    "kind": "dialog",
+    "width": 880,
+    "height": 0.8
+  },
+  "palette": [
+    {
+      "title": "Session history",
+      "command": "mod.open",
+      "args": {
+        "name": "pond-history"
+      },
+      "words": "claude resume sessions back in time restore"
+    }
+  ]
+}

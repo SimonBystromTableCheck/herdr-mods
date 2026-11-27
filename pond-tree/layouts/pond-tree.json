@@ -1,12 +1,11 @@
 {
   "id": "root",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "source": {
     "repo": "https://github.com/SimonBystromTableCheck/herdr-mods",
     "item": "pond-tree",
     "layout": "pond-tree"
   },
-  "preview": "layouts/pond-tree.svg",
   "cloned_from": {
     "name": "main",
     "version": "0.1.13"
@@ -122,7 +121,6 @@
             {
               "id": "chat-view",
               "type": "stack",
-              "active": "chat-panel",
               "children": [
                 {
                   "id": "chat-panel",
@@ -161,7 +159,8 @@
                     }
                   }
                 }
-              ]
+              ],
+              "active": "chat-panel"
             },
             {
               "id": "panel",
@@ -276,5 +275,6 @@
   "traffic_lights": [
     12,
     16
-  ]
+  ],
+  "preview": "layouts/pond-tree.svg"
 }

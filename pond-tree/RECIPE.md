@@ -16,7 +16,7 @@ his permission), itself built on azaeldrm's Harness layout (github.com/azaeldrm/
 **Install:** tell your Herdr agent "Install the Herdr layout at
 https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/pond-tree", or use Install in Pond
 settings' Available layouts. The agent copies `layouts/pond-tree.json` and its preview `layouts/pond-tree.svg` to `~/.config/herdr-app/layouts/`
-and every folder in `mods/` (`pond-chrome`, `pond-sidebar`, `pond-usage`, `agent-chat`, `pond-pins`,
+and every folder in `mods/` (`pond-chrome`, `pond-history`, `pond-sidebar`, `space-editor`, `pond-usage`, `agent-chat`, `pond-pins`,
 `pond-settings`, `pond-tabs`, `pond-profiles`, `pond-agents`, `pond-files`, `git`, `git-conflicts`,
 `skills`, `todos`, `servers`, `remote-checker`, `workbench`, `notes`) to `~/.config/herdr-app/mods/`,
 skipping mods you already have from this repo (offering their updates) and never overwriting your own,
@@ -24,7 +24,7 @@ then runs `herdr-app check` on each. It's an alternative to `pond`, never a repl
 installed. Installing doesn't switch layouts; pick it in Settings → Look or cycle with ctrl-shift-L
 (`layout.switch --name pond-tree`).
 
-**Version:** 1.0.0 (see Changes at the end; also `"version"` in `layouts/pond-tree.json`, and each
+**Version:** 1.1.0 (see Changes at the end; also `"version"` in `layouts/pond-tree.json`, and each
 mod's own in its `mod.json`).
 
 **Update:** Pond settings (the duck in the footer, or "Pond settings" in the palette) shows the layout
@@ -89,7 +89,7 @@ Tree: `root` row → `sidebar` column [`brand` (pond-chrome), `sidebar-lists` co
 `terminal-panel` (`tab: active`, header agent-chat)], `panel` column [`panel-body` stack, `active:
 files`]], `status` (workspace-status)].
 
-Mods: `pond-chrome`, `pond-sidebar`, `agent-chat` (from herdr-pond / Harness), `pond-usage`,
+Mods: `pond-chrome`, `pond-sidebar`, `agent-chat` (from herdr-pond / Harness), `pond-history` (Anthony Chapé's Session history, opened from the brand bar), `space-editor` (Edit space, from a space's menu), `pond-usage`,
 `pond-pins`, `pond-settings` (opened by the footer duck), `pond-tabs` (1.6.0: the dropdown, pins and
 the `dock`), `pond-agents` (the sidebar draws its figures from `pond-agents.json`), and Pond's panels
 (see `pond` and each mod's recipe). Shipped: `workspace-status`, `picker`, `machine-add`, `menu`,
@@ -125,6 +125,12 @@ the `dock`), `pond-agents` (the sidebar draws its figures from `pond-agents.json
 - ctrl-shift-L cycles back to the previous layout, unchanged.
 
 ## Changes
+
+### 1.1.0 (2026-11-27)
+
+- Mods: git 2.0.0, leader 2.3.0, notes 1.1.0, pond-chrome 1.1.0, pond-sidebar 1.1.0, agent-chat 1.1.0, todos 1.2.1, servers 1.3.1, remote-checker 1.4.2, skills 1.2.1, workbench 1.0.1, pond-profiles 1.5.1, pond-files 1.1.3.
+- Adds [`pond-history`](../pond-history/) (Anthony Chapé's Session history, from the brand bar's history button) and [`space-editor`](../space-editor/) (Edit space: name, colour, icon) to the install.
+- The private system-stats block (`pond-sysstat`) is cut from the published copy.
 
 ### 1.0.0 (2026-11-26)
 

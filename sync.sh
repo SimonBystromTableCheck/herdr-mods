@@ -10,7 +10,7 @@ REPO="$(cd "$(dirname "$0")" && pwd)"
 if [[ "${1:-}" != "--overwrite" ]]; then
   python3 "$REPO/tools/guard.py" check "$REPO" "$HOME_DIR" || exit 1
 fi
-EXCLUDES=(--exclude gpui-kit.d.ts --exclude jsconfig.json --exclude .DS_Store --exclude '*.error' --exclude node_modules --exclude '.handoff-*' --exclude __pycache__)
+EXCLUDES=(--exclude gpui-kit.d.ts --exclude jsconfig.json --exclude .DS_Store --exclude '*.error' --exclude node_modules --exclude '.handoff-*' --exclude __pycache__ --exclude .cache.json)
 
 while read -r item kind rest; do
   [[ -z "$item" || "$item" == \#* ]] && continue

@@ -116,9 +116,14 @@ export default class Leader extends View {
     }
     if (b.mod) return this.panel(b.mod, cx);
     if (b.run === "pane.resize") return this.resize(b.args.direction, cx);
+    // Right from the agent chat (it covers the tab, so its terminal is hidden and a single pane.go from
+    // there only sometimes lands): into the right-hand panel when one is open, as leader + its key does.
+    if (b.run === "pane.go" && b.args.direction === "right" && !this.fromPanel && panelOnScreen("agent-chat")
+      && this.panels.some(p => panelOnScreen(p.mod))) return this.enterPanel(cx);
     this.close();
     // pane.go would start from the last focused terminal, not the panel this popup took the keyboard
     // from, so that panel makes the move itself once it has the keyboard back.
+    // (Left goes back through the panel's focusTab(), which also hands the keys to the agent chat in Chat mode.)
     if (b.run === "pane.go" && this.fromPanel) return run(`${this.fromPanel}.go:${b.args.direction}`);
     run(b.run, b.args ?? {});
   }
@@ -182,7 +187,7 @@ export default class Leader extends View {
       return;
     }
     revealPanel(mod);
-    this.enterPanel(cx);
+    this.enterPanel(cx, mod);
   }
 
   // Enter the right-hand panel the way the app's own navigation does (pane.go), not by
@@ -191,7 +196,13 @@ export default class Leader extends View {
   // From the focused terminal, `right` as many times as the tab has panes always ends in the
   // panel (the rightmost column; pane.go from it to the right does nothing). Waits a moment so
   // the panel shown just now is laid out, then closes this popup.
-  enterPanel(cx) {
+  enterPanel(cx, mod) {
+    // In Chat mode the agent chat covers the tab and its pane is hidden: the app's own navigation from that pane
+    // (pane.focus, pane.go) never reaches the panel. So close first, then hand the panel the keyboard directly.
+    if (panelOnScreen("agent-chat")) {
+      const target = mod ?? this.panels.find(p => panelOnScreen(p.mod))?.mod;
+      return cx.timer.after(60, () => { this.close(); if (target) run(`${target}.focus`); });
+    }
     cx.timer.after(60, () => {
       const f = focused();
       if (f?.pane) run("pane.focus", { pane: f.pane });

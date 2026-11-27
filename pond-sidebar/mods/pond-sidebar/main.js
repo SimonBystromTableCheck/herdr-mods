@@ -10,6 +10,7 @@ import { look, changedHosts, machinesChanged } from "./turns.js";
 import { agentFolder } from "./sessions.js";
 import { NewMenu } from "./new-menu.js";
 import { dragger, dropPlace } from "./drag.js";
+import { styleFor, load as loadSpaceIcons } from "./space-icons.js";
 import { find, narrow } from "./layout.js";
 import { collectUsage, readMachineUsage, usageDays, usageDue, usagePlace } from "./token-usage.js";
 import { usageDetails, usageRailMark, usageStrip } from "./usage-card.js";
@@ -33,6 +34,18 @@ const mix = (a, b, share) => {
   return "#" + x.map((v, i) => Math.round(v * share + y[i] * (1 - share)).toString(16).padStart(2, "0")).join("");
 };
 const treeColor = t => mix(t.dim, t.surface, 0.7);
+/**
+ * A space row's mark: the icon chosen in Edit space (else the folder). With a chosen theme color, the glyph
+ * takes it on a soft tile of the same hue; without one, the plain 14 px glyph as before.
+ */
+const spaceMark = (t, sp) => {
+  const { icon: path, color } = styleFor(sp.id);
+  const src = path ?? "mods/pond-sidebar/icons/folder.svg";
+  const c = color ? t[color] : null;
+  if (!c) return icon({ icon: src }, 14, sp.active ? t.foreground : t.dim);
+  return div().size(20).flex_none().rounded(5).flex().items_center().justify_center().bg(mix(c, t.surface, 0.2))
+    .child(icon({ icon: src }, 13, c));
+};
 /**
  * A tree's lines in a row at x px, starting from px above it: on down past the row, and an elbow reach px into it
  * elbowAt px down.
@@ -215,7 +228,11 @@ export default class Agents extends View {
     this.hosts = {};
     this.retrying = {};
     this.refreshHosts(cx);
-    this.changed = JSON.parse(localStorage.getItem("changed") ?? "{}");
+    // Space icons the person chose (pond-space-icons.json); re-read every few seconds so hand edits show.
+    this.spaceIconsLast = {};
+    loadSpaceIcons(this.spaceIconsLast);
+    cx.timer.every(3000, () => loadSpaceIcons(this.spaceIconsLast));
+    this.changed =JSON.parse(localStorage.getItem("changed") ?? "{}");
     this.pins = JSON.parse(localStorage.getItem("pins") ?? "[]");
     this.order = JSON.parse(localStorage.getItem("order") ?? "[]");
     this.drag = null; this.drop = null;
@@ -1062,12 +1079,10 @@ export default class Agents extends View {
       // The model its status line last reported (claude.model, from pond-profiles' statusline hook).
       const model = all.find((x) => x.address === a.address)?.labels?.["claude.model"] ?? null;
       const tab = tabs.find(x => x.id === a.tab);
-      const folder = folderName(agentFolder(a, tab ? lead(tab) : null));
+      // Only the branch: the space (its name, its folder) is already the row the card hangs from.
       const branch = paneBranch(a);
       const where = [
-        [folder !== name && folder !== a.space_name ? folder : "", "folder", t.dim],
         [branch, "branch", t.accent],
-        [full && a.space_name !== name ? a.space_name : "", "layers", t.dim],
       ].filter(([text]) => text);
       const context = (shared("agents.context") ?? {})[a.address];
       const used = Number.isFinite(context?.percent) ? Math.max(0, Math.min(100, context.percent)) : null;
@@ -1298,11 +1313,21 @@ export default class Agents extends View {
         })
         .when(spaceDrag.shown?.target?.id === sp.id, (el) => el.child(div().absolute().left(6).right(6).h(2).rounded(1).bg(t.accent)
           .when(spaceDrag.shown.target.after, (d) => d.bottom(-1)).when(!spaceDrag.shown.target.after, (d) => d.top(-1))))
-        .child(svg("mods/pond-sidebar/icons/folder.svg").size(14).flex_none().text_color(sp.active ? t.foreground : t.dim))
+        .child(spaceMark(t, sp))
         .child(div().flex_1().min_w(0).truncate().font_medium().text_color(sp.active ? t.foreground : t.muted).child(sp.name || "folder"))
         .when(!open, (el) => el
           .when(Boolean(top) && top !== "idle", (el) => el.child(this.status(t, { status: top }, true)))
           .child(div().text_size(11).text_color(t.dim).child(String(members.length + nTerms))))
+        .when(this.hoveredSpace === sp.id, (el) => el.child(div().id(`edit-${key}`).size(16).flex_none().rounded(5).flex().items_center().justify_center()
+          .text_color(t.dim).hover((st) => st.bg(t.hover).text_color(t.foreground)).tooltip("Edit space")
+          .on_click((_e, cx) => {
+            cx.stop_propagation();
+            const style = styleFor(sp.id);
+            openOverlay({ mod: "space-editor", kind: "popup", width: 304, height: 500, props: {
+              space: sp.id, name: sp.name ?? "", icon: style.icon, color: style.color,
+            }});
+          })
+          .child(svg("mods/pond-sidebar/icons/square-pen.svg").size(11))))
         .when(this.hoveredSpace === sp.id, (el) => el.child(div().id(`remove-${key}`).size(16).flex_none().rounded(5).flex().items_center().justify_center()
           .text_color(t.dim).hover((st) => st.bg(t.hover).text_color(t.blocked)).tooltip("Remove space")
           .on_click((_e, cx) => {

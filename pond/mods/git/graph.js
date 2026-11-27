@@ -41,7 +41,8 @@ export function layoutGraph(commits) {
 }
 
 // One row of the graph: `h` tall, W px per lane, lines `lw` thick.
-export function graphCell(lane, h, palette, bg, { W = 14, lw = 1.6, highlight } = {}) {
+// `dot`: {fill, ring} to draw the commit's dot yourself (a ring alone is hollow).
+export function graphCell(lane, h, palette, bg, { W = 14, lw = 1.6, highlight, dot } = {}) {
   const mid = h / 2, x = k => k * W + W / 2, r = Math.min(W / 2, mid) - 1;
   const col = i => palette[i % palette.length];
   const parts = [];
@@ -59,6 +60,11 @@ export function graphCell(lane, h, palette, bg, { W = 14, lw = 1.6, highlight } 
     parts.push(div().absolute().top(mid - lw / 2).h(h - mid + lw / 2).border_color(col(b.color)).border_t(lw)
       .when(right, e => e.left(xc).w(xk - xc + lw / 2).border_r(lw).rounded_tr(r))
       .when(!right, e => e.left(xk - lw / 2).w(xc - xk + lw / 2).border_l(lw).rounded_tl(r)));
+  }
+  if (dot) {
+    const d = 10;
+    parts.push(div().absolute().left(xc - d / 2).top(mid - d / 2).size(d).rounded_full().bg(dot.fill ?? bg).border(2).border_color(dot.ring ?? dot.fill));
+    return div().relative().flex_none().w(lane.width * W + 2).h(h).children(parts);
   }
   const d = lane.merge || highlight ? 10 : 8, c = col(lane.color);
   parts.push(div().absolute().left(xc - d / 2).top(mid - d / 2).size(d).rounded_full()

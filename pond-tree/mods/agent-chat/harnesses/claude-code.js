@@ -19,6 +19,8 @@ export default {
       names: { "auto mode": "Auto mode", "manual mode": "Ask before edits", "accept edits": "Accept edits", "plan mode": "Plan mode", "bypass permissions": "Bypass permissions" },
     },
   },
+  // Claude Code's chord for delivering queued prompts now instead of when the turn ends.
+  sendQueued: ["ctrl+x", "ctrl+s"],
   box: { style: "mark", mark: "❯", stopAtBlank: false },
   skills: { triggers: ["/"], invoke: "/", user: ["~/.claude/skills"], project: [".claude/skills"], skip: ["synced"] },
   reader: "claude-code",

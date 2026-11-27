@@ -4,7 +4,7 @@
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Input, InputState, Editor, EditorState, ScrollHandle } from "gpui-base";
 import { keybar, keysCard } from "./keybar.js";
-import { closePanel, hidePanel, revealPanel } from "./panel.js";
+import { closePanel, hidePanel, revealPanel, focusTab } from "./panel.js";
 import { KEYS, keyOf } from "./keys.js";
 import { SelfUpdate } from "./update.js";
 import { detect, runPipeline, rulesFor } from "./format.js";
@@ -610,7 +610,7 @@ export default class Workbench extends View {
   go(dir) {
     this.focusToken = (this.focusToken ?? 0) + 1;
     const pane = focused()?.pane;
-    if (dir === "left" && pane) return run("pane.focus", { pane });
+    if (dir === "left" && pane) return focusTab();
     this.handle.focus();
     run("pane.go", { direction: dir });
   }

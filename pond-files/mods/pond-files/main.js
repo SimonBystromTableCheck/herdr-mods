@@ -4,6 +4,7 @@ import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { keybar, keysCard } from "./keybar.js";
 import { spaces, panes, focused, exec, readTextFile, watchFolder, theme, settings, window, run, nextCommand, setShared, appHome } from "herdr";
+import { focusTab } from "./panel.js";
 import { SelfUpdate } from "./update.js";
 
 function location() {
@@ -329,7 +330,7 @@ export default class Files extends View {
   go(dir) {
     this.focusToken = (this.focusToken ?? 0) + 1; // cancel a pending focus retry
     const pane = focused()?.pane;
-    if (dir === "left" && pane) return run("pane.focus", { pane });
+    if (dir === "left" && pane) return focusTab();
     this.handle.focus();
     run("pane.go", { direction: dir });
   }
@@ -356,7 +357,7 @@ export default class Files extends View {
     if (k === "?") { this.keysOpen = true; cx.notify(); return true; }
     if (k === "q") {
       run("layout.hide", { id: "panel" });
-      if (focused()?.pane) run("pane.focus", { pane: focused().pane });
+      focusTab();
       return true;
     }
     if (k === "r") { this.refresh(cx); return true; }
@@ -408,7 +409,7 @@ export default class Files extends View {
         if (row?.entry.dir) this.toggle(row.path, cx);
         return true;
       case "escape":
-        if (focused()?.pane) { run("pane.focus", { pane: focused().pane }); return true; }
+        if (focused()?.pane) { focusTab(); return true; }
         return false;
     }
     return false;

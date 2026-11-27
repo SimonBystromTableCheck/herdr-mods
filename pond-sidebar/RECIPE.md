@@ -28,7 +28,7 @@ https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/pond-sidebar". Wh
 There are no props for layout copies. The mod opens three copies of itself with props (`newMenu`,
 `newSpace`, `loginBar`) as popups and dialogs; never place those in a layout.
 
-**Version:** 1.0.0 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.1.0 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** no update pill. Tell your Herdr agent "update my herdr mods" (or "update pond mods"); it
 follows `UPDATE.md` in the mod folder, which checks this repo's `versions.json` and backs up what it
@@ -46,7 +46,7 @@ appears at the top or bottom when more is out of sight that way.
   (`dim` mixed 70% into `surface`) runs down from the icon to the machine's spaces. With one machine the
   band is left out and the spaces are the top level. Machines with nothing show "No agents",
   "Connecting…", "Needs login" or "Offline".
-- **Space rows**, 28px, radius 6: 14px folder icon, the space name (`foreground` if shown, else `muted`),
+- **Space rows**, 28px, radius 6: the icon and colour chosen in **Edit space** ([`space-editor`](../space-editor/), from the space's menu; a 13px glyph on a 20px tile of that hue at 20%), else a 14px folder icon, the space name (`foreground` if shown, else `muted`),
   a fold chevron and a 16px `+` (new tab). Folded: the most urgent status mark and a count. Hover: a `×`
   that removes the space (turns `blocked` red on hover).
 - **Agent cards** under their space, 24px in on rounded tree elbows; py 5, radius 6, a 2px left border
@@ -102,7 +102,7 @@ machines as a dash / spinner / cross, `+` for New space. Space rows are dropped 
 - A clone of Harness's `machine-sidebar` (`mod.json` `cloned_from: { name: "machine-sidebar", version: "0.1.16" }`).
   `main.js` is the view; `new-menu.js` the machine `+` popup; `drag.js` the space drag (`dragger`,
   `dropPlace`); `layout.js` the rail test (`narrow()`); `context*.js`, `snapshots.js`, `sessions.js`,
-  `turns.js` the context readings; `details.js`, `platforms.js`, `os.js`, `os-icons.js` the machine card
+  `turns.js` the context readings; `space-icons.js` reads `~/.config/herdr-app/pond-space-icons.json` (shared key `pond-space-icons`, written by `space-editor`) for each space's icon and colour; `details.js`, `platforms.js`, `os.js`, `os-icons.js` the machine card
   and OS icons; `machine-metrics.js` the CPU/RAM rings (Classic only); `figures-lib/` a copy of
   `pond-agents`' figure code (`figures.js`, `duck.js`, `slime.js`, `animate.js`). Art: `icons/`, `os/`,
   `stats/`. `LICENSE` (MIT, azaeldrm).
@@ -155,6 +155,11 @@ machines as a dash / spinner / cross, `+` for New space. Space rows are dropped 
 - New space opens the dialog and starts the chosen agent in the chosen folder.
 
 ## Changes
+
+### 1.1.0 (2026-11-27)
+
+- Space rows show the icon and theme colour chosen in **Edit space** ([`space-editor`](../space-editor/), now published): the glyph on a soft tile of that hue, else the plain folder. Read from `pond-space-icons.json` by the new `space-icons.js`.
+- Agent cards under a space show only the branch, not the folder again (the space row already says where it is).
 
 ### 1.0.0 (2026-11-26)
 

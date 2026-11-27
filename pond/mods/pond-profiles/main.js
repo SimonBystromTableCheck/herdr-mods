@@ -9,7 +9,7 @@ import { pinnedUsage, loadUsagePins, toggleUsagePin } from "./usage-pins.js";
 import { keybar, keysCard } from "./keybar.js";
 import { SelfUpdate } from "./update.js";
 import { setupView, loadDoctor, openProfileForm, profileForm, openLabelForm, labelForm, openUsageForm, usageForm } from "./setup.js";
-import { closePanel } from "./panel.js";
+import { closePanel, focusTab } from "./panel.js";
 
 // Any block showing `mod`, anywhere in the tree.
 const showsMod = (node, mod) => Boolean(node) && (node.content?.mod === mod || (node.children ?? []).some(c => showsMod(c, mod)));
@@ -419,7 +419,7 @@ export default class Claude extends View {
   go(dir) {
     this.focusToken = (this.focusToken ?? 0) + 1;
     const pane = focused()?.pane;
-    if (dir === "left" && pane) return run("pane.focus", { pane });
+    if (dir === "left" && pane) return focusTab();
     this.handle.focus();
     run("pane.go", { direction: dir });
   }
@@ -439,7 +439,7 @@ export default class Claude extends View {
       return false; // the inputs type
     }
     if (this.setupShown) {
-      if (k === "escape" && focused()?.pane) { run("pane.focus", { pane: focused().pane }); return true; }
+      if (k === "escape" && focused()?.pane) { focusTab(); return true; }
       if (k === "q") { closePanel(MOD); return true; }
       return false;
     }
@@ -448,7 +448,7 @@ export default class Claude extends View {
       case "?": this.keysOpen = true; cx.notify(); return true;
       case "escape":
         if (this.picking || this.removing) { this.picking = null; this.removing = null; cx.notify(); return true; }
-        if (focused()?.pane) run("pane.focus", { pane: focused().pane });
+        focusTab();
         return true;
       case "j": case "down": moveTo(this.sel + 1); return true;
       case "k": case "up": moveTo(this.sel - 1); return true;

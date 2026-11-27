@@ -1,1 +1,1 @@
-{ "place": "none", "title": "Skills", "version": "1.2.0", "source": {"repo": "https://github.com/SimonBystromTableCheck/herdr-mods", "item": "skills", "mod": "skills"}, "focusable": true, "panel": {"title": "Skills", "icon": "skills.svg", "leader": "a"} }
+{ "place": "none", "title": "Skills", "version": "1.2.1", "source": {"repo": "https://github.com/SimonBystromTableCheck/herdr-mods", "item": "skills", "mod": "skills"}, "focusable": true, "panel": {"title": "Skills", "icon": "skills.svg", "leader": "a"} }

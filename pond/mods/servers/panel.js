@@ -58,5 +58,12 @@ export function closePanel(mod) {
   const pane = panes().find(p => p.mod === mod && p.focused);
   if (pane) return run("pane.close", { pane: pane.pane });
   hidePanel(mod);
+  focusTab();
+}
+
+// Gives the keyboard back to the tab when leaving a panel (q, esc, left): its focused pane, and while the agent chat
+// covers the tab (Chat mode, where that pane is hidden) the chat's reply box, which takes it with agent-chat.focus.
+export function focusTab() {
   if (focused()?.pane) run("pane.focus", { pane: focused().pane });
+  if (panelOnScreen("agent-chat")) run("agent-chat.focus");
 }

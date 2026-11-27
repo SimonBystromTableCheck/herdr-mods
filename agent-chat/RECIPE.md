@@ -25,7 +25,7 @@ https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/agent-chat". What
    (and `"lone": true` so a single pane gets it too). The ids must be exactly these: the mod switches
    with `layout.select {stack: "chat-view", child}`. On `pond-tree` (this repo) it already is.
 
-**Version:** 1.0.0 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.1.0 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** tell your Herdr agent "update my herdr mods". It follows `UPDATE.md` from this repo, which
 checks `versions.json` and offers every newer version of the mods and layouts you have from here, with
@@ -170,6 +170,11 @@ copy. Shared state (drafts, views, read positions) lives outside the mod folder 
 - A Codex, Pi or OpenCode tab also shows its conversation.
 
 ## Changes
+
+### 1.1.0 (2026-11-27)
+
+- The chat box takes the keyboard reliably when focus comes back to the chat (leader+h, a panel's Esc): it retries for up to a second and its border turns the accent colour while focused.
+- New `model/screen-reply.js`, plus reader, session, harness and row updates for how replies and question cards are read from the screen.
 
 ### 1.0.0 (2026-11-26)
 

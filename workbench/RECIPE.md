@@ -35,7 +35,7 @@ Without changing the tab bar, it also opens beside a terminal:
 `herdr-app do pane.split --direction right --mod workbench`, or as a tab:
 `herdr-app do tab.new --mod workbench --props '{"query":"TODO"}'`.
 
-**Version:** 1.0.0 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.0.1 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** an "Update available" pill appears in its header when this repo publishes a newer version; click it, confirm, and a new Claude tab updates just this mod (following `UPDATE.md`). Or tell your Herdr agent "update my herdr mods". By hand: replace `mods/workbench/` with this folder's copy (asking an agent to *install* it again adds a second copy instead). It keeps no settings or data of its own.
 
@@ -170,6 +170,10 @@ Without changing the tab bar, it also opens beside a terminal:
   `e` expands it to a tab and back.
 
 ## Changes
+
+### 1.0.1 (2026-11-27)
+
+- Back to the chat: leader+h (or Esc / h at the left edge) now gives the keyboard to agent-chat's chat box when the Chat view shows, not just to the hidden terminal (`focusTab()` in the shared `panel.js`).
 
 ### 1.0.0 (2026-11-16)
 

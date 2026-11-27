@@ -1,0 +1,14 @@
+{
+  "place": "none",
+  "version": "1.0.0",
+  "source": {
+    "repo": "https://github.com/SimonBystromTableCheck/herdr-mods",
+    "item": "space-editor",
+    "mod": "space-editor"
+  },
+  "title": "Edit space",
+  "overlay": {
+    "width": 304,
+    "height": 500
+  }
+}
