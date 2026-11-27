@@ -28,7 +28,7 @@ https://github.com/SimonBystromTableCheck/herdr-mods/tree/main/pond-sidebar". Wh
 There are no props for layout copies. The mod opens three copies of itself with props (`newMenu`,
 `newSpace`, `loginBar`) as popups and dialogs; never place those in a layout.
 
-**Version:** 1.2.1 (see Changes at the end; also `"version"` in `mod.json`).
+**Version:** 1.2.2 (see Changes at the end; also `"version"` in `mod.json`).
 
 **Update:** no update pill. Tell your Herdr agent "update my herdr mods" (or "update pond mods"); it
 follows `UPDATE.md` in the mod folder, which checks this repo's `versions.json` and backs up what it
@@ -56,7 +56,7 @@ appears at the top or bottom when more is out of sight that way.
   coloured by the most urgent), and the status: a 15px `working` spinner, a `done` green check
   (`ansi2`), or a "Needs you" pill (`blocked` text on `blocked` at 15%). Hover swaps the status for a pin.
   Line 2, 10.5px `dim`: a 14×3px context bar under the figure, the folder (if it differs from the name),
-  the branch (icon in `accent`), the space name when pinned, and the model (`muted`, max 120px, truncated).
+  the branch (icon in `accent`), the space name when pinned, and the model (`muted`, at its full width; the branch is cut first).
 - **Sub-agent rows**, 24px, their own small figure (14px) on tree lines, name and status.
 - **Plain terminals** (shells, servers, lazygit), 28px: the program's icon (a Claude terminal that stopped
   reporting status gets the duck), its name and folder.
@@ -155,6 +155,10 @@ machines as a dash / spinner / cross, `+` for New space. Space rows are dropped 
 - New space opens the dialog and starts the chosen agent in the chosen folder.
 
 ## Changes
+
+### 1.2.2 (2026-11-27)
+
+- An agent card's model name gets its full width on the second row (no more 120 px cap): the branch beside it gives way first, and the name is only cut when the sidebar is too narrow for it alone.
 
 ### 1.2.1 (2026-11-27)
 

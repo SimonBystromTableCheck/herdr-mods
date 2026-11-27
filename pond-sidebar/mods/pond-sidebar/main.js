@@ -1333,9 +1333,10 @@ export default class Agents extends View {
               .when(glyph !== "folder" && glyph !== "branch", el => el.min_w(0))
               .child(svg(`mods/pond-sidebar/icons/${glyph}.svg`).size(10).flex_none().text_color(color))
               .child(div().min_w(0).truncate().text_color(glyph === "branch" ? t.muted : color).child(text)))))
-          // The model at the right end, its right edge under the badge's (the 14 px status column follows); a long name
-          // ends in an ellipsis rather than pushing the branch out.
-          .when(Boolean(model), el => el.child(div().flex_shrink(1).min_w(0).max_w(120).truncate().text_color(t.muted).child(model)))
+          // The model at the right end, its right edge under the badge's (the 14 px status column follows). It takes its
+          // full width: the branch beside it (flex_1, from 0) gives way first, and only a sidebar too narrow for the name
+          // alone cuts it with an ellipsis.
+          .when(Boolean(model), el => el.child(div().flex_shrink(1).min_w(0).truncate().text_color(t.muted).child(model)))
           .when(Boolean(model) && !collapsed, el => el.child(div().w(14).flex_none()))
           .when(!pic && Boolean(bar), el => el.child(bar)));
     };
